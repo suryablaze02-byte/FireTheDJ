@@ -44,7 +44,7 @@ function Caption($name, $w, $h, [string[]]$lines, $size, $y, $align = 'Center', 
 }
 
 # The end card: logo, wordmark ("Fire" in fire colours), tagline and where to get it, on a warm dark ground.
-function EndCard($name, $w, $h, $scale) {
+function EndCard($name, $w, $h, $scale, $tag = 'Your AI DJ for every party') {
   $b, $g = New-Canvas $w $h
   $path = New-Object System.Drawing.Drawing2D.GraphicsPath; $path.AddEllipse(-$w * .3, -$h * .2, $w * 1.6, $h * 1.4)
   $bg = New-Object System.Drawing.Drawing2D.PathGradientBrush($path)
@@ -63,7 +63,7 @@ function EndCard($name, $w, $h, $scale) {
   $g.DrawString('TheDJ', $wf, (New-Object System.Drawing.SolidBrush $white), ($wx + $fireW), $wy, $tight)
   $sf = New-Object System.Drawing.StringFormat; $sf.Alignment = 'Center'
   $tf = New-Object System.Drawing.Font('Segoe UI Semibold', [int](40 * $scale), [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
-  $g.DrawString('Your AI DJ for every party', $tf, (New-Object System.Drawing.SolidBrush $white), (New-Object System.Drawing.RectangleF 0, ($wy + 150 * $scale), $w, (60 * $scale)), $sf)
+  $g.DrawString($tag, $tf, (New-Object System.Drawing.SolidBrush $white), (New-Object System.Drawing.RectangleF 0, ($wy + 150 * $scale), $w, (60 * $scale)), $sf)
   # Call to action pill.
   $pw = [int](620 * $scale); $ph = [int](92 * $scale); $px = [int]($cx - $pw / 2); $py = [int]($wy + 250 * $scale)
   $pill = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -95,6 +95,26 @@ Caption 'hv_tv' 1920 1080 @('Cast them to your TV') 84 860
 EndCard 'v_end' 1080 1920 1.25
 EndCard 'h_end' 1920 1080 1.0
 
+# Version 1.1: the TV app and what's new. TV scenes caption low and centred in both shapes'
+# landscape, and across the top in vertical; phone scenes keep the 1.0 placement.
+$caps11 = @{
+  'tvnew'   = @('Now on Android TV');
+  'tvhome'  = @('Start a mix', 'from the couch');
+  'tvvis'   = @('Visualizers fill', 'the big screen');
+  'tvrot'   = @('A new look', 'every 30 seconds');
+  'tvctrl'  = @('Play, pause & stop', 'from the remote');
+  'tour'    = @('New: a quick', 'guided tour');
+  'live'    = @('New songs join', 'the set live');
+  'same'    = @('Same AI DJ.', 'Beat-matched mixes.')
+}
+foreach ($k in $caps11.Keys) {
+  Caption "v_$k" 1080 1920 $caps11[$k] 74 210
+  Caption "h_$k" 1920 1080 $caps11[$k] 78 430 'Near' 120 1120
+  Caption "hv_$k" 1920 1080 @($caps11[$k] -join ' ') 76 900
+}
+EndCard 'v_end11' 1080 1920 1.25 "Version 1.1 $([char]0x00B7) Phone + Android TV"
+EndCard 'h_end11' 1920 1080 1.0 "Version 1.1 $([char]0x00B7) Phone + Android TV"
+
 # Backgrounds behind the phone screen: the splash's warm glow on near-black.
 function Ground($name, $w, $h) {
   $b, $g = New-Canvas $w $h
@@ -119,5 +139,25 @@ function Mask($name, $w, $h, $r) {
 }
 Mask 'v_mask' 724 1460 52
 Mask 'h_mask' 486 980 36
+
+# A TV on the warm ground: a thin dark bezel around where the edit places the screen, and a stand.
+function TvGround($name, $w, $h, $sx, $sy, $sw, $sh) {
+  $b, $g = New-Canvas $w $h
+  $path = New-Object System.Drawing.Drawing2D.GraphicsPath; $path.AddEllipse(-$w * .4, $h * .1, $w * 1.8, $h * 1.3)
+  $br = New-Object System.Drawing.Drawing2D.PathGradientBrush($path)
+  $br.CenterColor = [System.Drawing.Color]::FromArgb(255, 70, 26, 16); $br.SurroundColors = @([System.Drawing.Color]::FromArgb(255, 10, 10, 13))
+  $g.Clear([System.Drawing.Color]::FromArgb(255, 10, 10, 13)); $g.FillRectangle($br, 0, 0, $w, $h)
+  $bz = [int]($sw * .012) + 4
+  $body = [System.Drawing.Color]::FromArgb(255, 22, 22, 26)
+  $standW = [int]($sw * .22); $neck = [int]($sh * .07)
+  $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 30, 30, 35))), [int]($sx + $sw / 2 - $standW / 2), ($sy + $sh + $bz + $neck), $standW, [int]($neck * .35))
+  $g.FillRectangle((New-Object System.Drawing.SolidBrush $body), [int]($sx + $sw / 2 - 14), ($sy + $sh + $bz), 28, $neck)
+  $g.FillRectangle((New-Object System.Drawing.SolidBrush $body), ($sx - $bz), ($sy - $bz), ($sw + 2 * $bz), ($sh + 2 * $bz))
+  $g.DrawRectangle((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 60, 60, 68)), 2), ($sx - $bz), ($sy - $bz), ($sw + 2 * $bz), ($sh + 2 * $bz))
+  $b.Save((Join-Path $dir "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $b.Dispose()
+}
+# Kept in step with edit-1.1.js's TV layout.
+TvGround 'v_tvbg' 1080 1920 40 760 1000 562
+TvGround 'h_tvbg' 1920 1080 200 50 1520 855
 $logo.Dispose()
 Get-ChildItem $dir | ForEach-Object { $_.Name }

@@ -50,6 +50,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 - **11 transition recipes**: bass-swap, phaser and flanger blends, filter and lo-fi fades, echo-out, gate build & drop, backspin, scratch cut, vocal swap, loop & ramp.
 - **Performs inside a track**: tempo pushes, loop-roll builds into drops, hook replays.
 - **Smooth or Trickster mode**: clean blends, or scratches, brakes, echo throws, sirens and air horns all through the set.
+- **Songs join the set live**: tracks that finish analysing while a set plays are queued into it if they belong to the crate you picked.
 
 #### Music sources
 - **Your phone**: whole folders, rescanned on every launch.
@@ -69,8 +70,9 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 - **Live mixing view**: both decks, crossfader, rate, phase error, key and every effect as it happens.
 - **Cast to a TV**: Miracast / Smart View screens show the visualizer in landscape; Chromecast & Google TV get the live mix ([how](docs/CASTING.md)).
 - **Android Auto**: pick a crate in the car and the set starts.
-- **FireTheDJ TV**: a separate Android TV app; the visualizers take over the screen and rotate on their own.
+- **FireTheDJ TV**: a separate Android TV app, run from the remote. The visualizers take over the screen and change look every 30 seconds; ◀ ▶ switches looks, OK brings up Home, Play/Pause and Stop.
 - **Background play** with media controls, audio focus and headphone-unplug pause.
+- **Guided tour** on first launch, on phone and TV.
 
     </td>
   </tr>
@@ -89,6 +91,24 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
     <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing"/><br/><sub>Now Playing</sub></td>
     <td align="center"><img src="screenshots/05-mixing.png" width="200" alt="Live mixing view"/><br/><sub>Live mixing view</sub></td>
     <td align="center"><img src="screenshots/07-cast.png" width="200" alt="Cast to a TV"/><br/><sub>Cast to a TV</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3"><img src="screenshots/08-tour.png" width="200" alt="First-launch guided tour"/><br/><sub>First-launch guided tour</sub></td>
+  </tr>
+</table>
+</div>
+
+#### FireTheDJ TV
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/09-tv-home.png" width="400" alt="FireTheDJ TV home screen"/><br/><sub>Home: crates, mode and music sources</sub></td>
+    <td align="center"><img src="screenshots/10-tv-player.png" width="400" alt="TV player with Home, Play/Pause and Stop"/><br/><sub>Home, Play/Pause and Stop on OK</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/11-tv-visualizer.png" width="400" alt="Neon Tunnel visualizer on the TV"/><br/><sub>Full-screen visualizers, a new look every 30 s</sub></td>
+    <td align="center"><img src="screenshots/12-tv-yt-music.png" width="400" alt="YT Music playlists on the TV"/><br/><sub>YT Music playlists by mood and genre</sub></td>
   </tr>
 </table>
 </div>
