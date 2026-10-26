@@ -10,7 +10,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -41,8 +43,20 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = colors) {
                 // The splash shows once per launch, not again when the activity is recreated.
                 var splash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
-                DjScreen(vm)
-                if (splash) SplashScreen { splash = false }
+                // The guided tour, once ever, right after the first splash.
+                var tour by remember { mutableStateOf(!TourMemory.done(this)) }
+                val tourState = remember { TourState() }
+                CompositionLocalProvider(LocalTour provides tourState) {
+                    DjScreen(vm)
+                    if (splash) {
+                        SplashScreen { splash = false }
+                    } else if (tour) {
+                        TourOverlay(tourState, PHONE_TOUR, tv = false) {
+                            tour = false
+                            TourMemory.markDone(this@MainActivity)
+                        }
+                    }
+                }
             }
         }
     }

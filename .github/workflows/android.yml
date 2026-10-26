@@ -21,10 +21,10 @@ jobs:
       - name: Unit tests and debug build
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleDebug --no-daemon
+          ./gradlew testPhoneDebugUnitTest assemblePhoneDebug assembleTvDebug --no-daemon
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: FireTheDJ-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: FireTheDJ-debug-apks
+          path: app/build/outputs/apk/*/debug/*.apk

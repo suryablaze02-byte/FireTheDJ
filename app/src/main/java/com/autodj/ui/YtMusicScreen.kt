@@ -8,6 +8,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -143,7 +146,8 @@ fun YtMusicScreen(
                                     shelf.title, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.padding(horizontal = 20.dp),
                                 )
-                                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                // Vertical room too: the remote-focused card grows a little.
+                                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(shelf.playlists, key = { it.playlistId }) { card ->
                                         val busy = importState == ImportState.Working && tapped == card
                                         PlaylistCard(card, isAdded = card.link in added, busy = busy) {
@@ -192,12 +196,21 @@ private fun StatusLine(state: ImportState, tapped: YtPlaylistCard?) {
 @Composable
 private fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
+    // On a TV the remote moves focus: the focused card grows and gets a fire-coloured edge.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Column(
-        Modifier.width(144.dp).clip(shape)
-            .clickable(role = Role.Button, onClickLabel = if (isAdded) "Already added" else "Add ${card.title}", onClick = onClick),
+        Modifier.width(144.dp).scale(if (focused) 1.07f else 1f).clip(shape)
+            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = if (isAdded) "Already added" else "Add ${card.title}", onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(shape).background(Dj.Surface).border(1.dp, Dj.Border, shape)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1f)
+                // An accent ring around the cover, with a gap, on the card the remote is on.
+                .border(3.dp, if (focused) Dj.Accent else Color.Transparent, RoundedCornerShape(17.dp))
+                .padding(5.dp)
+                .clip(shape).background(Dj.Surface).border(1.dp, Dj.Border, shape),
+        ) {
             rememberRemoteImage(card.thumbnailUrl)?.let {
                 Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             }
@@ -212,7 +225,11 @@ private fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean, 
                 )
             }
         }
-        Text(card.title, color = Dj.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(
+            card.title, color = if (focused) Dj.Accent else Dj.Text, fontSize = 13.sp,
+            fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 5.dp),
+        )
     }
 }
 

@@ -495,6 +495,24 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         refreshQueue(t)
     }
 
+    /**
+     * Adds songs that finished analysing after the set started (and belong to it) to what's left
+     * to play: they become candidates for every pick from now on. A next track already chosen
+     * stays chosen. Main thread, like the rest of the engine.
+     */
+    fun addTracks(tracks: List<TrackInfo>) {
+        if (loop == null) return
+        val known = (played + remaining).mapTo(HashSet()) { it.uri }
+        decks.forEach { d -> d.track?.let { known += it.uri } }
+        next?.let { known += it.uri }
+        val fresh = tracks.filter { it.uri !in known }
+        if (fresh.isEmpty()) return
+        remaining.addAll(fresh)
+        setSize += fresh.size
+        decks[main].track?.let(::refreshQueue)
+        publish()
+    }
+
     private fun refreshQueue(current: TrackInfo) {
         val n = next
         val ahead = if (n != null) listOf(n) + SetPlanner.upcoming(n, remaining - n) else SetPlanner.upcoming(current, remaining)

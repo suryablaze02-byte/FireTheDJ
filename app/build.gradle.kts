@@ -22,8 +22,8 @@ android {
         buildConfigField("String", "CAST_APP_ID", "\"${localProps.getProperty("cast.appId", "")}\"")
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     // Release key from keystore.properties (kept out of git; see docs/RELEASE_SIGNING.md).
@@ -39,6 +39,17 @@ android {
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
             }
+        }
+    }
+
+    // Two apps from one codebase: FireTheDJ for phones, and FireTheDJ TV (its own package, so both
+    // install side by side) with a remote-driven home screen and an auto-rotating visualizer.
+    flavorDimensions += "device"
+    productFlavors {
+        create("phone") { dimension = "device" }
+        create("tv") {
+            dimension = "device"
+            applicationIdSuffix = ".tv"
         }
     }
 

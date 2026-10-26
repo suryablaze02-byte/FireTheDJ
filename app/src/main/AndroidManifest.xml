@@ -17,16 +17,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="FireTheDJ"
         android:theme="@android:style/Theme.Material.NoActionBar">
-        <activity
-            android:name=".ui.MainActivity"
-            android:exported="true"
-            android:screenOrientation="portrait"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+        <!-- The launcher activity is per app: src/phone and src/tv each declare their own. -->
 
         <service
             android:name=".dj.MixService"

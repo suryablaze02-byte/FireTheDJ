@@ -50,7 +50,9 @@ import kotlinx.coroutines.launch
 
 /** The launch splash: the icon, the name and the credit, then a fade into the app. A tap skips it. */
 @Composable
-fun SplashScreen(onDone: () -> Unit) {
+fun SplashScreen(tv: Boolean = false, onDone: () -> Unit) {
+    // A TV is seen from across the room: everything a size up.
+    val k = if (tv) 1.4f else 1f
     val icon = remember { Animatable(0f) }
     val text = remember { Animatable(0f) }
     val out = remember { Animatable(1f) }
@@ -70,10 +72,10 @@ fun SplashScreen(onDone: () -> Unit) {
     ) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier.size(132.dp).graphicsLayer {
+                Modifier.size(132.dp * k).graphicsLayer {
                     val s = 0.6f + 0.4f * icon.value
                     scaleX = s; scaleY = s; alpha = icon.value
-                }.clip(RoundedCornerShape(36.dp)),
+                }.clip(RoundedCornerShape(36.dp * k)),
             ) {
                 // Launchers show the middle 72 of the icon's 108 units: scale up by 1.5 to match.
                 Image(painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.5f; scaleY = 1.5f })
@@ -85,13 +87,13 @@ fun SplashScreen(onDone: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                FireTheDjWordmark(46.sp)
-                Text("Your AI DJ for every party", color = Dj.Text, fontSize = 17.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
+                FireTheDjWordmark(46.sp * k)
+                Text("Your AI DJ for every party", color = Dj.Text, fontSize = 17.sp * k, fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
             }
         }
         Text(
             "Made with passion ❤️ by Surya",
-            color = Dj.Muted, fontSize = 13.sp,
+            color = Dj.Muted, fontSize = 13.sp * k,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).graphicsLayer { alpha = text.value },
         )
     }

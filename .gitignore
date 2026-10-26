@@ -12,3 +12,8 @@ build-stamp
 keystore.properties
 .claude/
 release/
+# Launch video: keep the scripts, not the recordings and renders.
+launch/clips/
+launch/cards/
+launch/*.mp4
+launch/*.wav

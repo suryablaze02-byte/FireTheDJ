@@ -31,20 +31,26 @@ keyAlias=firethedj
 keyPassword=…
 ```
 
-From then on `./gradlew assembleRelease` signs with your key. Without the file, release builds
+From then on `./gradlew assemblePhoneRelease assembleTvRelease` signs with your key. Without the file, release builds
 fall back to the local debug key, which is fine for your own phone and nothing else.
 
 ## 3. Build and check
 
 ```bash
-./gradlew testDebugUnitTest assembleRelease
+./gradlew testPhoneDebugUnitTest assemblePhoneRelease assembleTvRelease
 ```
 
-The APK is `app/build/outputs/apk/release/app-release.apk`. Check who signed it
-(`apksigner` is in the Android SDK's `build-tools`):
+That builds both apps:
+
+| App | APK |
+|---|---|
+| FireTheDJ (phones) | `app/build/outputs/apk/phone/release/app-phone-release.apk` |
+| FireTheDJ TV (Android TV) | `app/build/outputs/apk/tv/release/app-tv-release.apk` |
+
+Check who signed them (`apksigner` is in the Android SDK's `build-tools`):
 
 ```bash
-apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+apksigner verify --print-certs app/build/outputs/apk/phone/release/app-phone-release.apk
 ```
 
 The certificate should show the name you gave in step 1.
@@ -52,8 +58,9 @@ The certificate should show the name you gave in step 1.
 ## 4. Publish on GitHub
 
 1. Raise `versionCode` (by one) and `versionName` in `app/build.gradle.kts`, commit and push.
-2. On GitHub: **Releases → Draft a new release**, tag `v0.2` (matching `versionName`), add notes.
-3. Rename the APK to `FireTheDJ-v0.2.apk`, attach it, publish.
+   Both apps share the version.
+2. On GitHub: **Releases → Draft a new release**, tag `v1.1.0` (matching `versionName`), add notes.
+3. Rename the APKs to `FireTheDJ-v1.1.0.apk` and `FireTheDJ-TV-v1.1.0.apk`, attach both, publish.
 
 ## Switching from the debug key
 

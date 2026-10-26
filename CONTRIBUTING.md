@@ -26,7 +26,7 @@ visualizer is easiest to discuss with a short description of how it should sound
 4. Make sure everything passes:
 
    ```bash
-   ./gradlew testDebugUnitTest assembleDebug
+   ./gradlew testPhoneDebugUnitTest assemblePhoneDebug assembleTvDebug
    ```
 
 5. Describe what changed and how you tested it, on a phone if it touches playback.

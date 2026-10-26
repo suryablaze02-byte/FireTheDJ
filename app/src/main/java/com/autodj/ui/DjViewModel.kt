@@ -35,7 +35,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
+import android.os.Process
+import java.util.concurrent.Executors
 
 enum class AnalysisStatus { QUEUED, ANALYZING, READY, FAILED }
 
@@ -77,6 +80,18 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
 
     /** Leaves cores free for playback and the UI. */
     private val analysisWorkers = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
+
+    /**
+     * Analysis runs on its own background-priority threads, so decoding a whole track never
+     * takes CPU from the screen (visualizers drop frames), the decks or the remote. That matters
+     * most on TV boxes, whose four slow cores are also playing the mix.
+     */
+    private val analysisDispatcher = Executors.newFixedThreadPool(analysisWorkers) { job ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            job.run()
+        }, "analysis")
+    }.asCoroutineDispatcher()
     private val artworkQueue = Channel<TrackInfo>(Channel.UNLIMITED)
 
     private val _library = MutableStateFlow<List<LibraryItem>>(emptyList())
@@ -150,6 +165,17 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         val saved = savedFolders()
         if (tree.toString() !in saved) prefs.edit().putString(KEY_FOLDERS, (saved + tree.toString()).joinToString("\n")).apply()
         scanFolder(tree)
+    }
+
+    /**
+     * Adds tracks found in the device's media library (the TV app's storage and USB scan). They are
+     * readable for as long as the app holds the audio permission; no grants to keep.
+     * Returns how many were new.
+     */
+    fun addDeviceTracks(uris: List<Uri>): Int {
+        val before = _library.value.size
+        addToLibrary(uris)
+        return _library.value.size - before
     }
 
     /** Pastes a playlist link: validates it, fetches the playlist and adds it as a source. */
@@ -279,16 +305,38 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     fun startSet(crate: String, source: String = ALL_SOURCES) {
         if (crate == Genres.UNCLASSIFIED) return
         val folder = _folders.value.firstOrNull { it.uri == source }
-        val tracks = _library.value.mapNotNull { it.info }.filter {
-            it.genreFamily != Genres.UNCLASSIFIED && (crate == ALL || it.genreFamily == crate) &&
-                (folder == null || it.uri in folder.tracks)
-        }
+        val tracks = _library.value.mapNotNull { it.info }.filter { belongs(it, crate, folder) }
         if (tracks.isEmpty()) return
         // Media3 promotes the service to the foreground once the session reports playing.
         val app = getApplication<Application>()
         app.startService(Intent(app, MixService::class.java))
         val crateLabel = if (crate == ALL) "All genres" else crate
-        engine.start(tracks, if (folder != null) "${folder.name} · $crateLabel" else crateLabel, _mode.value)
+        val label = if (folder != null) "${folder.name} · $crateLabel" else crateLabel
+        engine.start(tracks, label, _mode.value)
+        playingSet = PlayingSet(crate, folder?.uri, label)
+    }
+
+    /** What the set playing now was started from, so songs analysed during it can join it. */
+    private class PlayingSet(val crate: String, val folderUri: String?, val label: String)
+    private var playingSet: PlayingSet? = null
+
+    private fun belongs(t: TrackInfo, crate: String, folder: MusicFolder?) =
+        t.genreFamily != Genres.UNCLASSIFIED && (crate == ALL || t.genreFamily == crate) &&
+            (folder == null || t.uri in folder.tracks)
+
+    /**
+     * A song just finished analysing: if a set from its crate (and source) is playing, it joins
+     * that set's pool, so the crate grows on the fly instead of only on the next set. A set
+     * started elsewhere (Android Auto) carries a different label and is left alone.
+     */
+    private fun offerToPlayingSet(t: TrackInfo) {
+        val set = playingSet ?: return
+        val state = engine.state.value
+        if (!state.running || state.crate != set.label) return
+        val folder = set.folderUri?.let { uri -> _folders.value.firstOrNull { it.uri == uri } ?: return }
+        if (!belongs(t, set.crate, folder)) return
+        engine.addTracks(listOf(t))
+        Log.i("AutoDJ", "added \"${t.title}\" to the playing set (${set.label})")
     }
 
     fun togglePause() = engine.togglePause()
@@ -301,13 +349,14 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
             // Streams are downloaded once, here: analysis reads the stored copy and the decks play it.
             // If the download fails the track still works, streaming instead.
             val stored = if (isStream(uri)) withContext(Dispatchers.IO) { storeStream(uri) } else null
-            val analysed = withContext(Dispatchers.Default) {
+            val analysed = withContext(analysisDispatcher) {
                 cache.get(uri) ?: TrackAnalyzer.analyze(
                     getApplication(), Uri.parse(uri), remoteLibrary.track(uri), stored?.let { Uri.fromFile(it) } ?: Uri.parse(uri),
                 ).also { cache.put(it) }
             }
             val info = withOnlineGenre(analysed)
             setItem(uri) { it.copy(status = AnalysisStatus.READY, info = info, name = info.title) }
+            offerToPlayingSet(info)
             artworkQueue.trySend(info)
         } catch (e: Exception) {
             setItem(uri) { it.copy(status = AnalysisStatus.FAILED, error = e.message ?: e.javaClass.simpleName) }
@@ -333,6 +382,11 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
 
     private fun save() {
         prefs.edit().putString(KEY_URIS, _library.value.joinToString("\n") { it.uri }).apply()
+    }
+
+    override fun onCleared() {
+        analysisDispatcher.close()
+        super.onCleared()
     }
 
     private companion object {
