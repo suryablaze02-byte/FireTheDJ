@@ -11,3 +11,4 @@ build-stamp
 *.keystore
 keystore.properties
 .claude/
+release/
