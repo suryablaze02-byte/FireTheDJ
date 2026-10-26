@@ -23,7 +23,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1"
+        versionName = "1.0.0"
     }
 
     // Release key from keystore.properties (kept out of git; see docs/RELEASE_SIGNING.md).
