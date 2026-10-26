@@ -17,7 +17,7 @@ import android.os.Looper
 import android.util.Log
 import androidx.annotation.RequiresApi
 import com.autodj.R
-import com.autodj.ui.MainActivity
+import com.autodj.openAppIntent
 
 /**
  * Runs the Chromecast stream ([MixStreamer]) while a cast is on. Capturing the app's audio needs
@@ -85,7 +85,7 @@ class CastStreamService : Service() {
     private fun notification(device: String): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Casting", NotificationManager.IMPORTANCE_LOW))
-        val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(this, 0, openAppIntent(), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 1, Intent(this, CastStreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)

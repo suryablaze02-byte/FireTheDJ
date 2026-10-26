@@ -44,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.text.KeyboardActions
@@ -106,10 +108,10 @@ fun LibraryScreen(
                 Text("Library", color = Dj.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
                 Text("Add music from", color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.alignByBaseline())
             }
-            CastButton(rememberCasting(), diameter = 36.dp, onClick = onCast)
+            Box(Modifier.tourTarget("cast")) { CastButton(rememberCasting(), diameter = 36.dp, onClick = onCast) }
         }
         // Tiles grow with the system font size; all four match the tallest.
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).tourTarget("sources"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SourceTile(SourceKind.PHONE, Modifier.weight(1.05f), onAddFolder)
             SourceTile(SourceKind.YOUTUBE, Modifier.weight(1.3f), onOpenYtMusic)
             SourceTile(SourceKind.LINK, Modifier.weight(0.95f)) {
@@ -160,7 +162,7 @@ fun LibraryScreen(
                         }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.tourTarget("crates"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Genre crates · detected from the audio", color = Dj.Muted, fontSize = 12.sp)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             CrateChip("$ALL ${ready.size}", crate == ALL) { picked = ALL }
@@ -177,7 +179,7 @@ fun LibraryScreen(
                         )
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.tourTarget("mode"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("Mode", color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.width(44.dp))
                             MixMode.entries.forEach { m -> CrateChip(m.label, mode == m) { onMode(m) } }
@@ -207,7 +209,7 @@ fun LibraryScreen(
         Button(
             onClick = { onStart(crate, source) },
             enabled = mixable,
-            modifier = Modifier.fillMaxWidth().height(54.dp).padding(bottom = 0.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp).tourTarget("start"),
             shape = RoundedCornerShape(27.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Dj.Accent,
@@ -261,13 +263,17 @@ private fun FolderChip(label: String, selected: Boolean, onClick: () -> Unit, on
 @Composable
 internal fun CrateChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
+    // Remote focus (TV) shows as a bright edge; touch never focuses it.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         Modifier
             .height(36.dp)
             .background(if (selected) Dj.Accent else Dj.Surface, shape)
-            .border(1.dp, if (selected) Dj.Accent else Dj.Border, shape)
+            // Remote focus: an accent ring (white on the already-orange selected chip).
+            .border(if (focused) 3.dp else 1.dp, if (focused) (if (selected) Dj.Text else Dj.Accent) else if (selected) Dj.Accent else Dj.Border, shape)
             .clip(shape)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {

@@ -69,6 +69,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 - **Live mixing view**: both decks, crossfader, rate, phase error, key and every effect as it happens.
 - **Cast to a TV**: Miracast / Smart View screens show the visualizer in landscape; Chromecast & Google TV get the live mix ([how](docs/CASTING.md)).
 - **Android Auto**: pick a crate in the car and the set starts.
+- **FireTheDJ TV**: a separate Android TV app; the visualizers take over the screen and rotate on their own.
 - **Background play** with media controls, audio focus and headphone-unplug pause.
 
     </td>
@@ -94,11 +95,16 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 
 <h2 id="download">Download</h2>
 
-Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page and open it on your phone. Sideloading needs "Install unknown apps" allowed for the app you open it with.
+Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. Sideloading needs "Install unknown apps" allowed for the app you open it with.
+
+| App | For |
+|---|---|
+| **FireTheDJ** | Android phones and tablets |
+| **FireTheDJ TV** | Android TV and Google TV: shows up in the TV's app drawer, runs from the remote, and plays the visualizers full screen, rotating through all five while the mix plays. Add music from the TV's storage or a USB drive, or YT Music playlists. To install, copy the APK to the TV (USB drive, or an app like *Send Files to TV*) and open it with a file manager. |
 
 | Needs | |
 |---|---|
-| Android 8.0+ | the app |
+| Android 8.0+ | the apps |
 | Android 10+ | casting the mix to a Chromecast |
 | Android 13+ | YouTube Music streaming |
 
@@ -107,10 +113,10 @@ Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte
 Requires JDK 17 and the Android SDK (platform 34).
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug
+./gradlew testPhoneDebugUnitTest assemblePhoneDebug assembleTvDebug
 ```
 
-The APK lands in `app/build/outputs/apk/debug/`. Optional settings go in `local.properties`:
+The phone and TV APKs land in `app/build/outputs/apk/phone/debug/` and `app/build/outputs/apk/tv/debug/`. Both apps share all the DJ code; the TV app's screens are in `app/src/tv`. Optional settings go in `local.properties`:
 
 ```properties
 jamendo.clientId=…   # free at devportal.jamendo.com, for Jamendo links
