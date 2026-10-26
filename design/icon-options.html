@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FireTheDJ icon options</title>
+<style>
+  :root { --bg: #0b0b0e; --card: #15151a; --text: #f2f2f5; --muted: #a9a9b4; --border: #26262e; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; padding: 24px 16px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p.lead { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .opt { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
+  .opt h2 { font-size: 17px; margin: 0 0 3px; } .opt .d { color: var(--muted); font-size: 13px; margin-bottom: 16px; line-height: 1.4; }
+  .row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .squircle { border-radius: 26%; overflow: hidden; box-shadow: 0 6px 20px #0008; }
+  .round { border-radius: 50%; overflow: hidden; box-shadow: 0 6px 20px #0008; }
+  .walls { display: flex; gap: 8px; }
+  .wall { width: 74px; height: 92px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 10px; }
+  .wall.dark { background: linear-gradient(160deg, #1d2333, #0e1018); color: #dde; }
+  .wall.light { background: linear-gradient(160deg, #e8ecf4, #c9d3e6); color: #223; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<h1>FireTheDJ app icon: EQ Flame, realistic</h1>
+<p class="lead">Three takes with a realistic flame (2R–2T), the original 2 for comparison, then every earlier option. Each at full size, as a round icon, and on a dark and a light home screen.</p>
+<div class="grid" id="grid"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- Fire palette: crimson → orange → amber. -->
+    <linearGradient id="fireV" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff2d55"/><stop offset=".5" stop-color="#ff6a1a"/><stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <linearGradient id="fireD" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8174a"/><stop offset=".55" stop-color="#ff5a1f"/><stop offset="1" stop-color="#ffb43a"/>
+    </linearGradient>
+    <radialGradient id="ink" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#1c1820"/><stop offset="1" stop-color="#0a0a0d"/>
+    </radialGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2d55" stop-opacity="0"/><stop offset=".6" stop-color="#ff6a1a"/><stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <!-- The same fire, laid over the whole icon rather than each shape. -->
+    <linearGradient id="fireU" gradientUnits="userSpaceOnUse" x1="54" y1="84" x2="54" y2="24">
+      <stop offset="0" stop-color="#ff2d55"/><stop offset=".5" stop-color="#ff6a1a"/><stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <linearGradient id="fireMid" gradientUnits="userSpaceOnUse" x1="54" y1="34" x2="54" y2="74">
+      <stop offset="0" stop-color="#ffc24a"/><stop offset=".3" stop-color="#ff6a1a"/><stop offset=".5" stop-color="#ff2d55"/>
+      <stop offset=".7" stop-color="#ff6a1a"/><stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <!-- Burning trails: faint where the groove has cooled, white-hot at the ember. Laid across the icon. -->
+    <linearGradient id="trailArc" gradientUnits="userSpaceOnUse" x1="36" y1="24" x2="74" y2="80">
+      <stop offset="0" stop-color="#ff2d55" stop-opacity="0"/><stop offset=".35" stop-color="#ff2d55"/>
+      <stop offset=".7" stop-color="#ff6a1a"/><stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <linearGradient id="trailArc2" gradientUnits="userSpaceOnUse" x1="72" y1="80" x2="32" y2="48">
+      <stop offset="0" stop-color="#ff2d55" stop-opacity="0"/><stop offset=".4" stop-color="#ff2d55"/>
+      <stop offset="1" stop-color="#ffc24a"/>
+    </linearGradient>
+    <linearGradient id="trailWhite" gradientUnits="userSpaceOnUse" x1="36" y1="24" x2="74" y2="80">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <!-- A real flame: a round base, a left tongue, a tall hooked main tip leaning left,
+         a right tongue, and a small lick breaking free above it. -->
+    <clipPath id="realOuter">
+      <path d="M54,80 C44,80 36,73 36,63 C36,56 38.5,51 40,45.5 C42,50.5 44,53.5 46.5,54.5
+               C45.5,46 48,37.5 52,31.5 C53.5,29 54.5,26 54.8,22.5 C57.5,29.5 62.5,34.5 63.5,42
+               C64,46 64,49 63,51.5 C66,48.5 68,44.5 69,39.5 C73,46.5 74,54 72.5,61.5 C71,72.5 63.5,80 54,80Z"/>
+      <path d="M65.5,36 C64.5,32 65,28.5 67,25.5 C68,29.5 70,31.5 69.5,34.5 C69,36.5 67,37 65.5,36Z"/>
+    </clipPath>
+    <!-- Its hot core: low and wide, with one inner tongue. -->
+    <clipPath id="realCore">
+      <path d="M54,78 C47,78 42.5,73 42.5,66.5 C42.5,61 46,57 48.5,52 C49.5,56 51.5,58 53,58.5
+               C52,52 54,45.5 57.5,41 C58.5,47.5 63.5,52.5 64.5,59.5 C65.5,64 64.5,68 63,71 C61,75.5 58,78 54,78Z"/>
+    </clipPath>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a0f2e"/><stop offset=".7" stop-color="#3a1240"/><stop offset="1" stop-color="#1a0f2e"/>
+    </linearGradient>
+    <!-- The sunset sun: above the horizon, with gaps cut through its lower half. -->
+    <clipPath id="sunClip"><path d="M20,20 H88 V46 H20Z M20,48 H88 V52 H20Z M20,54.5 H88 V57.5 H20Z M20,60 H88 V62 H20Z M20,64 H88 V65 H20Z"/></clipPath>
+    <clipPath id="leftHalf"><rect x="0" y="0" width="54" height="108"/></clipPath>
+    <clipPath id="rightHalf"><rect x="54" y="0" width="54" height="108"/></clipPath>
+    <!-- A clean, slightly asymmetric flame: one curve up the left, a hooked tip, a full round base. -->
+    <clipPath id="flameClip"><path d="M56,24 C58,33 68,40 71,51 C74,63 66,78 54,78 C42,78 35,69 36,59 C37,51 42,46 45,40 C46,45 48,48 51,49 C49,41 51,31 56,24Z"/></clipPath>
+    <path id="flame" d="M56,24 C58,33 68,40 71,51 C74,63 66,78 54,78 C42,78 35,69 36,59 C37,51 42,46 45,40 C46,45 48,48 51,49 C49,41 51,31 56,24Z"/>
+  </defs>
+</svg>
+
+<script>
+const bars = (fill) => Array.from({length: 7}, (_, i) =>
+  `<rect x="${33 + i * 6}" y="20" width="4.2" height="62" rx="2.1" fill="${fill}"/>`).join("");
+
+const flameAt = (cx, baseY, s, fill, extra = "") =>
+  `<g transform="translate(${cx} ${baseY}) scale(${s}) translate(-54 -78)" ${extra}><use href="#flame" fill="${fill}"/></g>`;
+
+const NEW = [
+  { name: "7 · F Monogram", desc: "A bold geometric F whose top stroke flares into a flame. A logo that is the name.",
+    bg: "url(#fireD)", art: `
+      <rect x="39" y="35" width="10" height="46" rx="5" fill="#fff"/>
+      <rect x="39" y="35" width="27" height="10" rx="5" fill="#fff"/>
+      <rect x="39" y="55" width="21" height="9.5" rx="4.75" fill="#fff"/>
+      ${flameAt(67, 45, .34, "#fff")}` },
+  { name: "8 · Crossfader Flame", desc: "A DJ crossfader whose knob is a flame, slid to full fire. Unmistakably a mixer.",
+    bg: "url(#ink)", art: `
+      ${[30, 40, 54, 68, 78].map(x => `<rect x="${x - .6}" y="64" width="1.2" height="${x === 54 ? 6 : 4}" rx=".6" fill="#3a3842"/>`).join("")}
+      <rect x="26" y="55" width="56" height="5" rx="2.5" fill="#2a2830"/>
+      <rect x="26" y="55" width="32" height="5" rx="2.5" fill="url(#trail)"/>
+      ${flameAt(58, 60, .48, "url(#fireV)")}` },
+  { name: "9 · Hot Needle", desc: "Close-up of a record with the stylus glowing like an ember on the groove.",
+    bg: "url(#ink)", art: `
+      ${[46, 40, 34, 28, 22].map(r => `<circle cx="34" cy="78" r="${r}" fill="none" stroke="#2c2a33" stroke-width="1.2"/>`).join("")}
+      <path d="M34,44 A34,34 0 0,1 60,55" fill="none" stroke="url(#trail)" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="80" cy="28" r="4.5" fill="#34323c"/>
+      <path d="M80,28 L72,50 L62,56" fill="none" stroke="#e8e8ee" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="60.5" cy="55.5" r="4" fill="#ffc24a"/><circle cx="60.5" cy="55.5" r="7.5" fill="#ff6a1a" fill-opacity=".25"/>` },
+  { name: "10 · Sunset Record", desc: "Retro synthwave: a striped fire sun that is also a record, rising over a horizon.",
+    bg: "url(#dusk)", art: `
+      <g clip-path="url(#sunClip)"><circle cx="54" cy="58" r="24" fill="url(#fireV)"/></g>
+      ${[34, 30, 26].map(r => `<path d="M${54 - r},58 A${r},${r} 0 0,1 ${54 + r},58" fill="none" stroke="#2a1430" stroke-opacity=".35" stroke-width=".8"/>`).join("")}
+      <circle cx="54" cy="58" r="3" fill="#2a1430"/>
+      <rect x="22" y="66" width="64" height="1.6" fill="#ff6a1a" fill-opacity=".9"/>
+      <rect x="30" y="71" width="48" height="1.2" fill="#ff6a1a" fill-opacity=".5"/>
+      <rect x="38" y="75.5" width="32" height="1" fill="#ff6a1a" fill-opacity=".3"/>` },
+  { name: "11 · AI Spark", desc: "A record whose label is a four-point spark, the universal 'AI' mark, in fire colours.",
+    bg: "url(#ink)", art: `
+      ${[31, 27, 23].map((r, i) => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="${i === 0 ? "url(#fireD)" : "#2c2a33"}" stroke-width="${i === 0 ? 2.4 : 1.1}"/>`).join("")}
+      <path d="M54,36 C56,49 59,52 72,54 C59,56 56,59 54,72 C52,59 49,56 36,54 C49,52 52,49 54,36Z" fill="url(#fireV)"/>
+      <path d="M68,36 C68.6,40 69.6,41 73.5,41.6 C69.6,42.2 68.6,43.2 68,47 C67.4,43.2 66.4,42.2 62.5,41.6 C66.4,41 67.4,40 68,36Z" fill="#ffd27a"/>` },
+  { name: "12 · Layered Flame", desc: "Three translucent flames stacked: crimson, orange, amber. Modern and warm.",
+    bg: "url(#ink)", art: `
+      ${flameAt(50, 80, .82, "#ff2d55", 'opacity=".9"')}
+      ${flameAt(57, 80, .68, "#ff6a1a", 'opacity=".9"')}
+      ${flameAt(53, 80, .46, "#ffc24a")}` },
+  { name: "13 · Flame Ring", desc: "A record's edge that rises into a flame at the top: the disc catching fire.",
+    bg: "url(#ink)", art: `
+      <path d="M45.5,30.8 A25,25 0 1,0 62.5,30.8" fill="none" stroke="url(#fireV)" stroke-width="6.5" stroke-linecap="round"/>
+      ${flameAt(54, 40, .42, "url(#fireV)")}
+      <circle cx="54" cy="56" r="7" fill="#2c2a33"/><circle cx="54" cy="56" r="2" fill="url(#fireD)"/>` },
+  { name: "14 · Half & Half", desc: "One mark, split: the left half is a record, the right half is a flame.",
+    bg: "url(#ink)", art: `
+      <g clip-path="url(#leftHalf)">
+        <circle cx="54" cy="56" r="27" fill="#141318" stroke="#2f2d37" stroke-width="1"/>
+        ${[22, 17, 12].map(r => `<circle cx="54" cy="56" r="${r}" fill="none" stroke="#2c2a33" stroke-width="1"/>`).join("")}
+        <circle cx="54" cy="56" r="7" fill="url(#fireD)"/></g>
+      <g clip-path="url(#rightHalf)">${flameAt(54, 84, .93, "url(#fireV)")}</g>
+      <rect x="53.4" y="26" width="1.2" height="58" fill="#0a0a0d"/>` },
+];
+
+const F = (fill) => `
+  <rect x="39" y="35" width="10" height="46" rx="5" fill="${fill}"/>
+  <rect x="39" y="35" width="27" height="10" rx="5" fill="${fill}"/>
+  <rect x="39" y="55" width="21" height="9.5" rx="4.75" fill="${fill}"/>
+  ${flameAt(67, 45, .34, fill)}`;
+
+const NEW2 = [
+  { name: "15 · F Monogram, black", desc: "No. 7 inverted: the F and its flame in the fire gradient on near-black. Matches the app's dark UI.",
+    bg: "url(#ink)", art: F("url(#fireU)") },
+  { name: "16 · FD Initials", desc: "F and D side by side; the D is a record, with grooves inside its curve. FireTheDJ's initials.",
+    bg: "url(#fireD)", art: `
+      <rect x="27" y="33" width="8" height="44" rx="4" fill="#fff"/>
+      <rect x="27" y="33" width="20" height="8" rx="4" fill="#fff"/>
+      <rect x="27" y="51" width="16" height="7.5" rx="3.75" fill="#fff"/>
+      <path d="M55,37 V73 A18,18 0 0,0 55,37Z" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M58.5,46 A9,9 0 0,1 58.5,64" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.6"/>
+      <circle cx="59" cy="55" r="2.2" fill="#fff"/>` },
+  { name: "17 · Fire Play", desc: "A rounded play button with a flame burning through its centre. Hit play, start the fire.",
+    bg: "url(#fireD)", art: `
+      <path d="M43,33 L78,54 L43,75Z" fill="#fff" stroke="#fff" stroke-width="8" stroke-linejoin="round"/>
+      ${flameAt(53.5, 66, .3, "url(#fireU)")}` },
+  { name: "18 · Flame Label", desc: "A classic black record whose centre label is a flame. Clean and instantly 'vinyl'.",
+    bg: "url(#ink)", art: `
+      <circle cx="54" cy="54" r="32" fill="#141318" stroke="#2f2d37" stroke-width="1"/>
+      ${[27, 22, 17].map(r => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="#26242d" stroke-width="1"/>`).join("")}
+      <path d="M33,40 A24,24 0 0,1 45,31" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="54" cy="54" r="12" fill="url(#fireD)"/>
+      ${flameAt(54, 62, .26, "#fff")}` },
+  { name: "19 · Fire Wave", desc: "A sound wave that swells into fire in the middle: bars mirror around the centre line.",
+    bg: "url(#ink)", art: [4, 8, 14, 22, 31, 40, 30, 23, 15, 9, 5].map((h, i) =>
+      `<rect x="${25.5 + i * 5.4}" y="${54 - h / 2}" width="3.4" height="${h}" rx="1.7" fill="url(#fireMid)"/>`).join("") },
+  { name: "20 · F in the Record", desc: "No. 7's F inside a white record ring: the name and the turntable together.",
+    bg: "url(#fireD)", art: `
+      <circle cx="54" cy="54" r="30" fill="none" stroke="#fff" stroke-width="3"/>
+      <g transform="translate(54 56) scale(.62) translate(-54 -56)">${F("#fff")}</g>` },
+  { name: "21 · Neon Tunnel", desc: "The app's own Neon Tunnel visualizer as the icon: glowing frames racing to a flame.",
+    bg: "url(#ink)", art: `
+      ${[[64, 1], [50, .8], [38, .62], [27, .45]].map(([s, o]) =>
+        `<rect x="${54 - s / 2}" y="${54 - s / 2}" width="${s}" height="${s}" rx="${s * .26}" fill="none" stroke="url(#fireU)" stroke-opacity="${o}" stroke-width="${s > 40 ? 2.4 : 1.8}"/>`).join("")}
+      ${flameAt(54, 61, .22, "url(#fireU)")}` },
+  { name: "22 · Speaker Flame", desc: "A speaker cone seen head-on, with a flame at its centre. Loud, party-ready.",
+    bg: "url(#ink)", art: `
+      <circle cx="54" cy="54" r="31" fill="#1a1820" stroke="#2f2d37" stroke-width="1.2"/>
+      <circle cx="54" cy="54" r="24" fill="#111015" stroke="#26242d" stroke-width="1"/>
+      <circle cx="54" cy="54" r="15" fill="url(#fireD)"/>
+      ${flameAt(54, 64, .32, "#fff")}
+      ${[[30, 30], [78, 30], [30, 78], [78, 78]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.6" fill="#2f2d37"/>`).join("")}` },
+];
+
+// Realistic flames for 2 · EQ Flame, bold.
+const eqBars = (n, x0, step, w, fill, opacity = 1) => Array.from({length: n}, (_, i) =>
+  `<rect x="${x0 + i * step}" y="18" width="${w}" height="66" rx="${w / 2}" fill="${fill}" fill-opacity="${opacity}"/>`).join("");
+
+const REAL = [
+  { name: "2R · Real flame, two-tone", desc: "A real fire silhouette (three tongues, hooked tip, a lick breaking free), and its hot inner core in solid white over softer outer flame.",
+    bg: "url(#fireD)", art: `
+      <g clip-path="url(#realOuter)">${eqBars(9, 32.3, 5, 3.4, "#fff", .55)}</g>
+      <g clip-path="url(#realCore)">${eqBars(9, 32.3, 5, 3.4, "#fff")}</g>` },
+  { name: "2S · Real flame, solid", desc: "The same real flame in solid white bars: simpler, the boldest silhouette.",
+    bg: "url(#fireD)", art: `<g clip-path="url(#realOuter)">${eqBars(9, 32.3, 5, 3.4, "#fff")}</g>` },
+  { name: "2T · Real flame, fine", desc: "Thinner, more bars: the flame's edges and tongues follow the fire more closely, like a high-res equalizer.",
+    bg: "url(#fireD)", art: `
+      <g clip-path="url(#realOuter)">${eqBars(13, 32.2, 3.5, 2.3, "#fff", .55)}</g>
+      <g clip-path="url(#realCore)">${eqBars(13, 32.2, 3.5, 2.3, "#fff")}</g>` },
+];
+
+// Bold takes on 3 · Ember Groove.
+const arc = (r, from, to) => {
+  const p = a => [54 + r * Math.cos((a - 90) * Math.PI / 180), 54 + r * Math.sin((a - 90) * Math.PI / 180)].map(v => v.toFixed(2));
+  const [x1, y1] = p(from), [x2, y2] = p(to);
+  return `M${x1},${y1} A${r},${r} 0 ${to - from > 180 ? 1 : 0},1 ${x2},${y2}`;
+};
+const ember = (r, deg, size) => {
+  const a = (deg - 90) * Math.PI / 180, x = 54 + r * Math.cos(a), y = 54 + r * Math.sin(a);
+  return `<circle cx="${x}" cy="${y}" r="${size * 2.2}" fill="#ff6a1a" fill-opacity=".22"/>
+          <circle cx="${x}" cy="${y}" r="${size * 1.45}" fill="#ffb43a" fill-opacity=".45"/>
+          <circle cx="${x}" cy="${y}" r="${size}" fill="#fff4d6"/>`;
+};
+
+const BOLD = [
+  { name: "3B · Ember Groove, bold", desc: "Thick grooves, a wide burning trail sweeping a third of the record, a big glowing ember and label.",
+    bg: "url(#ink)", art: `
+      ${[30, 23.5, 17].map(r => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="#2e2b36" stroke-width="3.2"/>`).join("")}
+      <path d="${arc(30, -20, 115)}" fill="none" stroke="url(#trailArc)" stroke-width="5.5" stroke-linecap="round"/>
+      ${ember(30, 115, 3.6)}
+      <circle cx="54" cy="54" r="11" fill="url(#fireD)"/><circle cx="54" cy="54" r="2.6" fill="#0a0a0d"/>` },
+  { name: "3C · Ember Groove, comet", desc: "Two grooves on fire at once, like a record spinning so fast it burns. The most motion.",
+    bg: "url(#ink)", art: `
+      ${[30, 23.5, 17].map(r => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="#2e2b36" stroke-width="3.2"/>`).join("")}
+      <path d="${arc(30, -40, 130)}" fill="none" stroke="url(#trailArc)" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="${arc(23.5, 150, 285)}" fill="none" stroke="url(#trailArc2)" stroke-width="4.6" stroke-linecap="round"/>
+      ${ember(30, 130, 3.4)}${ember(23.5, 285, 2.6)}
+      <circle cx="54" cy="54" r="10" fill="url(#fireD)"/><circle cx="54" cy="54" r="2.4" fill="#0a0a0d"/>` },
+  { name: "3D · Ember Groove, fire", desc: "Inverted onto the full fire gradient: white grooves, a white-hot trail and a dark label.",
+    bg: "url(#fireD)", art: `
+      ${[30, 23.5, 17].map(r => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="#ffffff" stroke-opacity=".28" stroke-width="3.2"/>`).join("")}
+      <path d="${arc(30, -20, 115)}" fill="none" stroke="url(#trailWhite)" stroke-width="5.5" stroke-linecap="round"/>
+      <circle cx="${(54 + 30 * Math.cos(25 * Math.PI / 180)).toFixed(2)}" cy="${(54 + 30 * Math.sin(25 * Math.PI / 180)).toFixed(2)}" r="4.6" fill="#ffffff"/>
+      <circle cx="54" cy="54" r="11" fill="#1a0a10"/><circle cx="54" cy="54" r="2.6" fill="url(#fireD)"/>` },
+];
+
+const OLD = [
+  { name: "1 · EQ Flame", desc: "A flame built from equalizer bars: music and fire in one mark. Fire gradient on near-black.",
+    bg: "url(#ink)", art: `<g clip-path="url(#flameClip)">${bars("url(#fireV)")}</g>` },
+  { name: "2 · EQ Flame, bold", desc: "The same mark in white on a full fire gradient. Loudest on a home screen.",
+    bg: "url(#fireD)", art: `<g clip-path="url(#flameClip)">${bars("#ffffff")}</g>` },
+  { name: "3 · Ember Groove", desc: "A record drawn in fine grooves, with one groove burning like a needle trail. Quiet and premium.",
+    bg: "url(#ink)", art: `
+      ${[30, 26, 22, 18].map(r => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="#2c2a33" stroke-width="1.1"/>`).join("")}
+      <path d="M54,28 A26,26 0 0,1 80,54" fill="none" stroke="url(#trail)" stroke-width="3.2" stroke-linecap="round"/>
+      <circle cx="80" cy="54" r="3.4" fill="#ffd27a"/>
+      <circle cx="54" cy="54" r="9" fill="url(#fireD)"/><circle cx="54" cy="54" r="1.8" fill="#0a0a0d"/>` },
+  { name: "4 · Flame in the Record", desc: "A fire-gradient disc with a flame cut out of it, spindle in the flame. Bold silhouette.",
+    bg: "url(#ink)", art: `
+      <circle cx="54" cy="54" r="32" fill="url(#fireD)"/>
+      ${[27, 23].map(r => `<circle cx="54" cy="54" r="${r}" fill="none" stroke="#ffffff" stroke-opacity=".16" stroke-width=".9"/>`).join("")}
+      <g transform="translate(54 56) scale(.62) translate(-54 -51)"><use href="#flame" fill="#0d0b10"/></g>
+      <circle cx="54" cy="62" r="2" fill="url(#fireD)"/>` },
+  { name: "5 · White Flame Disc", desc: "Two-tone: a white record ring and flame on the fire gradient. Simple, iconic.",
+    bg: "url(#fireD)", art: `
+      <circle cx="54" cy="54" r="29" fill="none" stroke="#ffffff" stroke-width="3.2"/>
+      <circle cx="54" cy="54" r="23" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="1.2"/>
+      <g transform="translate(54 55) scale(.55) translate(-54 -51)"><use href="#flame" fill="#ffffff"/></g>` },
+  { name: "6 · Spin Flame", desc: "The flame turning into a spinning record: three arcs sweep around it like motion.",
+    bg: "url(#ink)", art: `
+      <path d="M54,22 A32,32 0 0,1 86,54" fill="none" stroke="url(#fireV)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M54,86 A32,32 0 0,1 22,54" fill="none" stroke="url(#fireV)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M74,40 A22,22 0 0,1 72,70" fill="none" stroke="#ffffff" stroke-opacity=".25" stroke-width="2" stroke-linecap="round"/>
+      <g transform="translate(54 55) scale(.6) translate(-54 -51)"><use href="#flame" fill="url(#fireV)"/></g>` },
+];
+
+const icon = (o, size, cls) =>
+  `<div class="${cls}" style="width:${size}px;height:${size}px"><svg viewBox="18 18 72 72" width="${size}" height="${size}">
+     <rect width="108" height="108" fill="${o.bg}"/>${o.art}</svg></div>`;
+
+const OPTIONS = [...REAL, OLD[1], ...BOLD, OLD[2], ...NEW2, ...NEW, ...OLD];
+document.getElementById("grid").innerHTML = OPTIONS.map(o => `
+  <div class="opt"><h2>${o.name}</h2><div class="d">${o.desc}</div>
+    <div class="row">${icon(o, 120, "squircle")}${icon(o, 80, "round")}
+      <div class="walls">
+        <div class="wall dark">${icon(o, 44, "squircle")}FireTheDJ</div>
+        <div class="wall light">${icon(o, 44, "round")}FireTheDJ</div>
+      </div></div></div>`).join("");
+</script>
+</body>
+</html>

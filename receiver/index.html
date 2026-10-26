@@ -1,0 +1,250 @@
+<!doctype html>
+<!--
+  FireTheDJ's Google Cast receiver: runs on the Chromecast / Google TV.
+  The phone streams the live mix (http://<phone>:<port>/mix.aac) and sends, on the
+  urn:x-cast:com.autodj.mix channel: {type:"stream", url, style}, {type:"track", title, artist, bpm, art}
+  and {type:"style", style}. The visualizer is drawn from the audio this page is playing, so the
+  picture is in time with what the TV is playing, however far the stream runs behind the phone.
+  Host it on HTTPS (e.g. GitHub Pages) and register its URL in the Google Cast developer console.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FireTheDJ</title>
+<script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: "Google Sans", Roboto, sans-serif; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #now { position: absolute; left: 64px; bottom: 56px; display: flex; align-items: center; gap: 24px;
+         color: #f2f2f5; text-shadow: 0 2px 12px #000; transition: opacity .6s; }
+  #art { width: 112px; height: 112px; border-radius: 14px; object-fit: cover; box-shadow: 0 6px 24px #000a; }
+  #title { font-size: 40px; font-weight: 700; max-width: 1300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sub { font-size: 24px; color: #b4b4be; margin-top: 6px; }
+  #brand { position: absolute; top: 44px; left: 64px; font-size: 30px; font-weight: 900; letter-spacing: -1px; color: #f2f2f5; }
+  #brand b { background: linear-gradient(#fffbe0, #ffd04a 40%, #ff7a1a 70%, #e0301a); -webkit-background-clip: text; color: transparent; }
+  #wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+          color: #b4b4be; font-size: 32px; transition: opacity .6s; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="brand"><b>Fire</b>TheDJ</div>
+<div id="wait">Waiting for the mix from your phone…</div>
+<div id="now" style="opacity:0"><img id="art" alt=""><div><div id="title"></div><div id="sub"></div></div></div>
+<audio id="mix" crossorigin="anonymous" preload="none"></audio>
+<cast-media-player style="display:none"></cast-media-player>
+<script>
+"use strict";
+const NAMESPACE = "urn:x-cast:com.autodj.mix";
+const audio = document.getElementById("mix");
+const canvas = document.getElementById("c");
+const g = canvas.getContext("2d");
+let style = "CLUB";
+let actx = null, analyser = null, bins = null, wave = null;
+
+// ---- messages from the phone ----------------------------------------------------------------
+function onMessage(m) {
+  if (m.style) style = m.style;
+  if (m.type === "stream") play(m.url);
+  // Paused on the phone: stop now, dropping the buffered seconds; "stream" comes again on play.
+  if (m.type === "pause") { lastUrl = null; audio.pause(); audio.removeAttribute("src"); audio.load(); }
+  if (m.type === "track") showTrack(m);
+}
+try {
+  const context = cast.framework.CastReceiverContext.getInstance();
+  context.addCustomMessageListener(NAMESPACE, e => onMessage(typeof e.data === "string" ? JSON.parse(e.data) : e.data));
+  const options = new cast.framework.CastReceiverOptions();
+  options.disableIdleTimeout = true;      // a set runs for hours with no "media" in CAF's sense
+  options.skipPlayersLoad = true;         // this page plays the stream itself
+  options.customNamespaces = { [NAMESPACE]: cast.framework.system.MessageType.JSON };
+  context.start(options);
+} catch (e) {
+  // Not on a Cast device: a desktop browser can preview with ?url=<stream>&style=<STYLE>.
+  console.log("Cast receiver not started:", e);
+}
+const q = new URLSearchParams(location.search);
+if (q.get("style")) style = q.get("style");
+if (q.get("url")) document.addEventListener("click", () => onMessage({ type: "stream", url: q.get("url") }), { once: true });
+
+function play(url) {
+  if (!actx) {
+    actx = new AudioContext();
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.72;
+    actx.createMediaElementSource(audio).connect(analyser);
+    analyser.connect(actx.destination);
+    bins = new Uint8Array(analyser.frequencyBinCount);
+    wave = new Uint8Array(analyser.fftSize);
+  }
+  lastUrl = url;
+  audio.src = url;
+  audio.play().catch(() => {});
+  actx.resume();
+  document.getElementById("wait").style.opacity = 0;
+}
+let lastUrl = null;
+// A live stream that stalls (Wi-Fi hiccup) is restarted at the live edge, unless it was paused.
+audio.addEventListener("error", () => setTimeout(() => lastUrl && play(lastUrl), 1500));
+audio.addEventListener("ended", () => lastUrl && play(lastUrl));
+
+function showTrack(m) {
+  document.getElementById("title").textContent = m.title || "";
+  document.getElementById("sub").textContent = [m.artist, m.bpm ? Math.round(m.bpm) + " BPM" : null].filter(Boolean).join(" · ");
+  const art = document.getElementById("art");
+  if (m.art) { art.src = m.art; art.style.display = ""; } else art.style.display = "none";
+  document.getElementById("now").style.opacity = 1;
+}
+
+// ---- listening: bands, energy and beats from the audio being played ------------------------
+const BANDS = 32;
+const bands = new Float32Array(BANDS);
+let energy = 0, bass = 0, beat = 0, bassAvg = 0, lastBeat = 0, hue = 18;
+function listen(now) {
+  if (!analyser) { bands.fill(0); energy *= 0.95; bass *= 0.95; beat *= 0.9; return; }
+  analyser.getByteFrequencyData(bins);
+  analyser.getByteTimeDomainData(wave);
+  // Log-spaced bands, 30 Hz – 16 kHz.
+  const nyq = actx.sampleRate / 2, n = bins.length;
+  let total = 0;
+  for (let b = 0; b < BANDS; b++) {
+    const lo = Math.floor(n * 30 * Math.pow(16000 / 30, b / BANDS) / nyq);
+    const hi = Math.max(lo + 1, Math.floor(n * 30 * Math.pow(16000 / 30, (b + 1) / BANDS) / nyq));
+    let s = 0;
+    for (let i = lo; i < hi && i < n; i++) s += bins[i];
+    const v = s / (hi - lo) / 255;
+    bands[b] = Math.max(v, bands[b] * 0.86);
+    total += v;
+  }
+  energy = energy * 0.8 + (total / BANDS) * 0.2;
+  const b0 = (bands[0] + bands[1] + bands[2] + bands[3]) / 4;
+  bass = bass * 0.6 + b0 * 0.4;
+  bassAvg = bassAvg * 0.97 + b0 * 0.03;
+  if (b0 > bassAvg * 1.35 && b0 > 0.25 && now - lastBeat > 280) { beat = 1; lastBeat = now; hue = (hue + 37) % 360; }
+  else beat *= 0.9;
+}
+
+// ---- drawing ------------------------------------------------------------------------------
+let W = 0, H = 0;
+function resize() {
+  // 720p is plenty on a TV and keeps older Chromecasts smooth.
+  W = canvas.width = 1280; H = canvas.height = 720;
+}
+resize();
+const hsl = (h, s, l, a = 1) => `hsla(${h},${s}%,${l}%,${a})`;
+let t0 = performance.now();
+
+function frame(now) {
+  const t = (now - t0) / 1000;
+  listen(now);
+  g.globalCompositeOperation = "source-over";
+  (SCENES[style] || SCENES.CLUB)(t);
+  requestAnimationFrame(frame);
+}
+
+const SCENES = {
+  // Light through smoke: beams swing down from above through a slow haze.
+  HAZE(t) {
+    g.fillStyle = `rgba(6,4,10,${0.35})`; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 6; i++) {
+      const x = W * (0.1 + 0.16 * i), ang = Math.sin(t * 0.5 + i * 1.3) * 0.5;
+      const len = H * 1.3, wid = 40 + bands[4 + i * 3] * 160;
+      const grad = g.createLinearGradient(x, 0, x + Math.sin(ang) * len, len);
+      grad.addColorStop(0, hsl(hue + i * 22, 100, 60, 0.35 + beat * 0.4));
+      grad.addColorStop(1, hsl(hue + i * 22, 100, 50, 0));
+      g.fillStyle = grad;
+      g.beginPath(); g.moveTo(x - 6, 0); g.lineTo(x + 6, 0);
+      g.lineTo(x + Math.sin(ang) * len + wid, Math.cos(ang) * len); g.lineTo(x + Math.sin(ang) * len - wid, Math.cos(ang) * len);
+      g.fill();
+    }
+    for (let i = 0; i < 4; i++) {
+      const cx = W * (0.5 + 0.4 * Math.sin(t * 0.07 + i * 2)), cy = H * (0.6 + 0.3 * Math.cos(t * 0.05 + i));
+      const r = 380 + energy * 300;
+      const grad = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+      grad.addColorStop(0, hsl(hue + 180 + i * 30, 60, 40, 0.06 + energy * 0.08)); grad.addColorStop(1, "transparent");
+      g.fillStyle = grad; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+  },
+  // Rings racing at the beat toward the viewer.
+  TUNNEL(t) {
+    g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    const cx = W / 2 + Math.sin(t * 0.6) * 60, cy = H / 2 + Math.cos(t * 0.45) * 40;
+    const speed = 0.35 + energy * 1.4;
+    for (let i = 0; i < 18; i++) {
+      const z = ((i / 18) + t * speed * 0.25) % 1;
+      const s = Math.pow(z, 2.2) * W * 1.1;
+      g.strokeStyle = hsl(hue + i * 14, 100, 55 + beat * 20, z * (0.6 + bands[i] * 0.8));
+      g.lineWidth = 2 + z * 10 + bass * 8;
+      g.beginPath();
+      g.roundRect ? g.roundRect(cx - s, cy - s * 0.6, s * 2, s * 1.2, s * 0.25) : g.rect(cx - s, cy - s * 0.6, s * 2, s * 1.2);
+      g.stroke();
+    }
+  },
+  // Soft colour that breathes: big glowing blobs drifting and swelling with the music.
+  LIQUID(t) {
+    g.fillStyle = "rgba(4,2,8,0.18)"; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 7; i++) {
+      const cx = W * (0.5 + 0.42 * Math.sin(t * (0.11 + i * 0.03) + i * 1.7));
+      const cy = H * (0.5 + 0.38 * Math.cos(t * (0.09 + i * 0.025) + i * 2.3));
+      const r = 220 + bands[i * 4] * 380 + beat * 60;
+      const grad = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+      grad.addColorStop(0, hsl(hue + i * 48, 90, 55, 0.22)); grad.addColorStop(1, "transparent");
+      g.fillStyle = grad; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+  },
+  // A wall of pixels: the spectrum as an LED matrix.
+  FIELD(t) {
+    g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+    const cols = 48, rows = 27, cw = W / cols, ch = H / rows;
+    for (let c = 0; c < cols; c++) {
+      const v = bands[Math.floor(c / cols * BANDS)];
+      const lit = Math.round(v * rows * 1.1);
+      for (let r = 0; r < rows; r++) {
+        const on = rows - r <= lit;
+        const l = on ? 45 + 20 * (1 - r / rows) + beat * 15 : 7;
+        g.fillStyle = on ? hsl(hue + c * 4 - r * 3, 100, l) : "#141418";
+        g.beginPath(); g.arc(c * cw + cw / 2, r * ch + ch / 2, Math.min(cw, ch) * 0.36, 0, Math.PI * 2); g.fill();
+      }
+    }
+  },
+  // Stage, LED wall and crowd.
+  CLUB(t) {
+    g.fillStyle = "#05040a"; g.fillRect(0, 0, W, H);
+    // LED wall behind the stage.
+    const wx = W * 0.18, wy = H * 0.08, ww = W * 0.64, wh = H * 0.42, cols = BANDS;
+    g.fillStyle = "#0c0b12"; g.fillRect(wx, wy, ww, wh);
+    for (let i = 0; i < cols; i++) {
+      const h = bands[i] * wh;
+      g.fillStyle = hsl(hue + i * 6, 100, 50 + beat * 15, 0.9);
+      g.fillRect(wx + i * ww / cols + 2, wy + wh - h, ww / cols - 4, h);
+    }
+    // Beams from the rig.
+    g.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 8; i++) {
+      const x = W * (0.08 + i * 0.12), ang = Math.sin(t * 0.8 + i) * 0.7;
+      const len = H * 1.1;
+      const grad = g.createLinearGradient(x, 0, x + Math.sin(ang) * len, Math.cos(ang) * len);
+      grad.addColorStop(0, hsl(hue + 120 + i * 20, 100, 60, 0.25 + beat * 0.5)); grad.addColorStop(1, "transparent");
+      g.strokeStyle = grad; g.lineWidth = 6 + bass * 14;
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x + Math.sin(ang) * len, Math.cos(ang) * len); g.stroke();
+    }
+    g.globalCompositeOperation = "source-over";
+    // The crowd: heads and raised hands bobbing to the bass.
+    g.fillStyle = "#000";
+    for (let i = 0; i < 40; i++) {
+      const x = (i + 0.5) * W / 40 + Math.sin(i * 7.3) * 10;
+      const bob = Math.abs(Math.sin(t * 4 + i)) * (6 + bass * 26);
+      const y = H * 0.84 - bob - (i % 3) * 14;
+      g.beginPath(); g.arc(x, y, 18, 0, Math.PI * 2); g.fill();
+      g.fillRect(x - 24, y + 14, 48, H);
+      if (i % 4 === 0) { g.fillRect(x + 12, y - 70 - bob, 8, 70); }
+    }
+  },
+};
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
