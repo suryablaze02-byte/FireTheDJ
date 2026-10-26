@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,6 +83,8 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
     var touched by remember { mutableIntStateOf(0) }
     val rootFocus = remember { FocusRequester() }
     val pauseFocus = remember { FocusRequester() }
+    // The key that brought the controls up: its release must not also press Play/Pause, now focused.
+    var opener by remember { mutableStateOf<Key?>(null) }
 
     KeepScreenOn()
     BackHandler { if (controls) controls = false else onHome() }
@@ -110,12 +113,13 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
         Modifier.fillMaxSize().background(Color.Black)
             .focusRequester(rootFocus).focusable()
             .onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyUp && e.key == opener) { opener = null; return@onPreviewKeyEvent true }
                 if (controls) { touched++; return@onPreviewKeyEvent false }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
                     Key.DirectionRight -> { index = (index + 1) % styles.size; manual++; infoUntil = System.currentTimeMillis() + INFO_MS; true }
                     Key.DirectionLeft -> { index = (index - 1 + styles.size) % styles.size; manual++; infoUntil = System.currentTimeMillis() + INFO_MS; true }
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionDown, Key.DirectionUp -> { controls = true; true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionDown, Key.DirectionUp -> { opener = e.key; controls = true; true }
                     else -> false
                 }
             },
@@ -133,10 +137,10 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 if (state.paused) Text("Paused", color = Dj.Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text(deck?.title.orEmpty(), color = Dj.Text, fontSize = 36.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(deck?.title.orEmpty(), color = Dj.Text, fontSize = 36.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                 val bits = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, deck?.let { "%.0f BPM".format(it.bpm) }, deck?.key, styles[index].label)
-                Text(bits.joinToString(" · "), color = Dj.Muted, fontSize = 20.sp, maxLines = 1)
-                state.next?.let { Text("Up next · ${it.title}", color = Dj.BlueText, fontSize = 18.sp, maxLines = 1) }
+                Text(bits.joinToString(" · "), color = Dj.Muted, fontSize = 20.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                state.next?.let { Text("Up next · ${it.title}", color = Dj.BlueText, fontSize = 18.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
             }
         }
 
