@@ -85,17 +85,19 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="screenshots/01-splash.png" width="200" alt="Splash screen"/><br/><sub>Splash</sub></td>
-    <td align="center"><img src="screenshots/02-library.png" width="200" alt="Library with genre crates"/><br/><sub>Library &amp; genre crates</sub></td>
-    <td align="center"><img src="screenshots/03-yt-music.png" width="200" alt="YT Music curated playlists"/><br/><sub>YT Music curated playlists</sub></td>
+    <td align="center"><img src="screenshots/02-mix.png" width="200" alt="Mix tab: source, mode and genre crates"/><br/><sub>Mix: pick a crate</sub></td>
+    <td align="center"><img src="screenshots/03-music.png" width="200" alt="Music tab: sources and songs"/><br/><sub>Music: your sources</sub></td>
+    <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing with the spinning glass record"/><br/><sub>Now Playing</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing"/><br/><sub>Now Playing</sub></td>
-    <td align="center"><img src="screenshots/05-mixing.png" width="200" alt="Live mixing view"/><br/><sub>Live mixing view</sub></td>
-    <td align="center"><img src="screenshots/07-cast.png" width="200" alt="Cast to a TV"/><br/><sub>Cast to a TV</sub></td>
+    <td align="center"><img src="screenshots/05-visualizer.png" width="200" alt="Full-screen Club visualizer with glass controls"/><br/><sub>Full-screen visualizers</sub></td>
+    <td align="center"><img src="screenshots/07-cast.png" width="200" alt="Play on a TV sheet"/><br/><sub>Play on a TV</sub></td>
+    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings with an update ready"/><br/><sub>Settings &amp; updates</sub></td>
   </tr>
   <tr>
-    <td align="center" colspan="3"><img src="screenshots/08-tour.png" width="200" alt="First-launch guided tour"/><br/><sub>First-launch guided tour</sub></td>
+    <td align="center"><img src="screenshots/14-update.png" width="200" alt="Banner for a new version"/><br/><sub>A new version is out</sub></td>
+    <td align="center"><img src="screenshots/13-support.png" width="200" alt="Support FireTheDJ over UPI"/><br/><sub>Support over UPI</sub></td>
+    <td></td>
   </tr>
 </table>
 </div>
@@ -105,12 +107,12 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="screenshots/09-tv-home.png" width="400" alt="FireTheDJ TV home screen"/><br/><sub>Home: crates, mode and music sources</sub></td>
-    <td align="center"><img src="screenshots/10-tv-player.png" width="400" alt="TV player with Home, Play/Pause and Stop"/><br/><sub>Home, Play/Pause and Stop on OK</sub></td>
+    <td align="center"><img src="screenshots/09-tv-home.png" width="400" alt="FireTheDJ TV home screen"/><br/><sub>Home: mode, crates and music sources</sub></td>
+    <td align="center"><img src="screenshots/10-tv-player.png" width="400" alt="TV player with Home, Stop and Play/Pause"/><br/><sub>Home, Stop and Play/Pause on OK</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/11-tv-visualizer.png" width="400" alt="Neon Tunnel visualizer on the TV"/><br/><sub>Full-screen visualizers, a new look every 30 s</sub></td>
-    <td align="center"><img src="screenshots/12-tv-yt-music.png" width="400" alt="YT Music playlists on the TV"/><br/><sub>YT Music playlists by mood and genre</sub></td>
+    <td align="center"><img src="screenshots/11-tv-visualizer.png" width="400" alt="Club visualizer on the TV with the track card"/><br/><sub>Full-screen visualizers, a new look every 30 s</sub></td>
+    <td align="center"><img src="screenshots/12-tv-settings.png" width="400" alt="TV Settings with an update ready"/><br/><sub>Settings: updates, support, clear library</sub></td>
   </tr>
 </table>
 </div>
