@@ -35,11 +35,12 @@ TVs don't come with a browser that can download APKs, so get the file onto the T
 ### Option A: Downloader app (easiest, no computer)
 
 1. On the TV, install **Downloader** by AFTVnews from the Play Store.
-2. Open Downloader and type this address:
-   `https://github.com/suryablaze02-byte/FireTheDJ/releases/latest`
-3. Scroll to *Assets* and choose **FireTheDJ-TV-vX.Y.Z.apk**.
-4. When asked, allow Downloader to install unknown apps (on Google TV: **Settings › System › About**, click **Android TV OS build** seven times to turn on developer options first, then **Settings › Apps › Security & restrictions › Unknown sources › Downloader**).
-5. Tap **Install**. Afterwards you can delete the APK to free space.
+2. Open Downloader, type the code **`9758344`** in the URL box and press **Go**.
+   It always downloads the latest FireTheDJ TV. (The code is a short link to
+   `https://github.com/suryablaze02-byte/FireTheDJ/releases/latest/download/FireTheDJ-TV.apk`;
+   you can type that instead, or `aftv.news/9758344` in a browser.)
+3. When asked, allow Downloader to install unknown apps (on Google TV: **Settings › System › About**, click **Android TV OS build** seven times to turn on developer options first, then **Settings › Apps › Security & restrictions › Unknown sources › Downloader**).
+4. Tap **Install**. Afterwards you can delete the APK to free space.
 
 ### Option B: Send Files to TV
 
