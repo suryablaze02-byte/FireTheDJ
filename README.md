@@ -17,7 +17,7 @@
 
 <br/>
 
-[**Features**](#features) · [**Screenshots**](#screenshots) · [**Download**](#download) · [**Build**](#build) · [**Contributing**](#contributing) · [**Support**](#support) · [**Disclaimer**](#disclaimer)
+[**Features**](#features) · [**Screenshots**](#screenshots) · [**Download**](#download) · [**Install**](docs/INSTALL.md) · [**Build**](#build) · [**Contributing**](#contributing) · [**Support**](#support) · [**Disclaimer**](#disclaimer)
 
 </div>
 
@@ -119,7 +119,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 
 <h2 id="download">Download</h2>
 
-Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. Sideloading needs "Install unknown apps" allowed for the app you open it with. From 1.2.0 on, FireTheDJ tells you when a new version is out and installs it from **Settings**.
+Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. Step-by-step help for phones and TVs, first launch and troubleshooting: [**Installation Guide**](docs/INSTALL.md). Sideloading needs "Install unknown apps" allowed for the app you open it with. From 1.2.0 on, FireTheDJ tells you when a new version is out and installs it from **Settings**.
 
 | App | For |
 |---|---|
