@@ -150,7 +150,7 @@ Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte
 #### 📺 Android TV and Google TV
 
 1. On the TV, install **Downloader** by AFTVnews from the Play Store.
-2. In Downloader, go to `github.com/suryablaze02-byte/FireTheDJ/releases/latest` and pick **FireTheDJ-TV-vX.Y.Z.apk**.
+2. In Downloader, type the code **`9758344`** and press **Go**. The latest FireTheDJ TV downloads.
 3. Allow Downloader to install unknown apps when asked, then tap **Install**. FireTheDJ TV appears in your apps.
 
 No Downloader? Send the APK from your phone with *Send Files to TV*, or use a USB drive. The [Installation Guide](docs/INSTALL.md) covers these, adb, first launch, permissions and troubleshooting.
