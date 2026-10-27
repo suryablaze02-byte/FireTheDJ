@@ -22,8 +22,8 @@ android {
         buildConfigField("String", "CAST_APP_ID", "\"${localProps.getProperty("cast.appId", "")}\"")
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     // Release key from keystore.properties (kept out of git; see docs/RELEASE_SIGNING.md).
@@ -91,6 +91,9 @@ dependencies {
     // YouTube Music: playlist listing, and the signature / `n` solving that makes stream URLs playable.
     // v0.26.3, not v0.26.4: the newer one fails to parse the current player JS's deobfuscation function.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.3")
+
+    // TV only: draws the UPI code for Support, to scan with a phone (Apache-2.0).
+    "tvImplementation"("com.google.zxing:core:3.5.3")
 
     testImplementation("junit:junit:4.13.2")
     // The real org.json for JVM tests (android.jar only has stubs).

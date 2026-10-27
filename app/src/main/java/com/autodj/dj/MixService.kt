@@ -140,12 +140,16 @@ class MixService : MediaLibraryService() {
         .build()
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Swiping the app away keeps a playing set going; otherwise shut down.
-        val s = engine.state.value
-        if (!s.running || s.paused) {
-            engine.stop()
-            stopSelf()
-        }
+        // Swiping the app away from recents ends the set. Not while Android Auto is playing it:
+        // the car is then where the set lives, and clearing the phone's recents shouldn't cut it.
+        val inCar = session?.connectedControllers?.any { it.packageName == ANDROID_AUTO } == true
+        if (inCar) return
+        engine.stop()
+        stopSelf()
+    }
+
+    private companion object {
+        const val ANDROID_AUTO = "com.google.android.projection.gearhead"
     }
 
     override fun onDestroy() {

@@ -73,6 +73,8 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 - **FireTheDJ TV**: a separate Android TV app, run from the remote. The visualizers take over the screen and change look every 30 seconds; ◀ ▶ switches looks, OK brings up Home, Play/Pause and Stop.
 - **Background play** with media controls, audio focus and headphone-unplug pause.
 - **Guided tour** on first launch, on phone and TV.
+- **Updates itself**: Settings shows new releases and what's new, and installs them.
+- **A frosted-glass look** on phone and TV.
 
     </td>
   </tr>
@@ -115,7 +117,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 
 <h2 id="download">Download</h2>
 
-Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. Sideloading needs "Install unknown apps" allowed for the app you open it with.
+Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. Sideloading needs "Install unknown apps" allowed for the app you open it with. From 1.2.0 on, FireTheDJ tells you when a new version is out and installs it from **Settings**.
 
 | App | For |
 |---|---|
@@ -153,7 +155,7 @@ Contributions are welcome: bug reports, ideas, new transition recipes, visualize
 
 <h2 id="support">Support</h2>
 
-FireTheDJ is free and always will be. If it has played at your party, you can chip in over UPI:
+FireTheDJ is free and always will be. If it has played at your party, you can chip in over UPI, here or from **Settings › Support FireTheDJ** in the app:
 
 <br/>
 

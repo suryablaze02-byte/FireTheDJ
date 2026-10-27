@@ -2,6 +2,7 @@ package com.autodj.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,54 +49,74 @@ import kotlin.math.sin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The launch splash: the icon, the name and the credit, then a fade into the app. A tap skips it. */
+/**
+ * The launch splash in the glass look: stage light, a glass record that settles in and turns with
+ * the app icon on its label, the burning name and the credit, then a fade into the app. A tap skips it.
+ */
 @Composable
 fun SplashScreen(tv: Boolean = false, onDone: () -> Unit) {
     // A TV is seen from across the room: everything a size up.
     val k = if (tv) 1.4f else 1f
+    val record = remember { Animatable(0f) }
     val icon = remember { Animatable(0f) }
     val text = remember { Animatable(0f) }
     val out = remember { Animatable(1f) }
+    val turn = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { icon.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
-        delay(350)
+        launch { turn.animateTo(140f, tween(3200, easing = LinearEasing)) }
+        launch { record.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
+        delay(200)
+        launch { icon.animateTo(1f, tween(600, easing = FastOutSlowInEasing)) }
+        delay(250)
         text.animateTo(1f, tween(650))
-        delay(1600)
+        delay(1500)
         out.animateTo(0f, tween(350))
         onDone()
     }
     Box(
         Modifier.fillMaxSize().graphicsLayer { alpha = out.value }
-            .background(Brush.radialGradient(listOf(Color(0xFF3B1A12), Color(0xFF16121A), Dj.Bg), Offset.Unspecified, 1400f))
-            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDone)
-            .safeDrawingPadding(),
+            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDone),
     ) {
-        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                Modifier.size(132.dp * k).graphicsLayer {
-                    val s = 0.6f + 0.4f * icon.value
-                    scaleX = s; scaleY = s; alpha = icon.value
-                }.clip(RoundedCornerShape(36.dp * k)),
-            ) {
-                // Launchers show the middle 72 of the icon's 108 units: scale up by 1.5 to match.
-                Image(painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.5f; scaleY = 1.5f })
-                Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.5f; scaleY = 1.5f })
+        AmbientLight(Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(210.dp * k), contentAlignment = Alignment.Center) {
+                    // The record turns underneath; the icon on its label stays upright.
+                    GlassPlatter(
+                        Modifier.fillMaxSize().graphicsLayer {
+                            val s = 0.82f + 0.18f * record.value
+                            scaleX = s; scaleY = s; alpha = record.value; rotationZ = turn.value
+                        },
+                        grooveFrom = 0.66f,
+                    )
+                    Box(
+                        Modifier.size(112.dp * k).graphicsLayer {
+                            val s = 0.6f + 0.4f * icon.value
+                            scaleX = s; scaleY = s; alpha = icon.value
+                        }.clip(RoundedCornerShape(30.dp * k)),
+                    ) {
+                        // Launchers show the middle 72 of the icon's 108 units: scale up by 1.5 to match.
+                        Image(painterResource(R.drawable.ic_launcher_background), null, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.5f; scaleY = 1.5f })
+                        Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize().graphicsLayer { scaleX = 1.5f; scaleY = 1.5f })
+                    }
+                }
+                Spacer(Modifier.height(30.dp * k))
+                Column(
+                    Modifier.graphicsLayer { alpha = text.value; translationY = (1 - text.value) * 24f },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FireTheDjWordmark(46.sp * k)
+                    Text("Your AI DJ for every party", color = Glass.Text, fontSize = 17.sp * k, fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
+                }
             }
-            Spacer(Modifier.height(28.dp))
-            Column(
-                Modifier.graphicsLayer { alpha = text.value; translationY = (1 - text.value) * 24f },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                FireTheDjWordmark(46.sp * k)
-                Text("Your AI DJ for every party", color = Dj.Text, fontSize = 17.sp * k, fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
-            }
+            Text(
+                "Made with passion ❤️ by Surya",
+                color = Glass.Muted, fontSize = 13.sp * k,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).graphicsLayer { alpha = text.value }
+                    .glass(RoundedCornerShape(999.dp)).padding(horizontal = 16.dp * k, vertical = 8.dp * k),
+            )
         }
-        Text(
-            "Made with passion ❤️ by Surya",
-            color = Dj.Muted, fontSize = 13.sp * k,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).graphicsLayer { alpha = text.value },
-        )
     }
 }
 

@@ -47,6 +47,8 @@ class TvActivity : ComponentActivity() {
                 CompositionLocalProvider(LocalTour provides tourState) {
                     Box(Modifier.fillMaxSize().background(Dj.Bg)) {
                         TvApp(vm)
+                        // Updates are looked for once a day; Settings offers them.
+                        LaunchedEffect(Unit) { com.autodj.update.Updates.autoCheck(this@TvActivity) }
                         if (splash) {
                             SplashScreen(tv = true) { splash = false }
                         } else if (tour) {
@@ -64,11 +66,12 @@ class TvActivity : ComponentActivity() {
 
 /** The TV app's first-launch tour, over the home screen, driven by the remote. */
 private val TV_TOUR = listOf(
-    TourStep(null, "Welcome to FireTheDJ TV 🔥", "Your AI DJ on the big screen. Use the remote: arrows to move, OK to choose. Here's a quick tour."),
+    TourStep(null, "Welcome to FireTheDJ TV", "Your AI DJ on the big screen. Use the remote: arrows to move, OK to choose. Here's a quick tour."),
     TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or pick YT Music playlists by mood and genre. Each song is analysed once, then sorted into crates."),
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
-    TourStep("tv_mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
-    TourStep(null, "During the mix", "The visualizer takes over the screen and changes look every 30 seconds. Press ◀ ▶ to switch looks, and OK for home, play/pause and stop."),
+    TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
+    TourStep("tv_settings", "Settings", "Clear the library from here."),
+    TourStep(null, "During the mix", "The visualizers take over the screen and change look every 30 seconds. ◀ ▶ switch looks; OK brings up Home, Stop and Play/Pause."),
 )
 
 private enum class Page { HOME, PLAYER, YT_MUSIC }

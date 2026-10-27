@@ -24,6 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +34,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.autodj.cast.CastControl
+import com.autodj.update.UpdateState
+import com.autodj.update.Updates
 import com.autodj.cast.TvPresentation
 
 @UnstableApi
@@ -41,7 +45,7 @@ fun DjScreen(vm: DjViewModel) {
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val state by vm.engine.state.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
-    var tab by rememberSaveable { mutableStateOf(if (state.running) Tab.NOW_PLAYING else Tab.LIBRARY) }
+    var tab by rememberSaveable { mutableStateOf(if (state.running) Tab.NOW_PLAYING else Tab.MIX) }
     // The mixing view opens by itself for each transition; Back hides it until the next one.
     var preview by remember { mutableStateOf(false) }
     var hiddenFor by remember { mutableStateOf(-1) }
@@ -97,57 +101,99 @@ fun DjScreen(vm: DjViewModel) {
         return
     }
 
-    Column(Modifier.fillMaxSize().background(Dj.Bg).safeDrawingPadding()) {
-        Box(Modifier.weight(1f)) {
-            when (tab) {
-                Tab.LIBRARY -> if (ytMusic) {
-                    YtMusicScreen(folders, importState, onImport = vm::importPlaylist, onImportClosed = vm::resetImport, onBack = { ytMusic = false })
-                } else LibraryScreen(
-                    library, artwork,
-                    mode = mode,
-                    onMode = vm::setMode,
-                    folders = folders,
-                    onAddFolder = { folderPicker.launch(null) },
-                    onOpenYtMusic = { ytMusic = true },
-                    onCast = { castDialog = true },
-                    importState = importState,
-                    onImport = vm::importPlaylist,
-                    onImportClosed = vm::resetImport,
-                    onRemoveFolder = vm::removeFolder,
-                    onClear = vm::clearLibrary,
-                    onStart = start,
-                    onRemove = vm::remove,
-                )
-                Tab.NOW_PLAYING -> {
-                    val showMix = state.running && (preview || (state.mixing && hiddenFor != state.index))
-                    if (showMix) {
-                        MixingScreen(state, artwork, visual = vm.engine::visual, onBack = {
-                            preview = false
-                            hiddenFor = state.index
-                        })
-                    } else {
-                        NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, visual = vm.engine::visual,
-                            onFullscreen = { fullscreen = true },
-                            onCast = { castDialog = true },
-                        )
+    // What the Mix tab has picked; kept here so it survives switching tabs.
+    var pickedSource by rememberSaveable { mutableStateOf(ALL_SOURCES) }
+    var pickedCrate by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Settings (updates, support) opens over the tabs. Updates are looked for once a day on launch.
+    var settings by rememberSaveable { mutableStateOf(false) }
+    val updateState by Updates.state.collectAsStateWithLifecycle()
+    val update = (updateState as? UpdateState.Available)?.release
+    var dismissed by remember { mutableStateOf(Updates.dismissed(context)) }
+    LaunchedEffect(Unit) { Updates.autoCheck(context) }
+    if (settings) {
+        Box(Modifier.fillMaxSize()) {
+            AmbientLight(Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().safeDrawingPadding()) { SettingsScreen(onBack = { settings = false }) }
+        }
+        return
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        // Light behind the glass; Now Playing lays the track's own art over it.
+        AmbientLight(Modifier.fillMaxSize())
+        if (tab == Tab.NOW_PLAYING) NowPlayingBackdrop(state, artwork)
+        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Box(Modifier.weight(1f)) {
+                when (tab) {
+                    Tab.MIX -> MixScreen(
+                        library, folders,
+                        mode = mode,
+                        onMode = vm::setMode,
+                        pickedSource = pickedSource,
+                        onPickSource = { pickedSource = it },
+                        pickedCrate = pickedCrate,
+                        onPickCrate = { pickedCrate = it },
+                        onCast = { castDialog = true },
+                        onAddMusic = { tab = Tab.MUSIC },
+                        onStart = start,
+                        onSettings = { settings = true },
+                        update = update,
+                        showBanner = update != null && update.version != dismissed,
+                        onDismissUpdate = {
+                            update?.let { Updates.dismiss(context, it.version) }
+                            dismissed = update?.version
+                        },
+                    )
+                    Tab.MUSIC -> if (ytMusic) {
+                        YtMusicScreen(folders, importState, onImport = vm::importPlaylist, onImportClosed = vm::resetImport, onBack = { ytMusic = false })
+                    } else MusicScreen(
+                        library, artwork,
+                        folders = folders,
+                        onAddFolder = { folderPicker.launch(null) },
+                        onOpenYtMusic = { ytMusic = true },
+                        importState = importState,
+                        onImport = vm::importPlaylist,
+                        onImportClosed = vm::resetImport,
+                        onRemoveFolder = { uri ->
+                            if (pickedSource == uri) pickedSource = ALL_SOURCES
+                            vm.removeFolder(uri)
+                        },
+                        onClear = {
+                            pickedSource = ALL_SOURCES
+                            vm.clearLibrary()
+                        },
+                        onRemove = vm::remove,
+                    )
+                    Tab.NOW_PLAYING -> {
+                        val showMix = state.running && (preview || (state.mixing && hiddenFor != state.index))
+                        if (showMix) {
+                            MixingScreen(state, artwork, visual = vm.engine::visual, onBack = {
+                                preview = false
+                                hiddenFor = state.index
+                            })
+                        } else {
+                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, visual = vm.engine::visual,
+                                onFullscreen = { fullscreen = true },
+                                onCast = { castDialog = true },
+                            )
+                        }
                     }
                 }
             }
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Dj.Divider))
-        Row(Modifier.fillMaxWidth().height(60.dp)) {
-            Tab.entries.forEach { t ->
-                TextButton(onClick = { tab = t }, modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    Text(
-                        t.label,
-                        fontSize = 14.sp,
-                        color = if (t == tab) Dj.Accent else Dj.Muted,
-                        fontWeight = if (t == tab) FontWeight.Bold else FontWeight.Normal,
-                    )
-                }
-            }
+            GlassTabBar(
+                Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) },
+                tab.ordinal,
+                onSelect = { tab = Tab.entries[it] },
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp),
+            )
         }
     }
 }
 
-private enum class Tab(val label: String) { LIBRARY("Library"), NOW_PLAYING("Now Playing") }
+/** The tabs; [tourKey] is what the guided tour spotlights. */
+private enum class Tab(val label: String, val tourKey: String?, val icon: @Composable (Color) -> Unit) {
+    MIX("Mix", null, { FlameGlyph(it) }),
+    MUSIC("Music", "tab_music", { NoteGlyph(it) }),
+    NOW_PLAYING("Now Playing", "tab_now", { BarsGlyph(it) }),
+}

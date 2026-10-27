@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ draws its own launch screen (the icon on a plain background) before the app's
+         splash: give it the app's near-black so the two run together. -->
+    <style name="Theme.FireTheDJ" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/glass_ground</item>
+        <item name="android:colorBackground">@color/glass_ground</item>
+        <item name="android:windowSplashScreenBackground">@color/glass_ground</item>
+    </style>
+</resources>

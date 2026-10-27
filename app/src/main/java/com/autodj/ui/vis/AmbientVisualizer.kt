@@ -17,12 +17,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import com.autodj.dj.VisualFrame
 
 /** The full-screen looks the user can pick between. */
-enum class VisualizerStyle(val label: String, val blurb: String) {
-    HAZE("Haze & Beams", "Light through smoke"),
-    TUNNEL("Neon Tunnel", "Rings racing at the beat"),
-    LIQUID("Liquid Light", "Soft colour that breathes"),
-    FIELD("LED Field", "A wall of pixels"),
-    CLUB("Club", "Stage, LED wall and crowd"),
+enum class VisualizerStyle(val label: String, val blurb: String, /** For tight spaces: the look switcher. */ val short: String) {
+    HAZE("Haze & Beams", "Light through smoke", "Haze"),
+    TUNNEL("Neon Tunnel", "Rings racing at the beat", "Tunnel"),
+    LIQUID("Liquid Light", "Soft colour that breathes", "Liquid"),
+    FIELD("LED Field", "A wall of pixels", "LED"),
+    CLUB("Club", "Stage, LED wall and crowd", "Club"),
     ;
 
     fun scene(): Scene = when (this) {
