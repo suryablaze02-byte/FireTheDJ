@@ -55,8 +55,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun SplashScreen(tv: Boolean = false, onDone: () -> Unit) {
-    // A TV is seen from across the room: everything a size up.
-    val k = if (tv) 1.4f else 1f
+    // A TV is seen from across the room: everything a size up. Only a little, since a TV screen is just 540dp tall.
+    val k = if (tv) 1.1f else 1f
     val record = remember { Animatable(0f) }
     val icon = remember { Animatable(0f) }
     val text = remember { Animatable(0f) }
@@ -78,8 +78,10 @@ fun SplashScreen(tv: Boolean = false, onDone: () -> Unit) {
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDone),
     ) {
         AmbientLight(Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+        // The credit sits in the same column as the logo, so on a short screen it moves down rather than overlapping.
+        Column(Modifier.fillMaxSize().safeDrawingPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.weight(1f))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(210.dp * k), contentAlignment = Alignment.Center) {
                     // The record turns underneath; the icon on its label stays upright.
                     GlassPlatter(
@@ -110,10 +112,12 @@ fun SplashScreen(tv: Boolean = false, onDone: () -> Unit) {
                     Text("Your AI DJ for every party", color = Glass.Text, fontSize = 17.sp * k, fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
                 }
             }
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(16.dp))
             Text(
                 "Made with passion ❤️ by Surya",
                 color = Glass.Muted, fontSize = 13.sp * k,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).graphicsLayer { alpha = text.value }
+                modifier = Modifier.padding(bottom = 28.dp).graphicsLayer { alpha = text.value }
                     .glass(RoundedCornerShape(999.dp)).padding(horizontal = 16.dp * k, vertical = 8.dp * k),
             )
         }
