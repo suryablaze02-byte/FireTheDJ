@@ -17,7 +17,7 @@
 
 <br/>
 
-[**Features**](#features) · [**Screenshots**](#screenshots) · [**Download**](#download) · [**Install**](docs/INSTALL.md) · [**Build**](#build) · [**Contributing**](#contributing) · [**Support**](#support) · [**Disclaimer**](#disclaimer)
+[**Features**](#features) · [**Screenshots**](#screenshots) · [**Download**](#download) · [**Install**](#install) · [**Build**](#build) · [**Contributing**](#contributing) · [**Support**](#support) · [**Disclaimer**](#disclaimer)
 
 </div>
 
@@ -119,7 +119,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 
 <h2 id="download">Download</h2>
 
-Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. Step-by-step help for phones and TVs, first launch and troubleshooting: [**Installation Guide**](docs/INSTALL.md). Sideloading needs "Install unknown apps" allowed for the app you open it with. From 1.2.0 on, FireTheDJ tells you when a new version is out and installs it from **Settings**.
+Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. From 1.2.0 on, FireTheDJ tells you when a new version is out and installs it from **Settings**.
 
 | App | For |
 |---|---|
@@ -131,6 +131,29 @@ Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte
 | Android 8.0+ | the apps |
 | Android 10+ | casting the mix to a Chromecast |
 | Android 13+ | YouTube Music streaming |
+
+<h2 id="install">Install</h2>
+
+<div align="center">
+
+[![Download the latest APK](https://img.shields.io/badge/Download-latest%20APK-ff7a45?style=for-the-badge&labelColor=0d1117&logo=android)](https://github.com/suryablaze02-byte/FireTheDJ/releases/latest)
+[![Installation Guide](https://img.shields.io/badge/Read%20the-Installation%20Guide-ff7a45?style=for-the-badge&labelColor=0d1117&logo=readthedocs&logoColor=white)](docs/INSTALL.md)
+
+</div>
+
+#### 📱 Phone or tablet
+
+1. On your phone, open the [latest release](https://github.com/suryablaze02-byte/FireTheDJ/releases/latest) and tap **FireTheDJ-vX.Y.Z.apk** under *Assets*.
+2. Open the downloaded file. If Android asks, allow installing from this source.
+3. Tap **Install**. If Play Protect doesn't recognise the app, tap **More details › Install anyway**.
+
+#### 📺 Android TV and Google TV
+
+1. On the TV, install **Downloader** by AFTVnews from the Play Store.
+2. In Downloader, go to `github.com/suryablaze02-byte/FireTheDJ/releases/latest` and pick **FireTheDJ-TV-vX.Y.Z.apk**.
+3. Allow Downloader to install unknown apps when asked, then tap **Install**. FireTheDJ TV appears in your apps.
+
+No Downloader? Send the APK from your phone with *Send Files to TV*, or use a USB drive. The [Installation Guide](docs/INSTALL.md) covers these, adb, first launch, permissions and troubleshooting.
 
 <h2 id="build">Build</h2>
 
