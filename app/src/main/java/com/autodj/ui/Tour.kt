@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,28 +76,31 @@ fun Modifier.tourTarget(key: String): Modifier {
     return onGloballyPositioned { tour.targets[key] = it.boundsInRoot() }
 }
 
-/** The phone app's first-launch tour, over the Library screen. */
+/** The phone app's first-launch tour, over the Mix tab. */
 val PHONE_TOUR = listOf(
-    TourStep(null, "Welcome to FireTheDJ 🔥", "Your AI DJ. It picks every song, mixes on the beat and drops the effects, all on its own. Here's a 30-second tour."),
-    TourStep("sources", "Add your music", "Pick a folder on this phone, browse YT Music's curated playlists, or paste a link. Each song is analysed once: tempo, key, drops and genre."),
-    TourStep("crates", "Genre crates", "Songs sort themselves into crates by genre. Pick one to keep the party in one style, or All for a set that moves across genres."),
+    TourStep(null, "Welcome to FireTheDJ", "Your AI DJ. It picks every song, mixes on the beat and drops the effects, all on its own. Here's a quick tour."),
+    TourStep("tab_music", "Add your music", "The Music tab: add a folder on this phone, YT Music's curated playlists, or a link. Each song is analysed once for tempo, key, drops and genre."),
+    TourStep("from", "Mix from", "The whole library, or just one folder or playlist."),
+    TourStep("crates", "Pick a crate", "Songs sort themselves into genre crates. One crate keeps the party in one style; All genres moves across them."),
     TourStep("mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster throws in scratches, rolls, echo throws and air horns."),
-    TourStep("start", "Start the mix", "FireTheDJ takes it from here: it chooses each next track and plans every transition. Songs still being analysed join the mix as they're ready."),
-    TourStep("cast", "Take it to the TV", "Cast the mix to a Chromecast or smart TV, and the visualizers fill the big screen."),
+    TourStep("start", "Start the mix", "FireTheDJ takes it from here: it chooses each next song and plans every transition. Songs still being analysed join as they're ready."),
+    TourStep("tab_now", "Now Playing", "The spinning record, the next transition, and the full-screen visualizers."),
+    TourStep("cast", "Take it to the TV", "Cast to a Chromecast or smart TV, and the visualizers fill the big screen."),
 )
 
 /** Whether the first-launch tour has been shown (or skipped) on this device, per app. */
 object TourMemory {
     private const val PREFS = "tour"
-    private const val DONE = "done_v1"
+    // v2: the tour for the glass redesign, shown once even to people who saw the first one.
+    private const val DONE = "done_v2"
     fun done(context: Context) = context.getSharedPreferences(PREFS, 0).getBoolean(DONE, false)
     fun markDone(context: Context) = context.getSharedPreferences(PREFS, 0).edit().putBoolean(DONE, true).apply()
 }
 
 /**
  * The guided tour: the screen dims, the current step's target shows through a rounded hole with
- * an accent ring, and a card explains it, above or below the target. Next / Skip on the phone;
- * on a TV the remote stays inside the card (OK = next, Back = skip).
+ * a white ring and a soft glow, and a glass card explains it, above or below the target. Next /
+ * Skip on the phone; on a TV the remote stays inside the card (OK = next, Back = skip).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -121,10 +128,13 @@ fun TourOverlay(state: TourState, steps: List<TourStep>, tv: Boolean, onDone: ()
                 addRect(Rect(Offset.Zero, size))
                 hole?.let { addRoundRect(RoundRect(it.inflate(pad), CornerRadius(pad * 1.6f))) }
             }
-            drawPath(scrim, Color.Black.copy(alpha = .74f))
+            drawPath(scrim, Color.Black.copy(alpha = .72f))
             hole?.let {
                 val r = it.inflate(pad)
-                drawRoundRect(Dj.Accent, r.topLeft, Size(r.width, r.height), CornerRadius(pad * 1.6f), style = Stroke(with(density) { 3.dp.toPx() }))
+                val corner = CornerRadius(pad * 1.8f)
+                // A soft ember glow round the ring, then the ring itself in white.
+                drawRoundRect(Glass.Ember.copy(alpha = .35f), r.topLeft - Offset(3f, 3f), Size(r.width + 6f, r.height + 6f), corner, style = Stroke(with(density) { 8.dp.toPx() }))
+                drawRoundRect(Color.White, r.topLeft, Size(r.width, r.height), corner, style = Stroke(with(density) { 2.dp.toPx() }))
             }
         }
 
@@ -138,20 +148,29 @@ fun TourOverlay(state: TourState, steps: List<TourStep>, tv: Boolean, onDone: ()
         }
         Column(
             placement.padding(horizontal = 16.dp)
-                .widthIn(max = if (tv) 560.dp else 380.dp)
-                .background(Dj.Surface, RoundedCornerShape(20.dp))
-                .border(1.dp, Dj.Border, RoundedCornerShape(20.dp))
-                .padding(if (tv) 28.dp else 20.dp)
+                .widthIn(max = if (tv) 520.dp else 380.dp)
+                // Frosted glass, a touch darker than the panels so it reads over the dimmed screen.
+                .background(Color(0xFF2A1E26), RoundedCornerShape(28.dp))
+                .glass(RoundedCornerShape(28.dp), Glass.Fill)
+                .padding(if (tv) 26.dp else 20.dp)
                 // On a TV the remote must not wander off into the dimmed screen behind.
                 .focusProperties { exit = { FocusRequester.Cancel } }
                 .focusGroup(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("${index + 1} of ${steps.size}", color = Dj.Accent, fontSize = if (tv) 15.sp else 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(step.title, color = Dj.Text, fontSize = if (tv) 26.sp else 19.sp, fontWeight = FontWeight.Bold)
-            Text(step.body, color = Dj.Muted, fontSize = if (tv) 18.sp else 14.sp, lineHeight = if (tv) 26.sp else 20.sp)
-            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (!last) TourButton("Skip tour", primary = false, tv = tv, onClick = onDone)
+            // Where you are in the tour: one dot per step, this one a longer ember bar.
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(bottom = 4.dp).semantics(mergeDescendants = true) {
+                contentDescription = "Step ${index + 1} of ${steps.size}"
+            }) {
+                steps.indices.forEach { i ->
+                    Box(Modifier.height(6.dp).width(if (i == index) 18.dp else 6.dp)
+                        .background(if (i == index) Glass.Ember else if (i < index) Color.White.copy(alpha = .6f) else Color.White.copy(alpha = .22f), RoundedCornerShape(3.dp)))
+                }
+            }
+            Text(step.title, color = Glass.Text, fontSize = if (tv) 24.sp else 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(step.body, color = Glass.Muted, fontSize = if (tv) 17.sp else 15.sp, lineHeight = if (tv) 25.sp else 21.sp)
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!last) TourButton("Skip", primary = false, tv = tv, onClick = onDone)
                 Spacer(Modifier.weight(1f))
                 TourButton(if (last) "Let's go" else "Next", primary = true, tv = tv, modifier = Modifier.focusRequester(nextFocus), onClick = next)
             }
@@ -166,12 +185,14 @@ private fun TourButton(label: String, primary: Boolean, tv: Boolean, modifier: M
     val shape = RoundedCornerShape(999.dp)
     Box(
         modifier
-            .border(if (focused) 3.dp else 0.dp, if (focused) Dj.Text else Color.Transparent, shape)
+            .border(if (focused) 3.dp else 0.dp, if (focused) Glass.Ember else Color.Transparent, shape)
             .padding(if (focused) 3.dp else 0.dp)
-            .background(if (primary) Dj.Accent else Color.Transparent, shape)
+            .background(if (primary) Color.White else Color.Transparent, shape)
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
-            .padding(horizontal = if (tv) 26.dp else 20.dp, vertical = if (tv) 12.dp else 10.dp),
+            .heightIn(min = 44.dp)
+            .padding(horizontal = if (tv) 26.dp else 22.dp, vertical = if (tv) 12.dp else 11.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (primary) Dj.Bg else Dj.Muted, fontSize = if (tv) 18.sp else 14.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (primary) Color(0xFF120A10) else Glass.Muted, fontSize = if (tv) 18.sp else 15.sp, fontWeight = FontWeight.Bold)
     }
 }

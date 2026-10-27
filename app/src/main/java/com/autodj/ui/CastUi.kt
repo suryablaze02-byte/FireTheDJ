@@ -41,6 +41,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -63,19 +75,19 @@ import com.google.android.gms.cast.CastMediaControlIntent
 /** The cast button: a screen with waves; lit while the mix is on a TV. */
 @Composable
 fun CastButton(casting: Boolean, diameter: Dp = 40.dp, onClick: () -> Unit) {
-    val tint = if (casting) Dj.Accent else Dj.Text
+    val tint = if (casting) Glass.Ember else Glass.Text
     Box(
-        Modifier.size(diameter).clip(CircleShape).background(if (casting) Dj.AccentBg else Dj.Surface, CircleShape)
-            .border(1.dp, if (casting) Dj.Accent else Dj.Border, CircleShape)
-            .clickable(role = Role.Button, onClickLabel = if (casting) "Casting: change or stop" else "Cast to a TV", onClick = onClick),
+        Modifier.size(diameter).glass(CircleShape, if (casting) Glass.FireSelected else Glass.Fill)
+            .clickable(role = Role.Button, onClickLabel = if (casting) "Casting: change or stop" else "Play on a TV", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(diameter * 0.48f)) {
+        Canvas(Modifier.size(diameter * 0.48f).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
             val w = size.width
             val s = w * 0.1f
             // The screen, open at the bottom-left where the waves come in.
             drawRoundRect(tint, Offset(w * 0.12f, w * 0.12f), Size(w * 0.82f, w * 0.64f), CornerRadius(w * 0.08f), style = Stroke(s))
-            drawRect(if (casting) Dj.AccentBg else Dj.Surface, Offset(0f, w * 0.48f), Size(w * 0.42f, w * 0.52f))
+            // Gap in the screen's corner for the waves, cut out rather than painted over (the button is see-through).
+            drawRect(Color.Transparent, Offset(0f, w * 0.48f), Size(w * 0.42f, w * 0.52f), blendMode = BlendMode.Clear)
             for (i in 1..2) {
                 val r = w * 0.17f * i
                 drawArc(tint, 270f, 90f, false, Offset(w * 0.06f - r, w * 0.94f - r), Size(r * 2, r * 2), style = Stroke(s, cap = StrokeCap.Round))
@@ -115,6 +127,7 @@ private fun tvScreenConnected(): Boolean {
  * to them), or a wireless display (Miracast, Smart View), which Android connects from its own
  * screen-cast settings and FireTheDJ then fills with the visualizer.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CastDialog(onClose: () -> Unit) {
     val context = LocalContext.current
@@ -155,59 +168,77 @@ fun CastDialog(onClose: () -> Unit) {
     }
     val streaming = status as? CastStatus.Streaming
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onClose,
-        title = { Text("Cast the mix") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "The TV plays the mix and shows your visualizer full screen in landscape. The phone stays the remote.",
-                    fontSize = 13.sp,
-                )
-                Text("Chromecast & Google TV", color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                when {
-                    cast == null -> Text("Needs Google Play services.", fontSize = 13.sp, color = Dj.Warn)
-                    routes.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Dj.Accent)
-                        Text("Looking on this Wi-Fi…", fontSize = 13.sp)
-                    }
-                    else -> routes.forEach { route ->
-                        val selected = route.isSelected
-                        DeviceRow(route.name, if (selected) "Casting · tap to stop" else "Chromecast", selected) {
-                            if (selected) CastControl.stop() else router.selectRoute(route)
-                            onClose()
-                        }
-                    }
-                }
-                Text("Smart TV screen", color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                DeviceRow(
-                    if (tvScreen) "TV screen connected" else "Screen cast (Miracast, Smart View)",
-                    if (tvScreen) "Showing the visualizer · stop it from screen cast" else "Pick the TV in Android's screen cast",
-                    tvScreen,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        // A solid smoky base, so the screen behind never shows through the words; the rows on it are glass.
+        containerColor = Color(0xFF241A20),
+        contentColor = Glass.Text,
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Play on a TV", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+            Text("The TV shows the visualizers full screen. Your phone stays the remote.", color = Glass.Muted, fontSize = 14.sp)
+            GlassHeading("Chromecast & Google TV", Modifier.padding(top = 8.dp))
+            when {
+                cast == null -> Text("Needs Google Play services.", fontSize = 14.sp, color = Dj.Warn)
+                routes.isEmpty() -> Row(
+                    Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    openScreenCast(context)
-                    onClose()
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Glass.Ember)
+                    Text("Looking on this Wi-Fi…", fontSize = 15.sp)
                 }
-                (status as? CastStatus.Failed)?.let { Text(it.reason, color = Dj.Warn, fontSize = 13.sp) }
+                else -> routes.forEach { route ->
+                    val selected = route.isSelected
+                    DeviceRow(route.name, if (selected) "Casting · tap to stop" else "Chromecast · plays the live mix", selected) {
+                        if (selected) CastControl.stop() else router.selectRoute(route)
+                        onClose()
+                    }
+                }
             }
-        },
-        confirmButton = {
-            if (streaming != null) TextButton(onClick = { CastControl.stop(); onClose() }) { Text("Stop casting", color = Dj.Warn) }
-            else TextButton(onClick = onClose) { Text("Close") }
-        },
-    )
+            GlassHeading("Any smart TV", Modifier.padding(top = 8.dp))
+            DeviceRow(
+                if (tvScreen) "TV screen connected" else "Screen cast",
+                if (tvScreen) "Showing the visualizer · stop it from screen cast" else "Miracast or Smart View",
+                tvScreen,
+            ) {
+                openScreenCast(context)
+                onClose()
+            }
+            (status as? CastStatus.Failed)?.let { Text(it.reason, color = Dj.Warn, fontSize = 14.sp) }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp).glass(RoundedCornerShape(18.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                FlameGlyph(Glass.Ember)
+                Text("Have an Android TV? Install FireTheDJ TV and it DJs on its own.", color = Glass.Muted, fontSize = 13.sp)
+            }
+            Box(
+                Modifier.padding(top = 6.dp).fillMaxWidth().height(52.dp).glass(RoundedCornerShape(26.dp), Glass.FillStrong)
+                    .clickable(role = Role.Button) { if (streaming != null) CastControl.stop(); onClose() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (streaming != null) "Stop casting" else "Cancel", color = if (streaming != null) Dj.Warn else Glass.Text,
+                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
 }
 
 @Composable
 private fun DeviceRow(name: String, detail: String, on: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
-    Column(
-        Modifier.fillMaxWidth().clip(shape).background(if (on) Dj.AccentBg else Dj.Surface, shape)
-            .border(1.dp, if (on) Dj.Accent else Dj.Border, shape)
-            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
+    Row(
+        Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), if (on) Glass.FireSelected else Glass.Fill)
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(name, color = Dj.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Text(detail, color = if (on) Dj.Accent else Dj.Muted, fontSize = 12.sp)
+        Column(Modifier.weight(1f)) {
+            Text(name, color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = if (on) Glass.Ember else Glass.Muted, fontSize = 13.sp)
+        }
+        Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
     }
 }
 

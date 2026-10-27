@@ -1,12 +1,13 @@
 package com.autodj.ui
 
+import android.os.Build
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,14 +16,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autodj.dj.EngineState
 import com.autodj.dj.VisualFrame
-import kotlin.math.roundToInt
 
 @Composable
 fun NowPlayingScreen(
@@ -48,114 +56,108 @@ fun NowPlayingScreen(
     if (deck == null || track == null) {
         Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Text(
-                "Pick a genre crate in the Library to start a mix.",
-                color = Dj.Muted,
+                "Pick a crate on the Mix tab to start a set.",
+                color = Glass.Muted,
                 fontSize = 15.sp,
                 textAlign = TextAlign.Center,
             )
         }
         return
     }
-    Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // The set label is "Source · Genre" for a folder or playlist set, else just the genre.
-        val label = state.crate.orEmpty()
-        val source = label.substringBeforeLast(" · ", "")
-        val genre = label.substringAfterLast(" · ")
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp)) {
+            // The set label is "Source · Genre" for a folder or playlist set, else just the genre.
+            val label = state.crate.orEmpty()
+            val source = label.substringBeforeLast(" · ", "")
+            val genre = label.substringAfterLast(" · ")
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FireTheDjWordmark(24.sp, Modifier.weight(1f))
-                if (genre.isNotBlank()) HeaderChip(genre, dot = false)
-                HeaderChip(state.mode.label, dot = true)
-                CastButton(rememberCasting(), onClick = onCast)
+                Row(
+                    Modifier.height(32.dp).glass(RoundedCornerShape(16.dp)).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(Modifier.size(7.dp).background(Glass.Ember, CircleShape))
+                    Text(listOf(genre, state.mode.label).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Text, fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                Spacer(Modifier.weight(1f))
+                GlassIconButton("Open the full-screen visualizer", onClick = onFullscreen) { ExpandGlyph(Glass.Text) }
+                CastButton(rememberCasting(), diameter = 44.dp, onClick = onCast)
             }
             if (source.isNotBlank()) {
-                Text("Playing from $source", color = Dj.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Playing from $source", color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 6.dp))
             }
-        }
 
-        // The visualizer takes whatever height is left, so the controls below always fit on screen.
-        Box(Modifier.fillMaxWidth().weight(1f)) {
-            DjVisualizer(visual, artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxSize())
-            // Top-right of the visualizer: the control sits on the thing it enlarges.
-            Row(
-                Modifier.align(Alignment.TopEnd).background(Dj.Surface.copy(alpha = 0.85f), RoundedCornerShape(999.dp))
-                    .border(1.dp, Dj.Border, RoundedCornerShape(999.dp))
-                    .clickable(role = Role.Button, onClickLabel = "Open the full-screen visualizer", onClick = onFullscreen)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                EqualizerGlyph(Dj.Accent)
-                Text("Visualizer", color = Dj.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
+            // The glass record with the live spectrum round it; it takes whatever height is left.
+            DjVisualizer(visual, artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxWidth().weight(1f).padding(vertical = 6.dp), glass = true)
 
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(deck.title, color = Dj.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (deck.artist.isNotBlank()) Text(deck.artist, color = Dj.Muted, fontSize = 15.sp, maxLines = 1)
-        }
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-            Chip("%.1f BPM".format(deck.bpm), mono = true)
-            Chip(
-                if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key,
-                mono = true,
-            )
-            Chip("${track.genre} · ${(track.genreConfidence * 100).roundToInt()}%")
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            EnergyMap(track, deck.positionSec, state.exitSec)
-            Row(Modifier.fillMaxWidth()) {
-                Text(
-                    "${formatTime(deck.positionSec)} / ${formatTime(deck.durationSec)} · set ${"%.1f".format(state.masterBpm)} BPM",
-                    color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.weight(1f),
-                )
-                state.exitSec?.let { exit ->
-                    Text("AI mix-out · bar ${track.barAt(exit) + 1}", color = Dj.BlueText, fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text(deck.title, color = Glass.Text, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (deck.artist.isNotBlank()) Text(deck.artist, color = Glass.Muted, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                val key = if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key
+                Text("${"%.0f".format(deck.bpm)} BPM · $key", color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
             }
-            val trick = when {
-                state.trickNow != null -> "Now: ${state.trickNow}"
-                state.trickNext != null -> "Next trick: ${state.trickNext} in ${formatTime(state.secondsToTrick ?: 0.0)}"
-                else -> null
+
+            // Where the set is in this track.
+            val progress = if (deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
+            Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(6.dp).clip(CircleShape).background(Glass.FillSelected)) {
+                Box(Modifier.fillMaxWidth(progress).height(6.dp).background(Color.White, CircleShape))
             }
-            if (trick != null) {
-                Text(
-                    trick,
-                    color = if (state.trickNow != null) Dj.Accent else Dj.BlueText,
-                    fontSize = 13.sp,
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Text(formatTime(deck.positionSec), color = Glass.Muted, fontSize = 12.sp)
+                val trick = when {
+                    state.trickNow != null -> "Now: ${state.trickNow}"
+                    state.trickNext != null -> "${state.trickNext} in ${formatTime(state.secondsToTrick ?: 0.0)}"
+                    else -> ""
+                }
+                Text(trick, color = if (state.trickNow != null) Glass.Ember else Glass.EmberText, fontSize = 12.sp,
                     fontWeight = if (state.trickNow != null) FontWeight.Bold else FontWeight.Normal,
-                )
+                    textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.weight(1f))
+                Text(formatTime(deck.durationSec), color = Glass.Muted, fontSize = 12.sp)
             }
-        }
 
-        UpNext(state, artwork, onOpenMix)
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onStop).semantics { contentDescription = "Stop the set" },
+                    contentAlignment = Alignment.Center,
+                ) { StopIcon(Glass.Text, Modifier.size(26.dp)) }
+                Box(
+                    Modifier.size(76.dp).background(Color.White, CircleShape).clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onToggle)
+                        .semantics { contentDescription = if (state.paused) "Resume the set" else "Pause the set" },
+                    contentAlignment = Alignment.Center,
+                ) { if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(32.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(32.dp)) }
+                Text("AI in control", color = Glass.Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
+            }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(52.dp).background(Dj.Surface, CircleShape).border(1.dp, Dj.Border, CircleShape)
-                    .clickable(role = Role.Button, onClick = onStop).semantics { contentDescription = "Stop the set" },
-                contentAlignment = Alignment.Center,
-            ) { StopIcon(Dj.Text) }
-            Box(
-                Modifier.size(72.dp).background(Dj.Accent, CircleShape)
-                    .clickable(role = Role.Button, onClick = onToggle)
-                    .semantics { contentDescription = if (state.paused) "Resume the set" else "Pause the set" },
-                contentAlignment = Alignment.Center,
-            ) { if (state.paused) PlayIcon(Dj.Bg) else PauseIcon(Dj.Bg) }
-            Text("AI in control", color = Dj.Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.width(52.dp))
+            UpNext(state, artwork, onOpenMix, Modifier.padding(top = 10.dp))
         }
     }
 }
 
+/**
+ * The playing track's cover, blown up and blurred, lighting the glass behind the whole screen,
+ * tab bar included (Android 12+; older phones keep the ambient light).
+ */
 @Composable
-private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: () -> Unit) {
+fun NowPlayingBackdrop(state: EngineState, artwork: Map<String, String>) {
+    val deck = state.current ?: return
+    if (Build.VERSION.SDK_INT < 31) return
+    Artwork(artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxSize().blur(80.dp).alpha(0.55f), RectangleShape)
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.45f)))))
+}
+
+/** The next track and the transition FireTheDJ has planned; opens the mixing view. */
+@Composable
+private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: () -> Unit, modifier: Modifier) {
     val next = state.next
     Row(
-        Modifier.fillMaxWidth().background(Dj.Surface, RoundedCornerShape(14.dp)).border(1.dp, Dj.Border, RoundedCornerShape(14.dp))
+        modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))
             .clickable(enabled = next != null, onClickLabel = "Show the planned mix", onClick = onOpenMix)
-            .padding(12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -164,52 +166,26 @@ private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: 
             val more = state.set.size > state.index + 1
             Text(
                 if (more) "FireTheDJ picks the next track after the ${(state.trickNow ?: state.trickNext)?.lowercase() ?: "current trick"}" else "Last track of the set",
-                color = Dj.Muted,
+                color = Glass.Muted,
                 fontSize = 14.sp,
             )
             return@Row
         }
-        Vinyl(artwork[next.uri], next.uri, next.title, 52.dp, spinning = false)
+        Artwork(artwork[next.uri], next.uri, next.title, Modifier.size(44.dp), CircleShape)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("Up next · chosen by FireTheDJ", color = Dj.Muted, fontSize = 12.sp)
-            Text(
-                listOf(next.title, next.artist).filter { it.isNotBlank() }.joinToString(" — "),
-                color = Dj.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            val tempo = state.tempoChange ?: ""
+            val tempo = state.tempoChange?.let { " · $it" }.orEmpty()
             val line = when {
-                state.secondsToMix != null -> "AI mixes in ${formatTime(state.secondsToMix)} · ${state.recipe} · $tempo"
-                state.mixing || state.recipe != null -> "Mixing now · ${state.recipe} · $tempo"
+                state.secondsToMix != null -> "Next · ${state.recipe} in ${formatTime(state.secondsToMix)}$tempo"
+                state.mixing || state.recipe != null -> "Mixing now · ${state.recipe}$tempo"
                 // Chosen, but the mix itself is planned once this track's hook replay is done.
-                else -> "Mix planned after the hook replay"
+                else -> "Next · mix planned after the hook replay"
             }
-            Text(line, color = Dj.BlueText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(line, color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOf(next.title, next.artist).filter { it.isNotBlank() }.joinToString(" · "),
+                color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
-    }
-}
-
-@Composable
-private fun Chip(text: String, mono: Boolean = false) {
-    Text(
-        text,
-        color = Dj.Text,
-        fontSize = 13.sp,
-        fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
-        maxLines = 1,
-        modifier = Modifier.background(Dj.Surface, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
-    )
-}
-
-/** A short status chip in the header: the set's genre crate, or its mode (with a live dot). */
-@Composable
-private fun HeaderChip(label: String, dot: Boolean) {
-    Row(
-        Modifier.background(Dj.Surface, RoundedCornerShape(999.dp)).border(1.dp, Dj.Border, RoundedCornerShape(999.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        if (dot) Box(Modifier.size(8.dp).background(Dj.Accent, CircleShape))
-        Text(label, color = if (dot) Dj.Text else Dj.Muted, fontSize = 13.sp, maxLines = 1)
+        Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
     }
 }

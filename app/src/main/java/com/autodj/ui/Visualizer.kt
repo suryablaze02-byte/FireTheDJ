@@ -2,6 +2,7 @@ package com.autodj.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -77,16 +78,22 @@ fun DjVisualizer(
     modifier: Modifier = Modifier,
     only: Boolean? = null,
     showLabels: Boolean = true,
+    glass: Boolean = false,
 ) {
     val scene = remember { Scene() }
     var tick by remember { mutableLongStateOf(0L) }
     var labels by remember { mutableStateOf<List<Pair<String, Color>>>(emptyList()) }
+    // The glass record's turn, in degrees: it turns while the set plays and stops when paused.
+    val turn = remember { FloatArray(2) } // [angle, last frame time in s]
     LaunchedEffect(only) {
         while (true) {
             withFrameNanos { now ->
                 val f = frame()
                 scene.update(f?.let { v -> VisualFrame(v.decks.filter { only == null || it.incoming == only }, v.paused) }, now)
                 if (scene.labels != labels) labels = scene.labels
+                val t = now / 1e9f
+                if (f != null && !f.paused && turn[1] > 0f) turn[0] = (turn[0] + (t - turn[1]) * RECORD_DEG_PER_S) % 360f
+                turn[1] = t
                 tick = now
             }
         }
@@ -107,11 +114,11 @@ fun DjVisualizer(
                     tick
                     scaleX = scene.pulse
                     scaleY = scene.pulse
-                    rotationZ = scene.artRotationDeg
+                    rotationZ = scene.artRotationDeg + if (glass) turn[0] else 0f
                     alpha = scene.artAlpha
                 },
             ) {
-                Artwork(artworkPath, seed, title, Modifier.fillMaxSize(), CircleShape)
+                if (glass) GlassRecord(artworkPath, seed, title) else Artwork(artworkPath, seed, title, Modifier.fillMaxSize(), CircleShape)
             }
         }
         if (showLabels && labels.isNotEmpty()) {
@@ -124,6 +131,21 @@ fun DjVisualizer(
                 labels.forEach { (label, color) -> FxTag(label, color) }
             }
         }
+    }
+}
+
+/** One turn every six seconds: slow enough to read the label, quick enough to feel alive. */
+private const val RECORD_DEG_PER_S = 60f
+
+/**
+ * A record made of frosted glass: fine grooves, light catching its upper left, a sheen that
+ * shows it turning, and the cover art as its centre label.
+ */
+@Composable
+private fun GlassRecord(artworkPath: String?, seed: String, title: String) {
+    GlassPlatter(Modifier.fillMaxSize()) {
+        Artwork(artworkPath, seed, title, Modifier.align(Alignment.Center).fillMaxSize(0.56f).border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape), CircleShape)
+        Box(Modifier.align(Alignment.Center).fillMaxSize(0.06f).background(Color(0xFF0F0A0E), CircleShape).border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape))
     }
 }
 

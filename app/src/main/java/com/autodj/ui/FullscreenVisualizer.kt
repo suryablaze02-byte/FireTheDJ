@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
@@ -100,48 +102,40 @@ fun FullscreenVisualizer(
 
         AnimatedVisibility(controls, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
             Row(
-                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(20.dp),
+                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp)
+                    .glass(RoundedCornerShape(24.dp), Glass.FillDark).padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(deck?.title.orEmpty(), color = Dj.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val sub = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, deck?.let { "%.1f BPM".format(it.bpm) }, deck?.key, state.mode.label)
-                    Text(sub.joinToString(" · "), color = Dj.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(deck?.title.orEmpty(), color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val sub = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, deck?.let { "%.0f BPM".format(it.bpm) }, deck?.key, state.mode.label)
+                    Text(sub.joinToString(" · "), color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(
-                    if (holdLandscape) "Auto-rotate" else "Landscape", color = Dj.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.background(Dj.Surface, RoundedCornerShape(999.dp)).border(1.dp, Dj.Border, RoundedCornerShape(999.dp))
+                Box(
+                    Modifier.height(44.dp).glass(RoundedCornerShape(22.dp), Glass.FillStrong)
                         .clickable(role = Role.Button, onClickLabel = if (holdLandscape) "Turn with the phone" else "Hold landscape") { holdLandscape = !holdLandscape; touches++ }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                )
-                RoundButton(44.dp, Dj.Surface, "Close full screen", onClose) { CloseGlyph(Dj.Text) }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (holdLandscape) "Auto-rotate" else "Landscape", color = Glass.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                GlassIconButton("Close full screen", fill = Glass.FillStrong, onClick = onClose) { CloseGlyph(Glass.Text) }
             }
         }
 
         AnimatedVisibility(controls, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) {
             Column(
-                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(20.dp),
+                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp)
+                    .widthIn(max = 520.dp)
+                    .glass(RoundedCornerShape(30.dp), Glass.FillDark).padding(horizontal = 14.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // Pick a look; the choice is remembered.
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    VisualizerStyle.entries.forEach { st ->
-                        val on = st == style
-                        Text(
-                            st.label, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                            color = if (on) Dj.Bg else Dj.Text, maxLines = 1,
-                            modifier = Modifier.background(if (on) Dj.Text else Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
-                                .border(1.dp, if (on) Dj.Text else Dj.Border, RoundedCornerShape(999.dp))
-                                .clickable(role = Role.Button, onClickLabel = "Use the ${st.label} visualizer") { onStyle(st); touches++ }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
-                    }
-                }
+                GlassSegmented(
+                    VisualizerStyle.entries, style, { it.short }, { onStyle(it); touches++ },
+                    Modifier.fillMaxWidth(), height = 44.dp, fontSize = 12.sp,
+                    selectedFill = Color.White, selectedText = Color(0xFF120A10),
+                )
                 val next = state.next
                 val status = when {
                     state.mixing -> "Mixing into ${next?.title ?: "the next track"} · ${state.recipe.orEmpty()}"
@@ -151,12 +145,12 @@ fun FullscreenVisualizer(
                 }
                 if (status != null) {
                     Text(
-                        status, color = if (state.mixing) Dj.BlueText else Dj.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        status, color = if (state.mixing) Dj.BlueText else Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                RoundButton(64.dp, Dj.Accent, if (state.paused) "Resume the set" else "Pause the set", onToggle) {
-                    if (state.paused) PlayIcon(Dj.Bg) else PauseIcon(Dj.Bg)
+                RoundButton(68.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", onToggle) {
+                    if (state.paused) PlayIcon(Color(0xFF120A10)) else PauseIcon(Color(0xFF120A10))
                 }
             }
         }
@@ -183,7 +177,7 @@ private fun Immersive() {
 @Composable
 private fun RoundButton(size: Dp, fill: Color, description: String, onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(
-        Modifier.size(size).background(fill, CircleShape).border(1.dp, Dj.Border, CircleShape)
+        Modifier.size(size).background(fill, CircleShape)
             .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { content() }

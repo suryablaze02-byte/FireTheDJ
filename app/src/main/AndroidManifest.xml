@@ -10,13 +10,23 @@
     <!-- Casting to a Chromecast: capturing FireTheDJ's own audio to stream it to the TV. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- In-app updates: installing a newer FireTheDJ downloaded from its GitHub releases. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Support over UPI: to see whether any UPI app can take the payment link. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="FireTheDJ"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.FireTheDJ">
         <!-- The launcher activity is per app: src/phone and src/tv each declare their own. -->
 
         <service
@@ -36,6 +46,11 @@
             android:name=".cast.CastStreamService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- The package installer's answer about an in-app update. -->
+        <receiver
+            android:name=".update.UpdateInstallReceiver"
+            android:exported="false" />
 
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
