@@ -69,6 +69,7 @@ fun TvCard(
     selected: Boolean = false,
     accent: Color? = null,
     titleColor: Color = Glass.Text,
+    subtitleLines: Int = 2,
     icon: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -94,7 +95,7 @@ fun TvCard(
         icon?.invoke()
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, color = titleColor, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) Text(subtitle, color = if (focused) Glass.Text else Glass.Muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, color = if (focused) Glass.Text else Glass.Muted, fontSize = 14.sp, maxLines = subtitleLines, overflow = TextOverflow.Ellipsis)
         }
     }
 }

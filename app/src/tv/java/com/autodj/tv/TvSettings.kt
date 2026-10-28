@@ -5,6 +5,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.autodj.support.Upi
 import com.autodj.ui.Glass
 import com.autodj.ui.songs
+import com.autodj.update.Changelog
 import com.autodj.update.UpdateState
 import com.autodj.update.Updates
 import com.google.zxing.BarcodeFormat
@@ -118,9 +123,16 @@ fun TvSettingsDialog(
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var whatsNew by remember { mutableStateOf(false) }
+    if (whatsNew) TvWhatsNewDialog(onDismiss = { whatsNew = false })
     TvGlassDialog(onDismiss = onDismiss, width = 640.dp) { first ->
         Text("Settings", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
         TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 12.dp).fillMaxWidth().focusRequester(first))
+        val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
+        TvCard(
+            "What's new in ${current.version}", current.summary,
+            Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth(),
+        ) { whatsNew = true }
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
             TvCard("Support FireTheDJ", "Chip in over UPI", Modifier.width(260.dp), onClick = onSupport)
             TvCard(
@@ -133,6 +145,37 @@ fun TvSettingsDialog(
             TvCard("Done", null, Modifier.width(140.dp), onClick = onDismiss)
             Text("FireTheDJ TV ${Updates.current}", color = Glass.Muted, fontSize = 14.sp, modifier = Modifier.padding(start = 20.dp))
         }
+    }
+}
+
+/**
+ * Every change, newest version first: one card per change so the remote steps through them
+ * and the list scrolls with it.
+ */
+@Composable
+fun TvWhatsNewDialog(onDismiss: () -> Unit) {
+    TvGlassDialog(onDismiss = onDismiss, width = 960.dp) { first ->
+        Text("What's new", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
+        LazyColumn(Modifier.heightIn(max = 470.dp), contentPadding = PaddingValues(horizontal = TV_EDGE, vertical = 12.dp)) {
+            Changelog.versions.forEachIndexed { vi, v ->
+                item {
+                    Text(
+                        if (v.version == Updates.current) "Version ${v.version} · installed" else "Version ${v.version}",
+                        color = Glass.EmberText, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = if (vi == 0) 0.dp else 22.dp),
+                    )
+                    Text(v.summary, color = Glass.Muted, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 2.dp, bottom = 6.dp))
+                }
+                v.sections.forEach { section ->
+                    items(section.changes.size) { i ->
+                        val c = section.changes[i]
+                        val focus = if (vi == 0 && section === v.sections.first() && i == 0) Modifier.focusRequester(first) else Modifier
+                        TvCard(c.title, c.detail, Modifier.padding(vertical = 6.dp).fillMaxWidth().then(focus), subtitleLines = 4) {}
+                    }
+                }
+            }
+        }
+        TvCard("Done", null, Modifier.padding(start = TV_EDGE, top = 8.dp).width(140.dp), onClick = onDismiss)
     }
 }
 
