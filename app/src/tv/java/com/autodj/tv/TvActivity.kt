@@ -71,7 +71,7 @@ private val TV_TOUR = listOf(
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
     TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
     TourStep("tv_settings", "Settings", "Clear the library from here."),
-    TourStep(null, "During the mix", "The visualizers take over the screen and change look every 30 seconds. ◀ ▶ switch looks; OK brings up Home, Stop and Play/Pause."),
+    TourStep(null, "During the mix", "The visualizer takes over the screen and keeps the look you pick, including Beat Pop and Karaoke lyrics. ◀ ▶ change the look; OK brings up Home, Stop, Play/Pause and the Look button."),
 )
 
 private enum class Page { HOME, PLAYER, YT_MUSIC }

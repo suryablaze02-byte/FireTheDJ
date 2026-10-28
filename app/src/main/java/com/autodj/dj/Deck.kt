@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -75,6 +77,49 @@ class Deck(context: Context) {
 
     private var retiring: Job? = null
 
+    /** Why the player stopped producing audio (a decoder or source failure), or null while it is fine. */
+    var error: String? = null
+        private set
+
+    /** Times this track has been restarted after a failure. */
+    var retries = 0
+        private set
+
+    private var lastPos = -1.0
+    private var lastMove = 0L
+
+    init {
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(e: PlaybackException) {
+                error = "${e.errorCodeName}: ${e.message}"
+            }
+        })
+    }
+
+    /**
+     * How long the deck has been meant to play without its position moving (a source that
+     * stopped delivering, a player that hung), in ms; 0 while it moves or isn't meant to play.
+     */
+    fun stuckMs(now: Long): Long {
+        val pos = positionSec
+        if (pos != lastPos || !player.playWhenReady || player.playbackState == Player.STATE_ENDED || track == null) {
+            lastPos = pos
+            lastMove = now
+        }
+        return now - lastMove
+    }
+
+    /** Opens the track again where it was, after a failure or a stall. */
+    fun retry() {
+        val pos = positionSec
+        retries++
+        error = null
+        fx.seekTo(pos)
+        player.seekTo((pos * 1000).toLong())
+        player.prepare()
+        lastMove = android.os.SystemClock.uptimeMillis()
+    }
+
     /** Fades the deck out over [FADE_MS] before stopping it, so a stop is never heard as a cut. */
     fun fadeOutThenUnload(scope: CoroutineScope) {
         retiring?.cancel()
@@ -92,6 +137,9 @@ class Deck(context: Context) {
         retiring = null
         player.volume = 1f
         track = t
+        error = null
+        retries = 0
+        lastPos = -1.0
         fx.seekTo(startSec)
         fx.plan = plan
         // A streamed track plays from its downloaded copy when there is one.
@@ -118,6 +166,7 @@ class Deck(context: Context) {
         player.volume = 1f
         player.clearMediaItems()
         track = null
+        error = null
         fx.plan = FxPlan.EMPTY
         pitchSemis = 0
         speed = 1.0

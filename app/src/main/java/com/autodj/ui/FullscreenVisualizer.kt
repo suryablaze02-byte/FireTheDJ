@@ -1,5 +1,8 @@
 package com.autodj.ui
 
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.animation.core.animateDpAsState
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
@@ -93,12 +96,15 @@ fun FullscreenVisualizer(
         shown = 0
     }
     val controls = shown != 0
+    // The controls panel's height, so the lyric looks can rise above it while it's open.
+    var panelPx by remember { mutableIntStateOf(0) }
+    val clear by animateDpAsState(if (controls) with(LocalDensity.current) { panelPx.toDp() } else 0.dp, label = "lyrics clear")
 
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { touches++ },
     ) {
-        AmbientVisualizer(visual, style, Modifier.fillMaxSize())
+        AmbientVisualizer(visual, style, Modifier.fillMaxSize(), lyricsClearBottom = clear)
 
         AnimatedVisibility(controls, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
             Row(
@@ -124,18 +130,20 @@ fun FullscreenVisualizer(
 
         AnimatedVisibility(controls, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) {
             Column(
-                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp)
+                Modifier.onSizeChanged { panelPx = it.height }.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp)
                     .widthIn(max = 520.dp)
                     .glass(RoundedCornerShape(30.dp), Glass.FillDark).padding(horizontal = 14.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                // Pick a look; the choice is remembered.
-                GlassSegmented(
-                    VisualizerStyle.entries, style, { it.short }, { onStyle(it); touches++ },
-                    Modifier.fillMaxWidth(), height = 44.dp, fontSize = 12.sp,
-                    selectedFill = Color.White, selectedText = Color(0xFF120A10),
-                )
+                // Pick a look; the choice is remembered. Scenes on one row, the lyric looks on another.
+                for (row in VisualizerStyle.entries.partition { !it.lyrics }.toList()) {
+                    GlassSegmented(
+                        row, style, { it.short }, { onStyle(it); touches++ },
+                        Modifier.fillMaxWidth(), height = 44.dp, fontSize = 12.sp,
+                        selectedFill = Color.White, selectedText = Color(0xFF120A10),
+                    )
+                }
                 val next = state.next
                 val status = when {
                     state.mixing -> "Mixing into ${next?.title ?: "the next track"} · ${state.recipe.orEmpty()}"

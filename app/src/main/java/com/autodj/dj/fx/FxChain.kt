@@ -26,7 +26,7 @@ import kotlin.math.tanh
  * gate/tremolo → lo-fi → flanger → phaser → × gain, plus echo and reverb sends that keep
  * ringing after the dry signal is cut (that is what makes an echo-out).
  */
-class FxChain(sampleRate: Int, private val channels: Int) {
+class FxChain(val sampleRate: Int, private val channels: Int) {
     @Volatile
     var plan: FxPlan = FxPlan.EMPTY
 
@@ -101,6 +101,10 @@ class FxChain(sampleRate: Int, private val channels: Int) {
     private var gainNow = 1f
     private val src = FloatArray(channels)
 
+    /** The gap before a drop: 0 while muted, eased over a couple of milliseconds so it never clicks. */
+    private var muteGain = 1f
+    private val muteCoef = (1 - exp(-1.0 / (0.002 * sr))).toFloat()
+
     /** Starts over at [startSec] (after a seek or a new track), dropping all effect state. */
     fun reset(startSec: Double) {
         baseSec = startSec
@@ -114,13 +118,30 @@ class FxChain(sampleRate: Int, private val channels: Int) {
         sfx.reset()
         sfxVerb.clear(); sfxTailUntil = Double.NEGATIVE_INFINITY
         gateGain = 1f
+        muteGain = 1f
         listOf(vocalLow, vocalHp, vocalLp).forEach { it.reset() }
         flBuf.fill(0f); flWrite = 0
         phX.fill(0f); phY.fill(0f); phLast.fill(0f)
         echoBuf.fill(0f); echoLp.fill(0f); echoUntil = Double.NEGATIVE_INFINITY; echoDirty = false
         reverb.clear(); reverbUntil = Double.NEGATIVE_INFINITY
-        gainNow = plan.gain.at(startSec)
+        gainNow = plan.gain.at(startSec).orIf(1f)
     }
+
+    /**
+     * Times the chain caught a broken number (NaN or infinity) and started its effects over.
+     * One bad value inside a filter's memory would otherwise stay there and silence the deck
+     * for the rest of the track while it kept playing.
+     */
+    @Volatile
+    var heals = 0
+        private set
+
+    fun heal() {
+        heals++
+        reset(timeSec)
+    }
+
+    private fun Float.orIf(fallback: Float) = if (isFinite()) this else fallback
 
     fun process(buf: FloatArray, frameCount: Int) {
         val p = plan
@@ -137,15 +158,15 @@ class FxChain(sampleRate: Int, private val channels: Int) {
         val tMid = t0 + n / 2.0 / sr
         val beat = p.beatSec
 
-        val bassDb = (20 * log10(max(p.bass.at(tMid), 0.02f).toDouble())).toFloat()
+        val bassDb = (20 * log10(max(p.bass.at(tMid).orIf(1f), 0.02f).toDouble())).toFloat()
         if (bassDb != lastBassDb) { shelf.lowShelf(120.0, bassDb.toDouble(), sr); lastBassDb = bassDb }
-        val hpAmt = p.active(FxType.HIGH_PASS, tMid)?.amount(tMid) ?: 0f
+        val hpAmt = (p.active(FxType.HIGH_PASS, tMid)?.amount(tMid) ?: 0f).orIf(0f)
         if (hpAmt != lastHp) { hp.highPass(FxPlan.highPassHz(hpAmt), 0.9, sr); lastHp = hpAmt }
-        val lpAmt = p.active(FxType.LOW_PASS, tMid)?.amount(tMid) ?: 0f
+        val lpAmt = (p.active(FxType.LOW_PASS, tMid)?.amount(tMid) ?: 0f).orIf(0f)
         if (lpAmt != lastLp) { lp.lowPass(min(FxPlan.lowPassHz(lpAmt), 0.45 * sr), 0.9, sr); lastLp = lpAmt }
 
         val gainStart = gainNow
-        val gainEnd = p.gain.at(t0 + n / sr)
+        val gainEnd = p.gain.at(t0 + n / sr).orIf(1f)
 
         val gate = p.active(FxType.GATE, tMid)
         val tremolo = p.active(FxType.TREMOLO, tMid)
@@ -182,6 +203,7 @@ class FxChain(sampleRate: Int, private val channels: Int) {
             brakeOn = true
             brakeRead = (histWrite - 1).toDouble()
         }
+        val mutes = p.events.filter { it.type == FxType.MUTE && it.end > t0 && it.start < t0 + n / sr }
         val sfxEvents = if (p.hasSfx) p.events.filter { it.type.isSfx && it.isActive(tMid) } else emptyList()
         sfxEvents.maxOfOrNull { it.end }?.let { sfxTailUntil = maxOf(sfxTailUntil, it + SFX_RT60) }
         val sfxOn = t0 < sfxTailUntil
@@ -216,6 +238,7 @@ class FxChain(sampleRate: Int, private val channels: Int) {
         val lofiNorm = tanh(lofiDrive)
         val lofiLevels = if (lofi != null) 2.0.pow((16 - lofiAmt * (16 - lofi.p1)).toDouble() - 1).toFloat() else 0f
         val lofiFactor = if (lofi != null) 1 + (lofiAmt * (lofi.p2 - 1)).roundToInt() else 1
+        var broken = false
 
         for (k in 0 until n) {
             val idx = (offset + k) * channels
@@ -333,9 +356,13 @@ class FxChain(sampleRate: Int, private val channels: Int) {
             val gain = gainStart + (gainEnd - gainStart) * (k + 1) / n
             // Effects bus: ducked under each kick (sidechain) so they pump with the track instead of
             // sitting on top of it, and sent to a short reverb so they share the room with the music.
+            if (mutes.isNotEmpty() || muteGain < 1f) {
+                val target = if (mutes.any { it.isActive(t) }) 0f else 1f
+                muteGain += (target - muteGain) * muteCoef
+            }
             val effect = if (sfxEvents.isEmpty()) 0f else {
                 val sinceKick = frac((t - p.downbeatSec) / beat) * beat
-                sfx.sample(sfxEvents, t, beat) * (1f - SFX_DUCK * exp(-sinceKick / 0.09).toFloat())
+                sfx.sample(sfxEvents, t, beat, duck = 1f - SFX_DUCK * exp(-sinceKick / 0.09).toFloat()) * muteGain
             }
 
             for (c in 0 until channels) {
@@ -368,6 +395,8 @@ class FxChain(sampleRate: Int, private val channels: Int) {
                     phLast[c] = v
                     x = x * (1 - phMix * 0.5f) + v * phMix * 0.5f
                 }
+                // In a gap the music stops feeding the echo and reverb too, so only their tails ring.
+                x *= muteGain
 
                 var out = x * gain
                 if (echoOn) {
@@ -381,6 +410,7 @@ class FxChain(sampleRate: Int, private val channels: Int) {
                 }
                 if (revOn) out += reverb.process(x * revSend, c)
                 if (sfxOn) out += effect * SFX_DRY + sfxVerb.process(effect * SFX_SEND, c)
+                if (!out.isFinite()) { out = 0f; broken = true }
                 buf[idx + c] = softClip(out)
             }
             if (lofi != null) holdCount = (holdCount + 1) % lofiFactor
@@ -389,6 +419,7 @@ class FxChain(sampleRate: Int, private val channels: Int) {
             frames++
         }
         gainNow = gainEnd
+        if (broken) heal()
     }
 
     private fun readRing(ring: FloatArray, size: Int, pos: Double, c: Int): Float {
@@ -428,11 +459,11 @@ class FxChain(sampleRate: Int, private val channels: Int) {
         const val SFX_RT60 = 1.4f
         const val SFX_DUCK = 0.45f
 
-        /** Crossfade into and out of a scratch, over the live beat. */
-        const val SCRATCH_FADE = 0.03
+        /** Crossfade into and out of a scratch, over the live beat: long enough to ease in, not snap. */
+        const val SCRATCH_FADE = 0.12
 
         /** How much of the live track keeps playing under a scratch, so the groove never stops. */
-        const val SCRATCH_BED = 0.5f
+        const val SCRATCH_BED = 0.65f
 
         /** Half-width of the click-free dip at a source jump. */
         const val EDGE_SEC = 0.008

@@ -5,9 +5,12 @@ import com.autodj.analysis.Genres
 import com.autodj.dj.fx.FxEvent
 import com.autodj.dj.fx.FxType
 import com.autodj.dj.fx.FxPlan
+import com.autodj.dj.fx.Lane
 import com.autodj.dj.fx.Ramp
+import com.autodj.lyrics.TimedLyrics
 import com.autodj.model.TrackInfo
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -89,17 +92,32 @@ object TransitionPlanner {
         mode: MixMode = MixMode.SMOOTH,
         /** For variety: picks among near-equal options. Null = always the top one (tests). */
         random: Random? = null,
+        /** Each track's timed words, for word play; null when there are none. */
+        lyrics: (TrackInfo) -> TimedLyrics? = { null },
+        /** The genre whose style the mix takes: the crate for a one-genre set, else (null) the incoming song's. */
+        styleFamily: String? = null,
     ): Transition {
+        val family = styleFamily ?: b.genreFamily
         val multiple = tempoMultiple(a.bpm, b.bpm)
         val speed = a.bpm * multiple / b.bpm
         val beatmatched = abs(speed - 1) <= MAX_STRETCH
+        // Word play first: when both songs share a word in the right places, that's the showpiece.
+        // Never twice running, so it stays a surprise.
+        if ((forced == null && history.lastOrNull() != Recipe.WORD_PLAY) || forced == Recipe.WORD_PLAY) {
+            wordPlay(a, aEntryBar, nowSec, b, lyrics, mode, multiple, speed, aPitchSemis)?.let { return it }
+        }
         // Ramp-ups stay short: the new song should arrive, not wait behind a long build.
         val rampBars = 4
+        // An energy lift: B one or two steps up the wheel and no quieter. One step mixes as it
+        // is; two steps clash in an overlap, so cuts (which play B unshifted) get a nudge, while a
+        // blend still pitches B into A's key.
+        val lift = keyLift(a, aPitchSemis, b)
         val (shift, keysFit) = keyShift(a, aPitchSemis, b)
         val ranked: List<Pair<Recipe, Double>> = if (forced != null) {
             listOf(forced to 0.0)
         } else {
-            DecisionEngine.scores(a, b, beatmatched, speed, history, keysFit, mode)
+            DecisionEngine.scores(a, b, beatmatched, speed, history, keysFit, mode, family)
+                .mapValues { (r, s) -> if (lift == 2 && r.cut) s + LIFT_CUT_BONUS else s }
                 .filterValues { it.isFinite() }
                 .entries.sortedByDescending { it.value }
                 .map { it.key to it.value }
@@ -152,9 +170,13 @@ object TransitionPlanner {
             score = 0.0,
         )
 
+        val turn = Math.floorMod((a.uri + b.uri).hashCode(), 3)
+        val drum = SfxDressing.drum(if (SfxDressing.indian(a)) a else b, turn)
         val raw = RecipeBuilder(a, b, a.barTime(c.exitBar), b.barTime(c.entryBar), multiple, beatmatched)
-            .build(c.recipe, c.mixBars, rampBars, rampTo = 1 / speed)
-        val built = if (mode == MixMode.TRICKSTER) withSoundEffects(raw, a, b, c, entrySec = b.barTime(c.entryBar)) else raw
+            .build(c.recipe, c.mixBars, rampBars, rampTo = 1 / speed, drum = drum)
+        // A hard cut is the clean move, and a drum-fill cut brings its own drums.
+        val dressed = mode == MixMode.TRICKSTER && c.recipe != Recipe.HARD_CUT && c.recipe != Recipe.DRUM_FILL_CUT
+        val built = if (dressed) withSoundEffects(raw, a, b, c, entrySec = b.barTime(c.entryBar), family = family) else raw
 
         val tempoText = when {
             beatmatched -> {
@@ -171,12 +193,17 @@ object TransitionPlanner {
         }
         val into = when {
             c.recipe == Recipe.VOCAL_SWAP -> " over B's vocal"
-            c.recipe == Recipe.BASS_DROP -> " onto B's drop"
+            c.recipe == Recipe.BASS_DROP || c.recipe == Recipe.DROP_SWAP -> " onto B's drop"
             c.entryBar != firstPhrase -> " into B's drop"
             else -> ""
         }
         val pitch = if (c.recipe.cut) 0 else shift
-        val keyText = if (pitch != 0) " · key ${if (pitch > 0) "+" else ""}$pitch st" else ""
+        val keyText = when {
+            lift > 0 && pitch == 0 -> " · key lift +$lift"
+            pitch != 0 -> " · key ${if (pitch > 0) "+" else ""}$pitch st"
+            else -> ""
+        }
+        val name = if (c.recipe == Recipe.DRUM_FILL_CUT) "${drum.label} fill cut" else c.recipe.label
         return Transition(
             recipe = c.recipe,
             startSec = built.startSec,
@@ -193,8 +220,130 @@ object TransitionPlanner {
             handoverSec = built.handoverSec,
             bPitchSemis = pitch,
             phases = built.phases,
-            description = "${c.recipe.label} $where$into · $tempoText$keyText",
+            description = "$name $where$into · $tempoText$keyText",
         )
+    }
+
+    /** How a word-play mix bridges the tempo gap between the songs. */
+    enum class WordBridge(val label: String) {
+        /** Up to [LOCK_GAP]: B locked to A's tempo (and key), the beats line up. */
+        LOCKED("locked"),
+
+        /** Up to [BRIDGE_GAP]: A's drums stop at the word; only its echo and a reverb wash carry over; B at its own tempo. */
+        ECHO("echo bridge"),
+
+        /** Further apart: the word, its echo, half a beat of silence, then B: a deliberate stop. */
+        PAUSE("pause and answer"),
+    }
+
+    /**
+     * The word-play mix, when [WordPlay] finds a link. The word decides when; the tempo gap
+     * decides how ([WordBridge]). A's word repeats in a beat-sized loop ("party, party"), the
+     * shortest loop the word fits in, from the quarter beat it starts on, until A's next beat,
+     * where the mix cuts; B starts on its own beat just before it sings the same word, so its
+     * word lands as the answer. Never two drum tracks at different tempos at once.
+     */
+    private fun wordPlay(
+        a: TrackInfo,
+        aEntryBar: Int,
+        nowSec: Double,
+        b: TrackInfo,
+        lyrics: (TrackInfo) -> TimedLyrics?,
+        mode: MixMode,
+        multiple: Double,
+        speed: Double,
+        aPitchSemis: Int,
+    ): Transition? {
+        val aL = lyrics(a) ?: return null
+        val bL = lyrics(b) ?: return null
+        val aStart = a.barTime(aEntryBar)
+        val available = a.durationSec - aStart
+        val aFrom = max(nowSec + 8.0, aStart + min(MIN_PLAY_SEC, 0.6 * available))
+        val bTo = min(b.durationSec * MAX_ENTRY_SHARE, b.durationSec - MIN_B_REMAINING_SEC)
+        // B comes in more gently where its drums are light.
+        val bEnergy = { sec: Double -> b.energyIn(b.barAt(sec), b.barAt(sec) + 1) }
+        val link = WordPlay.find(aL, bL, aFrom, a.durationSec - 15.0, 0.5, bTo, aStart + TARGET_PLAY_SEC, bEnergy) ?: return null
+        // Smooth sets only cut for the clearest links.
+        if (mode == MixMode.SMOOTH && link.score < WordPlay.MIN_SCORE + SMOOTH_WORD_MARGIN) return null
+        val gap = abs(speed - 1)
+        val bridge = when {
+            gap <= LOCK_GAP -> WordBridge.LOCKED
+            gap <= BRIDGE_GAP -> WordBridge.ECHO
+            else -> WordBridge.PAUSE
+        }
+        val locked = bridge == WordBridge.LOCKED
+        val aBeat = a.beatSec
+        val bBeat = b.beatSec
+        val word = link.aWord
+        // The word loop starts on the quarter beat the word starts in, so it stays on A's grid.
+        val quarter = aBeat / 4
+        val loopStart = a.downbeatSec + floor((word.startSec - a.downbeatSec) / quarter) * quarter
+        val loopBeats = WordPlay.loopBeats(word.endSec - loopStart, aBeat)
+        val looped = loopBeats <= 1.0
+        val fromSec = if (looped) loopStart + 2 * loopBeats * aBeat else word.endSec + 0.04
+        val cut = a.downbeatSec + ceil((fromSec - a.downbeatSec) / aBeat - 1e-6) * aBeat
+        // B starts on the beat at or just before its word; after a pause, half a beat later than A's cut.
+        val bStart = if (bridge == WordBridge.PAUSE) cut + aBeat / 2 else cut
+        val entry = max(0.0, b.downbeatSec + floor((link.bWord.startSec - 0.03 - b.downbeatSec) / bBeat) * bBeat)
+        val aEvents = buildList {
+            if (looped) add(FxEvent(FxType.LOOP_ROLL, loopStart, cut, p1 = loopBeats.toFloat()))
+            // The word's echo rings on into B: one repeat when locked, a longer tail to bridge a tempo change.
+            add(FxEvent(FxType.ECHO, cut - aBeat / 2, cut, 0.8f, 0.8f, p1 = 0.5f, p2 = if (locked) 0.35f else 0.55f))
+            if (!locked) add(FxEvent(FxType.REVERB, word.startSec, cut, 0.1f, 0.7f, p1 = 3f))
+        }
+        val aPlan = FxPlan(a.beatSec, a.downbeatSec, Lane(listOf(Ramp(cut, cut + CUT_SEC, 1f, 0f)), 1f), Lane(emptyList(), 1f), aEvents)
+        val bPlan = FxPlan(b.beatSec, b.downbeatSec, Lane(listOf(Ramp(entry, entry + CUT_SEC, 0f, 1f)), 1f), Lane(emptyList(), 1f), emptyList())
+        // Locked, the two singers meet in tune: B is pitched into A's key when they clash.
+        val pitch = if (locked) keyShift(a, aPitchSemis, b).let { (s, fits) -> if (fits) s else 0 } else 0
+        val tempoText = if (locked) {
+            val pct = (speed - 1) * 100
+            if (abs(pct) < 0.05) "same tempo" else "tempo ${if (pct > 0) "+" else ""}${"%.1f".format(pct)}%"
+        } else {
+            "${a.bpm.roundToInt()} → ${b.bpm.roundToInt()} BPM"
+        }
+        return Transition(
+            recipe = Recipe.WORD_PLAY,
+            startSec = if (looped) loopStart else word.startSec,
+            exitBar = a.barAt(cut),
+            exitSec = bStart,
+            endSec = min(cut + 2 * a.barSec, a.durationSec - 0.1),
+            entryBar = max(0, b.barAt(entry)),
+            entrySec = entry,
+            tempoMultiple = multiple,
+            beatmatched = locked,
+            aPlan = aPlan,
+            bPlan = bPlan,
+            aSpeedRamp = null,
+            handoverSec = bStart + CUT_SEC,
+            bPitchSemis = pitch,
+            phases = listOfNotNull(
+                Phase(if (looped) "Word loop ${link.label}" else "Word ${link.label}", if (looped) loopStart else word.startSec, cut),
+                if (bStart > cut) Phase("Pause", cut, bStart) else null,
+                Phase("B answers", bStart, bStart + a.barSec),
+            ),
+            description = "Word play ${link.label} · ${bridge.label} · $tempoText",
+        )
+    }
+
+    /** A word-play cut doesn't click: 12 ms. */
+    private const val CUT_SEC = 0.012
+
+    /** Tempo gaps for each [WordBridge]. */
+    const val LOCK_GAP = 0.06
+    const val BRIDGE_GAP = 0.25
+
+    /** How much clearer than the minimum a link must be for a Smooth set to cut for it. */
+    private const val SMOOTH_WORD_MARGIN = 0.8
+
+    /**
+     * Energy-boost mixing: 1 or 2 when B sits that many steps up the Camelot wheel from A, in
+     * the same mode, and is no quieter, so the set lifts; else 0. Unclear keys never count.
+     */
+    fun keyLift(a: TrackInfo, aPitchSemis: Int, b: TrackInfo): Int {
+        if (a.keyConfidence < KEY_CONFIDENT || b.keyConfidence < KEY_CONFIDENT) return 0
+        if (a.keyMinor != b.keyMinor || b.loudnessDb < a.loudnessDb - 1.0) return 0
+        val steps = Math.floorMod(Camelot.number(b.keyPc, b.keyMinor) - Camelot.number(a.keyPc + aPitchSemis, a.keyMinor), 12)
+        return if (steps == 1 || steps == 2) steps else 0
     }
 
     /**
@@ -210,6 +359,9 @@ object TransitionPlanner {
 
     private const val KEY_CONFIDENT = 0.25f
 
+    /** How much a two-step key lift favours cutting over blending. */
+    private const val LIFT_CUT_BONUS = 0.6
+
     /** Mean vocalness for a phrase to count as sung. */
     private const val VOCAL = 0.55
 
@@ -222,8 +374,8 @@ object TransitionPlanner {
     /** How much of B a vocal swap may skip to reach B's first sung phrase. */
     private const val MAX_VOCAL_SKIP_SEC = 45.0
 
-    /** How close to the best score a style must be to be picked for variety. */
-    private const val VARIETY_MARGIN = 0.8
+    /** How close to the best score a style must be to be picked for variety (scores carry the genre weight). */
+    private const val VARIETY_MARGIN = 1.3
 
     /** For each of [recipes] that fits somewhere, its best (entry, exit). */
     private fun search(
@@ -266,7 +418,7 @@ object TransitionPlanner {
      * Trickster dressing ([SfxDressing]): a build on A into the moment B takes over, then a hit
      * on B's first beat (or its drop), both picked by style and sized to the music there.
      */
-    private fun withSoundEffects(raw: RecipeBuilder.Built, a: TrackInfo, b: TrackInfo, c: Candidate, entrySec: Double): RecipeBuilder.Built {
+    private fun withSoundEffects(raw: RecipeBuilder.Built, a: TrackInfo, b: TrackInfo, c: Candidate, entrySec: Double, family: String): RecipeBuilder.Built {
         val exit = a.barTime(c.exitBar)
         // B's big moment: its drop for a bass drop, else its first beat.
         val bHit = if (c.recipe == Recipe.BASS_DROP) b.barTime(b.introEndBar) else entrySec
@@ -275,8 +427,8 @@ object TransitionPlanner {
         val turn = Math.floorMod((a.uri + b.uri).hashCode(), 3)
         val aHitBar = a.barAt(aHit + 0.01)
         val buildBars = if (c.recipe.cut) SfxDressing.buildBars(a, aHitBar).coerceAtMost(4) else 4
-        val build = SfxDressing.build(a, aHitBar, buildBars, turn)
-        val hits = SfxDressing.hit(b, b.barAt(bHit + 0.01), turn)
+        val build = SfxDressing.build(a, aHitBar, buildBars, turn, family = family)
+        val hits = SfxDressing.hit(b, b.barAt(bHit + 0.01), turn, family = family)
         return RecipeBuilder.Built(
             raw.aPlan.withEvents(build),
             raw.bPlan.withEvents(hits),
@@ -289,6 +441,7 @@ object TransitionPlanner {
         // Lead-in bars up to B's drop, plus the bar after it.
         recipe == Recipe.BASS_DROP -> (b.introEndBar - entry).let { if (it == 8 || it == 16) it + 1 else 0 }
         recipe == Recipe.VOCAL_SWAP -> 12
+        recipe == Recipe.BREAKDOWN_SWAP -> 8
         // Different tempos can only overlap briefly; matched ones get a full 8-bar filter fade.
         !beatmatched -> 4
         recipe == Recipe.FILTER_FADE -> 8
@@ -316,6 +469,7 @@ object TransitionPlanner {
             recipe.cut -> exit
             recipe == Recipe.VOCAL_SWAP -> exit + 6
             recipe == Recipe.BASS_DROP -> exit + mix - 1
+            recipe == Recipe.BREAKDOWN_SWAP -> exit + 2
             else -> exit + mix / 2
         }
         val played = a.barTime(handover) - a.barTime(aEntryBar)
@@ -325,7 +479,18 @@ object TransitionPlanner {
         if (exit == a.outroStartBar || exit in a.dropBars) s += 1.2
         val before = meanEnergy(a, exit - 8, exit)
         val after = meanEnergy(a, exit, exit + 8)
-        if (recipe.cut) {
+        if (recipe == Recipe.DROP_SWAP) {
+            // Only where A's own drop would land: a quiet run-up, then full energy.
+            if (a.energyIn(exit - 4, exit) >= 0.65 || a.energyIn(exit, exit + 4) < 0.85) return Double.NEGATIVE_INFINITY
+            s += 0.8
+        } else if (recipe == Recipe.BREAKDOWN_SWAP) {
+            // Only over a real breakdown: eight or more open bars from where it starts.
+            if (exit !in a.dropBars || quietBars(a, exit) < 8) return Double.NEGATIVE_INFINITY
+            s += 0.6
+        } else if (recipe == Recipe.SCRATCH_CUT && a.vocalIn(exit - 1, exit) >= 0.5) {
+            // Scratching over a sung bar chops the vocal; only where A's last bar is instrumental.
+            return Double.NEGATIVE_INFINITY
+        } else if (recipe.cut) {
             s += (before - 0.6) * 1.5 // end a loud phrase with a bang
         } else if (recipe == Recipe.VOCAL_SWAP) {
             s += (after - 0.75) * 2 // B's vocal needs A's full beat underneath
@@ -356,6 +521,14 @@ object TransitionPlanner {
             // A sung phrase landing on the other track's beat is the showpiece move when it's available.
             return if (b.vocalIn(entry, entry + 8) >= VOCAL) 1.8 - 0.2 * skipped else Double.NEGATIVE_INFINITY
         }
+        if (recipe == Recipe.DROP_SWAP) {
+            // B must come in at full swing: its drop replaces A's.
+            return if (b.energyIn(entry, entry + 4) >= 0.8) 1.0 - 0.3 * skipped else Double.NEGATIVE_INFINITY
+        }
+        if (recipe == Recipe.BREAKDOWN_SWAP) {
+            // B's beat has to be there to carry the floor under the breakdown.
+            return if (b.energyIn(entry, entry + 4) >= 0.6) 0.5 - SKIP_COST_PER_MIN * skipped else Double.NEGATIVE_INFINITY
+        }
         if (!recipe.cut) {
             // A blend can come in anywhere B runs at its matched tempo (the search only offers
             // such phrases), preferably over a quieter stretch, with a small cost for what it
@@ -376,5 +549,7 @@ object TransitionPlanner {
     }
 
     /** Cuts that hit hardest when B comes in at full energy. */
-    private val DROP_RECIPES = setOf(Recipe.BACKSPIN_DROP, Recipe.LOOP_RAMP, Recipe.GATE_BUILD, Recipe.ECHO_OUT)
+    private val DROP_RECIPES = setOf(
+        Recipe.BACKSPIN_DROP, Recipe.LOOP_RAMP, Recipe.GATE_BUILD, Recipe.ECHO_OUT, Recipe.BRAKE_STOP, Recipe.DRUM_FILL_CUT,
+    )
 }

@@ -1,5 +1,8 @@
 package com.autodj.tv
 
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.animation.core.animateDpAsState
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -9,7 +12,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,17 +75,16 @@ import com.autodj.ui.vis.AmbientVisualizer
 import com.autodj.ui.vis.VisualizerStyle
 import kotlinx.coroutines.delay
 
-/** How long each visualizer runs before the next one fades in. */
-private const val ROTATE_MS = 30_000L
 /** How long the track card stays up after a new track starts or the look changes. */
 private const val INFO_MS = 7_000L
 /** Controls hide after this long without a key press. */
 private const val CONTROLS_MS = 6_000L
 
 /**
- * The mix on the big screen: the visualizers full screen, rotating through all five with a
- * cross-fade, the playing track in the corner whenever it changes. Left/right on the remote
- * switch looks by hand, OK opens pause/stop/home, Back goes home and the mix plays on.
+ * The mix on the big screen: the look the viewer picked, full screen, and the playing track in
+ * the corner whenever it changes. The look stays until the viewer changes it: left/right on the
+ * remote, or the Look button in the controls (it is remembered, like on the phone). OK opens
+ * the controls, Back goes home and the mix plays on.
  */
 @UnstableApi
 @Composable
@@ -84,31 +92,27 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
     val state by vm.engine.state.collectAsStateWithLifecycle()
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val styles = VisualizerStyle.entries
-    var index by remember { mutableIntStateOf(styles.indexOf(vm.visualizerStyle.value).coerceAtLeast(0)) }
-    // Bumped by a manual change, so the 30 s timer restarts from it.
-    var manual by remember { mutableIntStateOf(0) }
+    val style by vm.visualizerStyle.collectAsStateWithLifecycle()
     var controls by remember { mutableStateOf(false) }
     var infoUntil by remember { mutableStateOf(0L) }
-    // When the current look started, for the "next look in m:ss" line.
-    var lookSince by remember { mutableStateOf(System.currentTimeMillis()) }
     // Bumped by any key while the controls are up; they hide after a few idle seconds.
     var touched by remember { mutableIntStateOf(0) }
     val rootFocus = remember { FocusRequester() }
     val pauseFocus = remember { FocusRequester() }
+    // Heights of the panels at the bottom, so the lyric looks can rise above the open one.
+    var controlsPx by remember { mutableIntStateOf(0) }
+    var cardPx by remember { mutableIntStateOf(0) }
     // The key that brought the controls up: its release must not also press Play/Pause, now focused.
     var opener by remember { mutableStateOf<Key?>(null) }
 
     KeepScreenOn()
     BackHandler { if (controls) controls = false else onHome() }
 
-    LaunchedEffect(manual) {
-        lookSince = System.currentTimeMillis()
-        while (true) {
-            delay(ROTATE_MS)
-            index = (index + 1) % styles.size
-            lookSince = System.currentTimeMillis()
-            infoUntil = System.currentTimeMillis() + INFO_MS
-        }
+    /** Steps to the next (or previous) look and keeps it, showing its name for a moment. */
+    fun changeLook(step: Int) {
+        val i = styles.indexOf(style).coerceAtLeast(0)
+        vm.setVisualizerStyle(styles[Math.floorMod(i + step, styles.size)])
+        infoUntil = System.currentTimeMillis() + INFO_MS
     }
     LaunchedEffect(controls, touched) {
         if (!controls) return@LaunchedEffect
@@ -121,6 +125,10 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
     LaunchedEffect(infoUntil, controls) { while (controls || System.currentTimeMillis() < infoUntil) { now = System.currentTimeMillis(); delay(500) }; now = System.currentTimeMillis() }
     LaunchedEffect(controls) { runCatching { if (controls) pauseFocus.requestFocus() else rootFocus.requestFocus() } }
 
+    val cardUp = (now < infoUntil || state.paused) && !controls
+    val clearPx = if (controls) controlsPx else if (cardUp) cardPx else 0
+    val clear by animateDpAsState(with(LocalDensity.current) { clearPx.toDp() }, label = "lyrics clear")
+
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .focusRequester(rootFocus).focusable()
@@ -129,15 +137,15 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
                 if (controls) { touched++; return@onPreviewKeyEvent false }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
-                    Key.DirectionRight -> { index = (index + 1) % styles.size; manual++; infoUntil = System.currentTimeMillis() + INFO_MS; true }
-                    Key.DirectionLeft -> { index = (index - 1 + styles.size) % styles.size; manual++; infoUntil = System.currentTimeMillis() + INFO_MS; true }
+                    Key.DirectionRight -> { changeLook(1); true }
+                    Key.DirectionLeft -> { changeLook(-1); true }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionDown, Key.DirectionUp -> { opener = e.key; controls = true; true }
                     else -> false
                 }
             },
     ) {
-        Crossfade(targetState = styles[index], animationSpec = tween(1600), label = "look") { style ->
-            AmbientVisualizer(vm.engine::visual, style, Modifier.fillMaxSize())
+        Crossfade(targetState = style, animationSpec = tween(900), label = "look") { look ->
+            AmbientVisualizer(vm.engine::visual, look, Modifier.fillMaxSize(), lyricsClearBottom = clear)
         }
 
         val deck = state.current
@@ -146,21 +154,20 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
         // The track card: on its own when a track or look changes, or while paused.
         AnimatedVisibility((now < infoUntil || state.paused) && !controls, Modifier.align(Alignment.BottomStart), enter = fadeIn(), exit = fadeOut()) {
             Row(
-                Modifier.padding(start = 40.dp, bottom = 36.dp).widthIn(max = 700.dp)
+                Modifier.onSizeChanged { cardPx = it.height }.padding(start = 40.dp, bottom = 36.dp).widthIn(max = 700.dp)
                     .glass(RoundedCornerShape(30.dp), Glass.FillDark).padding(start = 16.dp, end = 28.dp, top = 16.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 if (deck != null) Artwork(art, deck.uri, deck.title, Modifier.size(80.dp).border(2.dp, Color.White.copy(alpha = .35f), CircleShape), CircleShape)
-                TrackLines(state, styles[index].label)
+                TrackLines(state, style.label)
             }
         }
 
-        // The next look, as information only: at the top while the track card or controls are up.
+        // The look on screen and how to change it: at the top while the track card or controls are up.
         AnimatedVisibility(now < infoUntil || controls, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
-            val left = ((ROTATE_MS - (now - lookSince)) / 1000).coerceAtLeast(0)
             Text(
-                "Next look · ${styles[(index + 1) % styles.size].label} · in ${left / 60}:${"%02d".format(left % 60)}",
+                "Look · ${style.label}   ◀ ▶ to change",
                 color = Glass.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 28.dp, end = 40.dp)
                     .glass(RoundedCornerShape(999.dp), Glass.FillDark)
@@ -171,12 +178,12 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
         // The controls: one glass bar along the bottom, as on Apple TV. Home, stop, then play/pause (focused first).
         AnimatedVisibility(controls, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) {
             Column(
-                Modifier.padding(horizontal = 40.dp, vertical = 30.dp).fillMaxWidth()
+                Modifier.onSizeChanged { controlsPx = it.height }.padding(horizontal = 40.dp, vertical = 30.dp).fillMaxWidth()
                     .glass(RoundedCornerShape(32.dp), Glass.FillDark).padding(horizontal = 32.dp, vertical = 22.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     if (deck != null) Artwork(art, deck.uri, deck.title, Modifier.size(76.dp).border(2.dp, Color.White.copy(alpha = .35f), CircleShape), CircleShape)
-                    TrackLines(state, styles[index].label, Modifier.weight(1f), showNext = false)
+                    TrackLines(state, style.label, Modifier.weight(1f), showNext = false)
                     state.next?.let { next ->
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
@@ -203,11 +210,30 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
                     TvRoundButton(80.dp, Color.White, if (state.paused) "Play" else "Pause", Modifier.focusRequester(pauseFocus), onClick = { vm.engine.togglePause() }) {
                         if (state.paused) PlayIcon(INK, Modifier.size(38.dp)) else PauseIcon(INK, Modifier.size(38.dp))
                     }
+                    // While the controls are up ◀ ▶ move between buttons, so the look has its own button.
+                    LookButton(style.label) { changeLook(1); touched++ }
                 }
-                Text("◀ ▶  change look", color = Glass.Muted, fontSize = 15.sp, textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
             }
         }
+    }
+}
+
+/** "Look · Beat Pop": OK steps to the next look. Lifted and ringed in white when focused, like the other buttons. */
+@Composable
+private fun LookButton(look: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "focus")
+    Box(
+        Modifier.scale(scale)
+            .border(3.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(999.dp))
+            .padding(6.dp)
+            .glass(RoundedCornerShape(999.dp), Glass.FillStrong)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = "Change the look", onClick = onClick)
+            .padding(horizontal = 26.dp, vertical = 18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("Look · $look", color = Glass.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

@@ -1,16 +1,24 @@
 package com.autodj.dj
 
 import com.autodj.analysis.Genres
+import com.autodj.dj.fx.Drum
 import com.autodj.dj.fx.FxEvent
 import com.autodj.dj.fx.FxType
 import com.autodj.dj.fx.Lane
 import com.autodj.dj.fx.Ramp
+import com.autodj.lyrics.LyricWord
+import com.autodj.lyrics.TimedLyrics
+import com.autodj.lyrics.WordKey
 import com.autodj.model.TrackInfo
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
-/** When the playhead reaches bar [atBar], jump back to bar [toBar] (played again on the other deck). */
-class Replay(val atBar: Int, val toBar: Int)
+/**
+ * When the playhead reaches bar [atBar], jump back to bar [toBar] (played again on the other
+ * deck): a crossfade for a hook replay, a hard [cut] for a rewind.
+ */
+class Replay(val atBar: Int, val toBar: Int, val cut: Boolean = false)
 
 /** A trick shown to the listener, in the track's own seconds. */
 class Trick(val label: String, val startSec: Double, val endSec: Double)
@@ -40,11 +48,15 @@ class Performance(
  * - **Loop-roll builds:** the two bars before a drop become a roll tightening from one beat to
  *   an eighth under a rising high-pass, dressed with sound effects by [SfxDressing]: a build as
  *   long as the quiet run-up and a hit sized to the drop.
+ *   Every other drop gets half a beat of silence before it lands.
  * - **Hook replay:** after a sung hook's first pass, jump back and play it again.
+ * - **Rewind:** otherwise, in hip-hop, bass, Latin and Indian music, the first drop is pulled
+ *   up: a spinback at the end of its first 8 bars and straight back to the top of the drop.
  * - **Phrase fills:** at the end of nearly every 8-bar phrase, a scratch, roll, echo throw,
  *   gate stutter, laser zaps, brake, spinback, whoosh, crash, gunshot or air horn, rotating by
  *   style, at a level that follows the energy there. Scratches are slow baby scratches over the
- *   live beat.
+ *   live beat. Indian music gets its region's drums (dappu, marfa, thavil or dhol), sirens,
+ *   horns and a nadaswaram sting in the rotation.
  */
 object Performer {
     /** How far a track may be pushed from its own tempo. */
@@ -67,14 +79,52 @@ object Performer {
         WHOOSH("Whoosh"),
         GUNSHOT("Gunshot"),
         CRASH("Crash"),
+        DAPPU("Dappu fill"),
+        MARFA("Marfa roll"),
+        DHOL("Dhol fill"),
+        THAVIL("Thavil roll"),
+        REED("Nadaswaram"),
+        SIREN("Siren"),
     }
 
-    private val HIPHOP_FILLS = listOf(
-        Fill.SCRATCH, Fill.ECHO_THROW, Fill.HORN, Fill.BRAKE, Fill.SCRATCH, Fill.GUNSHOT, Fill.SPINBACK, Fill.WHOOSH, Fill.ECHO_THROW, Fill.LASER,
+    private val SOUTH_FILLS = listOf(
+        Fill.DAPPU, Fill.HORN, Fill.ECHO_THROW, Fill.MARFA, Fill.REED, Fill.SIREN, Fill.DAPPU, Fill.ROLL, Fill.THAVIL, Fill.ECHO_THROW,
     )
-    private val CLUB_FILLS = listOf(
-        Fill.ROLL, Fill.WHOOSH, Fill.ECHO_THROW, Fill.GATE, Fill.CRASH, Fill.LASER, Fill.SCRATCH, Fill.HORN, Fill.BRAKE, Fill.ROLL,
+    private val NORTH_FILLS = listOf(
+        Fill.DHOL, Fill.HORN, Fill.ECHO_THROW, Fill.SIREN, Fill.DHOL, Fill.ROLL, Fill.BRAKE, Fill.GUNSHOT, Fill.ECHO_THROW,
     )
+    private val INDIAN_FILLS = listOf(
+        Fill.DAPPU, Fill.HORN, Fill.DHOL, Fill.ECHO_THROW, Fill.MARFA, Fill.REED, Fill.SIREN, Fill.ROLL,
+    )
+
+    /** Styles where pulling a drop back up is part of the culture. */
+    private val REWIND_FAMILIES = setOf(Genres.HIPHOP, Genres.LATIN, Genres.BASS, Genres.DNB)
+
+    /**
+     * Each genre's phrase fills, in rotation. Scratching is hip-hop's: anywhere else it breaks
+     * the flow, so no other genre has it. House and trance stay smooth (rolls, echoes, sweeps),
+     * techno minimal, bass music and drum & bass loud, chill barely there.
+     */
+    private val FILLS: Map<String, List<Fill>> = mapOf(
+        Genres.HIPHOP to listOf(
+            Fill.SCRATCH, Fill.ECHO_THROW, Fill.HORN, Fill.BRAKE, Fill.SCRATCH, Fill.GUNSHOT, Fill.SPINBACK, Fill.WHOOSH, Fill.ECHO_THROW, Fill.LASER,
+        ),
+        Genres.HOUSE to listOf(Fill.ROLL, Fill.ECHO_THROW, Fill.WHOOSH, Fill.CRASH, Fill.GATE, Fill.ROLL, Fill.ECHO_THROW),
+        Genres.TECHNO to listOf(Fill.GATE, Fill.ROLL, Fill.ECHO_THROW, Fill.ROLL, Fill.GATE),
+        Genres.TRANCE to listOf(Fill.ROLL, Fill.WHOOSH, Fill.CRASH, Fill.ECHO_THROW, Fill.GATE),
+        Genres.DNB to listOf(Fill.ROLL, Fill.ECHO_THROW, Fill.HORN, Fill.SPINBACK, Fill.LASER),
+        Genres.BASS to listOf(Fill.LASER, Fill.ROLL, Fill.GUNSHOT, Fill.SPINBACK, Fill.ECHO_THROW, Fill.HORN),
+        Genres.LATIN to listOf(Fill.HORN, Fill.ECHO_THROW, Fill.ROLL, Fill.WHOOSH, Fill.SPINBACK),
+        Genres.POP to listOf(Fill.ROLL, Fill.ECHO_THROW, Fill.WHOOSH, Fill.CRASH, Fill.GATE),
+        Genres.CHILL to listOf(Fill.ECHO_THROW),
+        Genres.ROCK to listOf(Fill.ECHO_THROW, Fill.CRASH, Fill.BRAKE),
+    )
+
+    /** Genres where a fill every other phrase would be too busy: every fourth instead. */
+    private val SPARSE = setOf(Genres.CHILL, Genres.ROCK)
+
+    /** Phrase fills per track at most. */
+    private const val MAX_FILLS = 4
 
     fun plan(
         t: TrackInfo,
@@ -83,6 +133,8 @@ object Performer {
         masterBpm: Double,
         allowReplay: Boolean = true,
         mode: MixMode = MixMode.SMOOTH,
+        /** The track's timed words, for word loops into drops; null plays the plain rolls. */
+        lyrics: TimedLyrics? = null,
     ): Performance {
         val trickster = mode == MixMode.TRICKSTER
         val bar = t.barSec
@@ -98,8 +150,9 @@ object Performer {
         // Tempo push across the first full main section after the glide.
         val pushStart = (max(entryBar + 8, t.introEndBar)..t.outroStartBar - 32)
             .firstOrNull { t.isPhraseStart(it) && t.energyIn(it, it + 8) >= LOUD }
-        if (pushStart != null) {
-            val pushed = min(target * (1 + push(mode)), 1 + MAX_STRETCH)
+        val pushed = min(target * (1 + push(mode)), 1 + MAX_STRETCH)
+        // A track already stretched as far as it goes has no room left to push.
+        if (pushStart != null && pushed / target - 1 >= 0.005) {
             speedRamps += Ramp(t.barTime(pushStart), t.barTime(pushStart + 32), target.toFloat(), pushed.toFloat())
             tricks += Trick("Tempo push +${"%.1f".format((pushed / target - 1) * 100)}%", t.barTime(pushStart), t.barTime(pushStart + 32))
         }
@@ -115,23 +168,33 @@ object Performer {
         val dressTurn = Math.floorMod(t.uri.hashCode(), 3)
         for ((n, d) in drops.withIndex()) {
             val dSec = t.barTime(d)
-            events += listOf(
-                FxEvent(FxType.LOOP_ROLL, dSec - 2 * bar, dSec - bar, p1 = 1f),
-                FxEvent(FxType.LOOP_ROLL, dSec - bar, dSec - bar / 2, p1 = 0.5f),
-                FxEvent(FxType.LOOP_ROLL, dSec - bar / 2, dSec - bar / 4, p1 = 0.25f),
-                FxEvent(FxType.LOOP_ROLL, dSec - bar / 4, dSec, p1 = 0.125f),
-                FxEvent(FxType.HIGH_PASS, dSec - 2 * bar, dSec, 0f, 0.55f),
-            )
+            // The last word sung before the drop, looped and tightening into it; else a plain roll.
+            val word = lyrics?.let { wordBeforeDrop(t, it, dSec) }
+            events += if (word != null) {
+                wordLoop(t, word, dSec)
+            } else {
+                listOf(
+                    FxEvent(FxType.LOOP_ROLL, dSec - 2 * bar, dSec - bar, p1 = 1f),
+                    FxEvent(FxType.LOOP_ROLL, dSec - bar, dSec - bar / 2, p1 = 0.5f),
+                    FxEvent(FxType.LOOP_ROLL, dSec - bar / 2, dSec - bar / 4, p1 = 0.25f),
+                    FxEvent(FxType.LOOP_ROLL, dSec - bar / 4, dSec, p1 = 0.125f),
+                )
+            }
+            events += FxEvent(FxType.HIGH_PASS, dSec - 2 * bar, dSec, 0f, 0.55f)
             // Build as long as the quiet run-up, landing with a hit sized to the drop.
             events += SfxDressing.build(t, d, SfxDressing.buildBars(t, d), dressTurn + n)
             events += SfxDressing.hit(t, d, dressTurn + n)
-            tricks += Trick("Roll into drop", dSec - 2 * bar, dSec + beat)
+            // Every other drop: half a beat of nothing, so the drop hits harder.
+            val gap = Math.floorMod(dressTurn + n, 2) == 0
+            if (gap) events += FxEvent(FxType.MUTE, dSec - beat / 2, dSec)
+            val into = if (word != null) "Word loop “${word.text}”" else "Roll"
+            tricks += Trick(if (gap) "$into · gap · drop" else "$into into drop", dSec - 2 * bar, dSec + beat)
         }
 
         // Hook replay: needs room after it, and must not collide with a roll build. Jumping back
         // mid-lyric sounds like a skip, so only where the hook is a sung chorus.
         val h = t.hookBar
-        val replay = if (
+        val hookReplay = if (
             allowReplay && t.vocalIn(h, h + 8) >= 0.5 &&
             h >= entryBar && h + 8 + 24 <= t.outroStartBar &&
             t.energyIn(h, h + 8) >= 0.8 && drops.none { it in h + 7..h + 10 }
@@ -144,20 +207,50 @@ object Performer {
             null
         }
 
-        // A fill at the end of (almost) every phrase, rotating through the style's tricks.
-        val busy = drops.flatMap { it - 2..it + 1 } + (if (replay != null) listOf(h, h + 8, h + 9) else emptyList())
-        val fills = if (t.genreFamily == Genres.HIPHOP || t.genreFamily == Genres.LATIN) HIPHOP_FILLS else CLUB_FILLS
+        // Rewind: spin the first big drop back and drop it again (its hit fires again too).
+        val indian = SfxDressing.indian(t)
+        val rewindable = indian || t.genreFamily in REWIND_FAMILIES
+        val rewindBar = if (hookReplay == null && allowReplay && rewindable) {
+            drops.firstOrNull { d -> d + 8 + 24 <= t.outroStartBar && t.energyIn(d, d + 8) >= 0.8 && drops.none { it in d + 7..d + 10 } }
+        } else {
+            null
+        }
+        val replay = hookReplay ?: rewindBar?.let { d ->
+            val jump = t.barTime(d + 8)
+            events += FxEvent(FxType.BACKSPIN, jump - 2 * beat, jump, p1 = 3f)
+            tricks += Trick("Rewind", jump - 2 * beat, jump + beat)
+            Replay(atBar = d + 8, toBar = d, cut = true)
+        }
+
+        // A fill at the end of every other phrase (every fourth for sparse styles), rotating through
+        // the style's tricks: a few well-placed ones, never over the singing, keep the track flowing.
+        val busy = drops.flatMap { it - 2..it + 1 } +
+            (if (hookReplay != null) listOf(h, h + 8, h + 9) else emptyList()) +
+            (rewindBar?.let { listOf(it + 8, it + 9) } ?: emptyList())
+        val fills = when (SfxDressing.region(t)) {
+            Genres.Region.SOUTH -> SOUTH_FILLS
+            Genres.Region.NORTH -> NORTH_FILLS
+            Genres.Region.INDIAN -> INDIAN_FILLS
+            null -> FILLS[t.genreFamily] ?: FILLS.getValue(Genres.POP)
+        }
+        val sparse = SfxDressing.region(t) == null && t.genreFamily in SPARSE
         var turn = Math.floorMod(t.uri.hashCode(), fills.size)
+        var phrase = 0
+        var placed = 0
         for (j in entryBar + 16 until t.outroStartBar - 8) {
             if (!t.isPhraseStart(j) || j in busy) continue
+            if (phrase++ % (if (sparse) 4 else 2) != 1 || placed >= MAX_FILLS) continue
+            if (t.vocalIn(j - 1, j) >= 0.5) continue
+            placed++
             val fill = fills[turn++ % fills.size]
             val pe = t.barTime(j)
-            events += fillEvents(fill, pe, bar, beat, SfxDressing.level(t, j, peak = 0.8f))
+            events += fillEvents(t, fill, pe, bar, beat, SfxDressing.level(t, j, peak = 0.8f))
             val (from, to) = when (fill) {
-                Fill.HORN, Fill.CRASH -> pe to pe + bar
+                Fill.HORN, Fill.CRASH, Fill.REED -> pe to pe + bar
                 Fill.GUNSHOT -> pe to pe + 2 * beat
                 Fill.WHOOSH -> pe - 2 * beat to pe
                 Fill.LASER -> pe - 2 * bar to pe
+                Fill.DAPPU, Fill.MARFA, Fill.DHOL -> pe - bar to pe + 3 * beat
                 else -> pe - bar to pe
             }
             tricks += Trick(fill.label, from, to)
@@ -166,10 +259,62 @@ object Performer {
     }
 
     /**
+     * The word to loop into the drop at [dSec]: sung in the two bars before it, at least a beat
+     * and a half ahead, opening its line (where lyric timing is reliable) and no longer than a
+     * beat. A word that opens its line wins, then the song's hook word, then the latest. Null if there's none.
+     */
+    private fun wordBeforeDrop(t: TrackInfo, l: TimedLyrics, dSec: Double): LyricWord? {
+        val beat = t.beatSec
+        val fits = l.words.withIndex().filter { (i, w) ->
+            w.startSec >= dSec - 2 * t.barSec && w.startSec <= dSec - 1.5 * beat &&
+                w.endSec - w.startSec <= beat * 1.05 && WordKey.linkable(w.key) &&
+                (w.lineStart || l.words.getOrNull(i - 1)?.let { p -> p.line == w.line && p.lineStart } == true)
+        }.map { it.value }
+        // A line's first word is timed by the lyrics themselves; later ones are estimates.
+        return fits.maxWithOrNull(compareBy<LyricWord>({ it.lineStart }, { (l.counts[it.key] ?: 0) >= 3 }, { it.startSec }))
+    }
+
+    /**
+     * The word repeating into the drop: a loop the length of the word (a quarter, half or whole
+     * beat) from the quarter beat it starts on, then tightening over the last two beats to a
+     * half, a quarter and an eighth of a beat ("Kissik, Kissik, Kiss-Kiss, Ki-Ki-Ki").
+     * The loops share one capture, so every repeat is the start of the same word.
+     */
+    private fun wordLoop(t: TrackInfo, w: LyricWord, dSec: Double): List<FxEvent> {
+        val beat = t.beatSec
+        val quarter = beat / 4
+        val start = t.downbeatSec + floor((w.startSec - t.downbeatSec) / quarter) * quarter
+        val len = min(1.0, WordPlay.loopBeats(w.endSec - start, beat))
+        // The last two beats tighten; before them the word plays at its own length.
+        val tiers = listOf(dSec - 2 * beat to 0.5, dSec - beat to 0.25, dSec - beat / 2 to 0.125)
+            .filter { (_, l) -> l < len }
+        val out = mutableListOf<FxEvent>()
+        var from = start
+        var l = len
+        for ((at, tighter) in tiers) {
+            if (at > from) {
+                out += FxEvent(FxType.LOOP_ROLL, from, at, p1 = l.toFloat())
+                from = at
+            }
+            l = tighter
+        }
+        out += FxEvent(FxType.LOOP_ROLL, from, dSec, p1 = l.toFloat())
+        return out
+    }
+
+    /**
      * The automation for one fill ending at the phrase boundary [pe] (horn, crash and shots
      * start on it). [level] is the sound-effect level that fits the music there.
      */
-    private fun fillEvents(fill: Fill, pe: Double, bar: Double, beat: Double, level: Float): List<FxEvent> = when (fill) {
+    private fun fillEvents(t: TrackInfo, fill: Fill, pe: Double, bar: Double, beat: Double, level: Float): List<FxEvent> = when (fill) {
+        // The drum fills into the phrase and punctuates its first beats.
+        Fill.DAPPU -> listOf(FxEvent(FxType.DAPPU, pe - bar, pe + bar, level * 0.75f, level, p1 = Drum.FILL_AND_HIT))
+        Fill.MARFA -> listOf(FxEvent(FxType.MARFA, pe - bar, pe + bar, level * 0.75f, level, p1 = Drum.FILL_AND_HIT))
+        Fill.DHOL -> listOf(FxEvent(FxType.DHOL, pe - bar, pe + bar, level * 0.75f, level, p1 = Drum.FILL_AND_HIT))
+        Fill.THAVIL -> listOf(FxEvent(FxType.THAVIL, pe - bar, pe, level * 0.6f, level * 0.9f, p1 = Drum.FILL))
+        // A short reed flourish welcoming the new phrase, in the track's key.
+        Fill.REED -> listOf(SfxDressing.reed(t, pe, pe + bar, level * 0.8f))
+        Fill.SIREN -> listOf(FxEvent(FxType.SIREN, pe - bar, pe, level * 0.5f, level * 0.85f, p1 = 4f))
         // Catch half a beat, then slow one-beat baby-scratch strokes over the live beat.
         Fill.SCRATCH -> listOf(FxEvent(FxType.SCRATCH, pe - bar, pe, p1 = 0.5f, p2 = 1f))
         Fill.ROLL -> listOf(

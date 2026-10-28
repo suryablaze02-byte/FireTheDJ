@@ -1,6 +1,7 @@
 package com.autodj.dj
 
 import com.autodj.analysis.Genres
+import com.autodj.dj.fx.Drum
 import com.autodj.dj.fx.FxEvent
 import com.autodj.dj.fx.FxPlan
 import com.autodj.dj.fx.FxType
@@ -41,6 +42,24 @@ enum class Recipe(
 
     /** B's intro rises over A with its bass held back; one bar of no bass; B's drop lands with full bass. */
     BASS_DROP("Bass drop", cut = false),
+
+    /** Straight cut on the one: A stops, B starts, nothing added. */
+    HARD_CUT("Hard cut", cut = true, preBars = 0, tailBars = 1),
+
+    /** A plays its own build-up, half a beat of silence, and B's drop lands where A's would have. */
+    DROP_SWAP("Drop swap", cut = true, preBars = 2, tailBars = 1),
+
+    /** A's platter brakes to a stop, a moment of silence, B on the one. */
+    BRAKE_STOP("Brake stop", cut = true, preBars = 1, tailBars = 1),
+
+    /** Indian roadshow cut: a dappu, marfa or dhol fill over A's last bar, B on the one under the drum's accents. */
+    DRUM_FILL_CUT("Drum fill cut", cut = true, preBars = 1, tailBars = 1),
+
+    /** B's beat comes in under A's breakdown (8+ open bars), and the breakdown fades away over it. */
+    BREAKDOWN_SWAP("Breakdown swap", cut = false),
+
+    /** A sings a word and B answers with the same word (or a rhyme); planned from lyrics by [WordPlay]. */
+    WORD_PLAY("Word play", cut = true, preBars = 0, tailBars = 1),
 }
 
 /** The two ways AutoDJ can play a set. */
@@ -61,22 +80,57 @@ class Phase(val label: String, val startSec: Double, val endSec: Double)
  */
 object DecisionEngine {
     private val byFamily: Map<String, Map<Recipe, Double>> = mapOf(
-        Genres.HOUSE to mapOf(Recipe.BASS_SWAP_BLEND to 3.0, Recipe.PHASER_BLEND to 2.2, Recipe.ECHO_OUT to 1.6, Recipe.FLANGER_BLEND to 1.2),
-        Genres.TECHNO to mapOf(Recipe.BASS_SWAP_BLEND to 2.6, Recipe.FLANGER_BLEND to 2.2, Recipe.GATE_BUILD to 2.2, Recipe.ECHO_OUT to 1.4),
-        Genres.TRANCE to mapOf(Recipe.GATE_BUILD to 2.6, Recipe.BASS_SWAP_BLEND to 2.2, Recipe.ECHO_OUT to 2.0, Recipe.FLANGER_BLEND to 1.2),
-        Genres.DNB to mapOf(Recipe.ECHO_OUT to 2.6, Recipe.BACKSPIN_DROP to 2.2, Recipe.BASS_SWAP_BLEND to 1.6, Recipe.GATE_BUILD to 1.2),
-        Genres.BASS to mapOf(Recipe.BACKSPIN_DROP to 2.6, Recipe.ECHO_OUT to 2.2, Recipe.GATE_BUILD to 1.8, Recipe.SCRATCH_CUT to 1.2),
-        Genres.HIPHOP to mapOf(Recipe.SCRATCH_CUT to 2.6, Recipe.BACKSPIN_DROP to 2.2, Recipe.ECHO_OUT to 1.6, Recipe.LOFI_FADE to 1.6),
-        Genres.LATIN to mapOf(Recipe.ECHO_OUT to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.BACKSPIN_DROP to 1.6),
-        Genres.POP to mapOf(Recipe.ECHO_OUT to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.BACKSPIN_DROP to 1.4, Recipe.FILTER_FADE to 1.2),
-        Genres.CHILL to mapOf(Recipe.PHASER_BLEND to 2.6, Recipe.LOFI_FADE to 2.2, Recipe.FILTER_FADE to 1.6),
-        Genres.ROCK to mapOf(Recipe.ECHO_OUT to 2.2, Recipe.FILTER_FADE to 2.0, Recipe.BACKSPIN_DROP to 1.2),
+        Genres.HOUSE to mapOf(
+            Recipe.BASS_SWAP_BLEND to 3.0, Recipe.PHASER_BLEND to 2.2, Recipe.BREAKDOWN_SWAP to 2.0, Recipe.ECHO_OUT to 1.6,
+            Recipe.DROP_SWAP to 1.4, Recipe.FLANGER_BLEND to 1.2,
+        ),
+        Genres.TECHNO to mapOf(
+            Recipe.BASS_SWAP_BLEND to 2.6, Recipe.BREAKDOWN_SWAP to 2.4, Recipe.FLANGER_BLEND to 2.2, Recipe.GATE_BUILD to 2.2,
+            Recipe.ECHO_OUT to 1.4, Recipe.DROP_SWAP to 1.2,
+        ),
+        Genres.TRANCE to mapOf(
+            Recipe.GATE_BUILD to 2.6, Recipe.BREAKDOWN_SWAP to 2.4, Recipe.BASS_SWAP_BLEND to 2.2, Recipe.ECHO_OUT to 2.0,
+            Recipe.DROP_SWAP to 2.0, Recipe.FLANGER_BLEND to 1.2,
+        ),
+        Genres.DNB to mapOf(
+            Recipe.ECHO_OUT to 2.6, Recipe.DROP_SWAP to 2.4, Recipe.BACKSPIN_DROP to 2.2, Recipe.BASS_SWAP_BLEND to 1.6,
+            Recipe.HARD_CUT to 1.4, Recipe.GATE_BUILD to 1.2,
+        ),
+        Genres.BASS to mapOf(
+            Recipe.DROP_SWAP to 2.8, Recipe.BACKSPIN_DROP to 2.6, Recipe.ECHO_OUT to 2.2, Recipe.GATE_BUILD to 1.8,
+            Recipe.HARD_CUT to 1.4, Recipe.SCRATCH_CUT to 1.2,
+        ),
+        Genres.HIPHOP to mapOf(
+            Recipe.SCRATCH_CUT to 2.6, Recipe.HARD_CUT to 2.4, Recipe.BACKSPIN_DROP to 2.2, Recipe.BRAKE_STOP to 2.0,
+            Recipe.ECHO_OUT to 1.6, Recipe.LOFI_FADE to 1.6,
+        ),
+        Genres.LATIN to mapOf(
+            Recipe.ECHO_OUT to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.HARD_CUT to 2.0, Recipe.BACKSPIN_DROP to 1.6,
+            Recipe.BRAKE_STOP to 1.4,
+        ),
+        Genres.POP to mapOf(
+            Recipe.ECHO_OUT to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.DROP_SWAP to 1.8, Recipe.HARD_CUT to 1.6,
+            Recipe.BACKSPIN_DROP to 1.4, Recipe.BRAKE_STOP to 1.4, Recipe.FILTER_FADE to 1.2,
+        ),
+        Genres.CHILL to mapOf(Recipe.PHASER_BLEND to 2.6, Recipe.LOFI_FADE to 2.2, Recipe.FILTER_FADE to 1.6, Recipe.BREAKDOWN_SWAP to 1.4),
+        Genres.ROCK to mapOf(
+            Recipe.ECHO_OUT to 2.2, Recipe.FILTER_FADE to 2.0, Recipe.HARD_CUT to 1.8, Recipe.BRAKE_STOP to 1.6,
+            Recipe.BACKSPIN_DROP to 1.2,
+        ),
     )
 
-    private val default = mapOf(Recipe.BASS_SWAP_BLEND to 2.0, Recipe.ECHO_OUT to 2.0, Recipe.FILTER_FADE to 1.5)
+    private val default = mapOf(Recipe.BASS_SWAP_BLEND to 2.0, Recipe.ECHO_OUT to 2.0, Recipe.FILTER_FADE to 1.5, Recipe.HARD_CUT to 1.4)
+
+    /**
+     * Indian party sets cut more than they blend: a drum fill into a hard cut is the signature,
+     * then plain cuts, drop swaps and brakes.
+     */
+    private val indianCuts = mapOf(
+        Recipe.DRUM_FILL_CUT to 3.2, Recipe.HARD_CUT to 2.4, Recipe.DROP_SWAP to 2.2, Recipe.BRAKE_STOP to 1.6, Recipe.ECHO_OUT to 1.6,
+    )
 
     /** Blends that need the beats locked for their whole length. */
-    private val needsBeatmatch = setOf(Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP)
+    private val needsBeatmatch = setOf(Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP, Recipe.BREAKDOWN_SWAP)
 
     private val vocalGenres = setOf(Genres.POP, Genres.HOUSE, Genres.HIPHOP, Genres.LATIN)
 
@@ -85,10 +139,23 @@ object DecisionEngine {
     private const val SMOOTH_CUT_BIAS = -3.0
     private const val CUT_AFTER_CUT = -3.0
 
-    /** Trickster mode: cuts and tricks are the point; a blend only when nothing else fits. */
-    private const val TRICK_CUT_BIAS = 1.5
-    private const val TRICK_BLEND_BIAS = -1.8
+    /**
+     * Trickster mode: cuts and tricks lead, but a run of cuts in a row stops flowing, so a blend
+     * comes back after two.
+     */
+    private const val TRICK_CUT_BIAS = 1.0
+    private const val TRICK_BLEND_BIAS = -1.0
+    private const val THIRD_CUT = -6.0
     private const val BLEND_AFTER_BLEND = -1.5
+
+    /** How strongly a genre's own moves are preferred over the mode's general leaning. */
+    private const val GENRE_WEIGHT = 1.6
+
+    /** A move that isn't one of the genre's own. */
+    private const val OFF_STYLE = 0.0
+
+    /** Smooth mode's cut penalty, mostly given back for the Indian drum-fill cut. */
+    private const val INDIAN_SMOOTH_CUT = 2.0
 
     /**
      * [speed] is the rate B would need to match A (B's beats per A beat already folded in), so
@@ -103,10 +170,14 @@ object DecisionEngine {
         history: List<Recipe>,
         keysFit: Boolean = true,
         mode: MixMode = MixMode.SMOOTH,
+        /** The genre whose moves the mix uses: the set's crate, or the incoming song's. */
+        family: String = a.genreFamily,
     ): Map<Recipe, Double> {
-        val base = (byFamily[a.genreFamily] ?: default).toMutableMap()
-        // Every style stays possible at a low score so a set never gets stuck on one.
-        Recipe.entries.forEach { base.putIfAbsent(it, 0.5) }
+        val base = (byFamily[family] ?: default).toMutableMap()
+        // Every other style stays possible at a low score so a set never gets stuck on one.
+        Recipe.entries.forEach { base.putIfAbsent(it, OFF_STYLE) }
+        // Scratching is hip-hop's: anywhere else it breaks the flow.
+        if (family != Genres.HIPHOP) base[Recipe.SCRATCH_CUT] = Double.NEGATIVE_INFINITY
         val rampTo = 1 / speed
         base[Recipe.LOOP_RAMP] = when {
             beatmatched || abs(rampTo - 1) > TransitionPlanner.MAX_RAMP -> Double.NEGATIVE_INFINITY
@@ -115,17 +186,26 @@ object DecisionEngine {
         }
         base[Recipe.VOCAL_SWAP] = when {
             !beatmatched || !keysFit -> Double.NEGATIVE_INFINITY // two vocals must share tempo and key
-            a.genreFamily in vocalGenres -> 3.0
+            family in vocalGenres -> 3.0
             else -> 2.3
         }
         // Whether B has a drop to land on is checked by the planner when it picks B's entry.
         base[Recipe.BASS_DROP] = if (mode == MixMode.SMOOTH) 3.4 else 1.8
+        // Word play needs a word both songs sing; the planner finds that itself, from their lyrics.
+        base[Recipe.WORD_PLAY] = Double.NEGATIVE_INFINITY
+        // The regional drums are for Indian music only.
+        val indian = SfxDressing.indian(a) || SfxDressing.indian(b)
+        if (indian) indianCuts.forEach { (r, s) -> base[r] = maxOf(base[r] ?: 0.0, s) }
+        else base[Recipe.DRUM_FILL_CUT] = Double.NEGATIVE_INFINITY
         val crossGenre = a.genreFamily != b.genreFamily
         val entryBar = (0 until 8).first { b.isPhraseStart(it) }
         val bIntroBars = b.introEndBar - entryBar
         val aOutroBars = a.barCount - a.outroStartBar
         val aOutroEnergy = a.barEnergy.getOrElse(a.outroStartBar - 1) { 1f }
-        return base.mapValues { (r, s) ->
+        // The genre's own moves (and the special ones set above) count most, so a techno set
+        // sounds like techno even in Trickster: their scores outweigh the mode's general leaning.
+        return base.mapValues { (r, raw) ->
+            val s = raw * GENRE_WEIGHT
             var score = s
             if (!beatmatched && r in needsBeatmatch) score = Double.NEGATIVE_INFINITY
             // Long overlaps in clashing keys sound out of tune.
@@ -141,9 +221,12 @@ object DecisionEngine {
             if (aOutroEnergy >= 0.85f && r.cut) score += 0.5
             if (history.lastOrNull() == r) score -= 2.5
             else if (r in history.takeLast(4)) score -= 1.5 // a set should keep changing moves
+            if (indian && !r.cut) score -= 0.5
             when (mode) {
                 MixMode.SMOOTH -> {
                     score += if (r.smooth) SMOOTH_BLEND_BIAS else SMOOTH_CUT_BIAS
+                    // Even a smooth Indian set keeps its drum-fill cuts.
+                    if (r == Recipe.DRUM_FILL_CUT) score += INDIAN_SMOOTH_CUT
                     if (!r.smooth && history.lastOrNull()?.smooth == false) score += CUT_AFTER_CUT
                 }
                 MixMode.TRICKSTER -> {
@@ -151,6 +234,7 @@ object DecisionEngine {
                     score += if (blend) TRICK_BLEND_BIAS else TRICK_CUT_BIAS
                     val lastWasBlend = history.lastOrNull()?.let { it.smooth && it != Recipe.LOOP_RAMP } == true
                     if (blend && lastWasBlend) score += BLEND_AFTER_BLEND
+                    if (!blend && history.size >= 2 && history.takeLast(2).none { it.smooth && it != Recipe.LOOP_RAMP }) score += THIRD_CUT
                 }
             }
             score + jitter(a, b, r)
@@ -189,6 +273,13 @@ internal class RecipeBuilder(
     private val beat = a.beatSec
     private val ratio = if (beatmatched) tempoMultiple * b.beatSec / a.beatSec else 1.0
 
+    /**
+     * How long A and B both sound when B drops in: half a bar when the beats are locked, one
+     * beat when they aren't (two tempos on top of each other for longer is a clash). The
+     * echo and reverb tails ring on after A's dry signal has gone.
+     */
+    private val overlapSec = if (beatmatched) a.barSec / 2 else a.beatSec
+
     /** The B track time that plays alongside A track time [aSec]. */
     private fun toB(aSec: Double) = entrySec + (aSec - exitSec) * ratio
 
@@ -198,15 +289,22 @@ internal class RecipeBuilder(
     private fun bPlan(gain: List<Ramp>, bass: List<Ramp>, events: List<FxEvent>) =
         FxPlan(b.beatSec, b.downbeatSec, Lane(gain, 1f), Lane(bass, 1f), events)
 
-    /** B comes in on the exit point and crossfades up over a bar while A's dry signal fades out. */
+    /** B comes in on the exit point and crossfades up while A's dry signal fades out ([overlapSec]). */
     private fun bDropIn(extra: List<FxEvent> = emptyList()) =
-        bPlan(listOf(Ramp(entrySec, entrySec + b.barSec, 0f, 1f, Law.CONSTANT_POWER)), emptyList(), extra)
+        bPlan(listOf(Ramp(entrySec, entrySec + overlapSec * ratio, 0f, 1f, Law.CONSTANT_POWER)), emptyList(), extra)
 
-    /** A's dry signal crossfades out over a bar from [at] (effect tails keep ringing). */
-    private fun aOutAt(at: Double) = listOf(Ramp(at, at + bar, 1f, 0f, Law.CONSTANT_POWER))
+    /** A's dry signal crossfades out over [overlapSec] from [at] (effect tails keep ringing). */
+    private fun aOutAt(at: Double) = listOf(Ramp(at, at + overlapSec, 1f, 0f, Law.CONSTANT_POWER))
 
-    fun build(recipe: Recipe, mixBars: Int, rampBars: Int = 8, rampTo: Double = 1.0): Built {
-        val built = recipeFor(recipe, mixBars, rampBars, rampTo)
+    /** A cut that doesn't click: 12 ms. */
+    private fun aCutAt(at: Double) = listOf(Ramp(at, at + CUT_SEC, 1f, 0f))
+
+    private fun bCutIn(extra: List<FxEvent> = emptyList()) =
+        bPlan(listOf(Ramp(entrySec, entrySec + CUT_SEC, 0f, 1f)), emptyList(), extra)
+
+    /** [drum]: the regional drum for a [Recipe.DRUM_FILL_CUT]. */
+    fun build(recipe: Recipe, mixBars: Int, rampBars: Int = 8, rampTo: Double = 1.0, drum: FxType = FxType.DHOL): Built {
+        val built = recipeFor(recipe, mixBars, rampBars, rampTo, drum)
         // Keep A running (silent, dry) until its echo and reverb tails have died away, so the
         // deck never stops mid-tail. A track that ends sooner simply ends the transition then.
         val tailEnd = built.aPlan.events.maxOfOrNull { e ->
@@ -220,7 +318,13 @@ internal class RecipeBuilder(
         return Built(built.aPlan, built.bPlan, built.startSec, end, built.phases, built.speedRamp, handoverSec = built.handoverSec)
     }
 
-    private fun recipeFor(recipe: Recipe, mixBars: Int, rampBars: Int, rampTo: Double): Built = when (recipe) {
+    private fun recipeFor(recipe: Recipe, mixBars: Int, rampBars: Int, rampTo: Double, drum: FxType): Built = when (recipe) {
+        // Word play is timed to the words by the planner; built here it's just its clean cut.
+        Recipe.HARD_CUT, Recipe.WORD_PLAY -> hardCut()
+        Recipe.DROP_SWAP -> dropSwap()
+        Recipe.BRAKE_STOP -> brakeStop()
+        Recipe.DRUM_FILL_CUT -> drumFillCut(drum)
+        Recipe.BREAKDOWN_SWAP -> breakdownSwap()
         Recipe.LOOP_RAMP -> loopRamp(rampBars, rampTo)
         Recipe.VOCAL_SWAP -> vocalSwap()
         Recipe.BASS_DROP -> bassDrop(mixBars - 1)
@@ -369,8 +473,9 @@ internal class RecipeBuilder(
     /** A's platter is spun backwards to a stop; B drops on the downbeat. */
     private fun backspin(): Built {
         val p = exitSec
+        // The spun-back record has stopped: A doesn't resume, and B lands on the one at full.
         val aOut = aPlan(
-            gain = aOutAt(p),
+            gain = aCutAt(p),
             bass = emptyList(),
             events = listOf(
                 FxEvent(FxType.BACKSPIN, p - 2 * beat, p, p1 = 3f),
@@ -378,9 +483,9 @@ internal class RecipeBuilder(
             ),
         )
         return Built(
-            aOut, bDropIn(), p - 2 * beat, p + bar,
-            listOf(Phase("Backspin", p - 2 * beat, p), Phase("Crossfade", p, p + bar)),
-            handoverSec = p + bar,
+            aOut, bCutIn(), p - 2 * beat, p + bar,
+            listOf(Phase("Backspin", p - 2 * beat, p), Phase("B drops", p, p + bar)),
+            handoverSec = p,
         )
     }
 
@@ -477,6 +582,110 @@ internal class RecipeBuilder(
             listOf(Phase("Crossfade", e, d - bar), Phase("No bass", d - bar, d), Phase("Drop", d, end)),
             handoverSec = d,
         )
+    }
+
+    /** A stops dead on the bar line and B starts on it. */
+    private fun hardCut(): Built {
+        val p = exitSec
+        return Built(
+            aPlan(aCutAt(p), emptyList(), emptyList()), bCutIn(), p, p + beat,
+            listOf(Phase("Cut", p, p + beat)),
+            handoverSec = p + CUT_SEC,
+        )
+    }
+
+    /**
+     * A builds as if into its own drop (a rising high-pass, the roll tightening), half a beat of
+     * silence, and B's drop lands where A's would have.
+     */
+    private fun dropSwap(): Built {
+        val p = exitSec
+        val gap = p - beat / 2
+        val aOut = aPlan(
+            gain = aCutAt(p),
+            bass = listOf(Ramp(p - bar, p - bar + beat / 2, 1f, 0.4f)),
+            events = listOf(
+                FxEvent(FxType.HIGH_PASS, p - 2 * bar, gap, 0f, 0.5f),
+                FxEvent(FxType.LOOP_ROLL, p - bar / 2, p - bar / 4, p1 = 0.5f),
+                FxEvent(FxType.LOOP_ROLL, p - bar / 4, gap, p1 = 0.25f),
+                FxEvent(FxType.MUTE, gap, p + GAP_HOLD_SEC),
+            ),
+        )
+        return Built(
+            aOut, bCutIn(), p - 2 * bar, p + bar,
+            listOf(Phase("A builds", p - 2 * bar, p - bar / 2), Phase("Roll", p - bar / 2, gap), Phase("Gap", gap, p), Phase("B's drop", p, p + bar)),
+            handoverSec = p,
+        )
+    }
+
+    /** A's platter brakes to a stop, half a beat of silence, then B on the one. */
+    private fun brakeStop(): Built {
+        val p = exitSec
+        val stop = p - beat / 2
+        val aOut = aPlan(
+            gain = aCutAt(p),
+            bass = emptyList(),
+            events = listOf(
+                FxEvent(FxType.BRAKE, p - 2 * beat, stop),
+                FxEvent(FxType.REVERB, p - 2 * beat, stop, 0.2f, 0.5f, p1 = 1.6f),
+                FxEvent(FxType.MUTE, stop, p + GAP_HOLD_SEC),
+            ),
+        )
+        return Built(
+            aOut, bCutIn(), p - 2 * beat, p + bar,
+            listOf(Phase("Brake", p - 2 * beat, stop), Phase("Gap", stop, p), Phase("B on the one", p, p + bar)),
+            handoverSec = p,
+        )
+    }
+
+    /**
+     * The roadshow cut: A's bass eases off under a [drum] fill over its last bar; B comes in on
+     * the one under the drum's accents (the dappu's "teen maar", a unison dhol or marfa hit).
+     */
+    private fun drumFillCut(drum: FxType): Built {
+        val p = exitSec
+        val aOut = aPlan(
+            gain = aCutAt(p),
+            bass = listOf(Ramp(p - bar, p - bar + beat / 2, 1f, 0.3f)),
+            events = listOf(
+                FxEvent(FxType.HIGH_PASS, p - bar, p, 0.05f, 0.4f),
+                FxEvent(drum, p - bar, p, 0.7f, 0.95f, p1 = Drum.FILL),
+            ),
+        )
+        // The accents ride on B, so they land on B's own beats.
+        val bIn = bCutIn(listOf(FxEvent(drum, entrySec, entrySec + b.barSec, 0.95f, 0.95f, p1 = Drum.HIT)))
+        return Built(
+            aOut, bIn, p - bar, p + bar,
+            listOf(Phase("${drum.label} fill", p - bar, p), Phase("Cut · ${drum.label} hits", p, p + bar)),
+            handoverSec = p,
+        )
+    }
+
+    /**
+     * Over A's breakdown (no beat, little bass), B's beat comes in within two bars and carries
+     * the floor while the breakdown fades out under a rising high-pass across eight bars.
+     */
+    private fun breakdownSwap(): Built {
+        val e = exitSec
+        val end = e + 8 * bar
+        val aOut = aPlan(
+            gain = listOf(Ramp(e, end, 1f, 0f, Law.CONSTANT_POWER)),
+            bass = listOf(Ramp(e, e + beat, 1f, 0f)),
+            events = listOf(FxEvent(FxType.HIGH_PASS, e + 4 * bar, end, 0f, 0.5f)),
+        )
+        val bIn = bPlan(listOf(Ramp(toB(e), toB(e + 2 * bar), 0f, 1f, Law.CONSTANT_POWER)), emptyList(), emptyList())
+        return Built(
+            aOut, bIn, e, end,
+            listOf(Phase("B's beat under A's breakdown", e, e + 4 * bar), Phase("Breakdown fades", e + 4 * bar, end)),
+            handoverSec = e + 2 * bar,
+        )
+    }
+
+    private companion object {
+        const val CUT_SEC = 0.012
+
+        /** The gap before a cut holds until A has faded out, so no blip of A plays as B comes in. */
+        const val GAP_HOLD_SEC = 2 * CUT_SEC
     }
 
     /** Grab a beat of A, scratch it back and forth for the rest of the bar, then cut to B. */

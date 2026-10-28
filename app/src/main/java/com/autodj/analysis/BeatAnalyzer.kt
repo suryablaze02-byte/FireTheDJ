@@ -75,6 +75,23 @@ object BeatAnalyzer {
     private const val MAX_BPM = 180.0
     private const val LOUD = 0.7f
 
+    /**
+     * How much singing there is through the track, [VOCAL_FPS] values a second: the vocal
+     * band's share of the sound times how harmonic it is, as for [BeatAnalysis.vocalness]
+     * but fine enough to line lyrics up to a fraction of a second.
+     */
+    fun vocalCurve(samples: FloatArray, sampleRate: Double): FloatArray {
+        val vocal = spectralFrames(samples, sampleRate).vocal
+        val fps = sampleRate / HOP
+        val frameCentre = WIN / 2 / sampleRate
+        val n = (samples.size / sampleRate * VOCAL_FPS).toInt()
+        return FloatArray(n) {
+            meanRange(vocal, (it / VOCAL_FPS - frameCentre) * fps, ((it + 1) / VOCAL_FPS - frameCentre) * fps).toFloat()
+        }
+    }
+
+    const val VOCAL_FPS = 10.0
+
     fun analyze(samples: FloatArray, sampleRate: Double): BeatAnalysis {
         require(samples.size >= sampleRate * 20) { "Track is too short to analyse" }
         val fps = sampleRate / HOP

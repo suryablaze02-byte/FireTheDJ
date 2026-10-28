@@ -149,6 +149,14 @@ class EffectLayer {
                 if (s.energy > 0.45f) fireCannons(t, chase = true)
             }
             FxType.BACKSPIN, FxType.BRAKE -> shake = max(shake, 0.3f)
+            // The regional drums: a marigold shockwave and a shake on every fill.
+            FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL -> {
+                shake = max(shake, 0.6f)
+                waves += Wave(Color(0xFFFFB020), t, 0.8f, 9f)
+                if (s.energy > 0.45f) fireCannons(t, chase = true)
+            }
+            // The gap before a drop: everything blacks out for a moment.
+            FxType.MUTE -> flash = 0f
             else -> Unit
         }
     }
@@ -339,7 +347,7 @@ class EffectLayer {
             FxType.RISER, FxType.SNARE_ROLL -> scale *= 0.85f + 0.2f * min(1f, age)
             FxType.BACKSPIN -> rot = -360f * min(1f, age * 1.2f)
             FxType.SCRATCH -> dx = sin(age * 60f) * w * 0.04f
-            FxType.HORN, FxType.CRASH, FxType.GUNSHOT -> scale *= 1f + 0.08f * abs(sin(age * 12f))
+            FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL -> scale *= 1f + 0.08f * abs(sin(age * 12f))
             else -> Unit
         }
         val color = if (type == FxType.SIREN) (if ((age * 8).toInt() % 2 == 0) SIREN_RED else SIREN_BLUE) else calloutColor
@@ -367,7 +375,7 @@ class EffectLayer {
     companion object {
         private const val CALLOUT_SEC = 1.7f
         private val BUILDS = setOf(FxType.RISER, FxType.SNARE_ROLL, FxType.REVERSE_CYMBAL)
-        private val HOT = setOf(FxType.IMPACT, FxType.SUB_DROP, FxType.HORN, FxType.CRASH, FxType.GUNSHOT)
+        private val HOT = setOf(FxType.IMPACT, FxType.SUB_DROP, FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL)
         private val SIREN_RED = Color(0xFFFF2D4A)
         private val SIREN_BLUE = Color(0xFF2D6BFF)
         private val LASER_GREEN = Color(0xFF3DFF6E)
@@ -378,6 +386,9 @@ class EffectLayer {
             FxType.CRASH to Color.White, FxType.GUNSHOT to Color(0xFFFFE6A0), FxType.LASER to Color(0xFF3DFF6E),
             FxType.HIGH_PASS to Color(0xFF8FD0FF), FxType.LOW_PASS to Color(0xFF6FE0D0), FxType.RISER to Color(0xFFFFE1C2),
             FxType.SNARE_ROLL to Color(0xFFFFE1C2), FxType.REVERSE_CYMBAL to Color.White,
+            // The regional drums burn marigold; the reed glows warm.
+            FxType.DAPPU to Color(0xFFFFB020), FxType.MARFA to Color(0xFFFFB020), FxType.DHOL to Color(0xFFFFB020),
+            FxType.THAVIL to Color(0xFFFFD36B), FxType.NADASWARAM to Color(0xFFFFE6A0),
         )
 
         /** What the screen shouts when an effect kicks in. */
@@ -409,6 +420,12 @@ class EffectLayer {
             FxType.DOWNLIFTER -> "DOWN"
             FxType.WHOOSH -> "WHOOSH"
             FxType.GUNSHOT -> "PULL UP"
+            FxType.MUTE -> "SILENCE"
+            FxType.DAPPU -> "DAPPU"
+            FxType.MARFA -> "MARFA"
+            FxType.DHOL -> "DHOL"
+            FxType.THAVIL -> "THAVIL"
+            FxType.NADASWARAM -> "NADASWARAM"
         }
     }
 }
