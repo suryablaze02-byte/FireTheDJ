@@ -31,7 +31,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -66,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autodj.support.Upi
+import com.autodj.update.Changelog
 import com.autodj.update.Release
 import com.autodj.update.UpdateState
 import com.autodj.update.Updates
@@ -103,6 +106,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                     colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
                 )
             }
+
+            WhatsNew()
 
             GlassHeading("Support", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
             Row(
@@ -327,6 +332,49 @@ private fun pay(context: Context, rupees: Int): String? {
 private fun copyId(context: Context) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("UPI ID", Upi.ID))
     Toast.makeText(context, "UPI ID copied", Toast.LENGTH_SHORT).show()
+}
+
+/** Every change in the installed version, then earlier versions, each opened with a tap. */
+@Composable
+private fun WhatsNew() {
+    val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
+    var open by rememberSaveable { mutableStateOf<String?>(null) }
+    GlassHeading("What's new in ${current.version}", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp)).padding(18.dp)) {
+        VersionChanges(current)
+    }
+    val earlier = Changelog.versions.filter { it !== current }
+    if (earlier.isEmpty()) return
+    GlassHeading("Earlier versions", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp))) {
+        earlier.forEach { v ->
+            val expanded = open == v.version
+            Row(
+                Modifier.fillMaxWidth().clickable(role = Role.Button) { open = if (expanded) null else v.version }.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Version ${v.version}", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(v.summary, color = Glass.Muted, fontSize = 13.sp, lineHeight = 18.sp, maxLines = if (expanded) 3 else 1)
+                }
+                Icon(if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null, tint = Glass.Muted)
+            }
+            if (expanded) Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) { VersionChanges(v, summary = false) }
+        }
+    }
+}
+
+@Composable
+private fun VersionChanges(v: Changelog.Version, summary: Boolean = true) {
+    if (summary) Text(v.summary, color = Glass.Text.copy(alpha = .88f), fontSize = 14.sp, lineHeight = 20.sp)
+    v.sections.forEachIndexed { i, section ->
+        Text(section.title.uppercase(), color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp,
+            modifier = Modifier.padding(top = if (i == 0 && !summary) 4.dp else 16.dp))
+        section.changes.forEach { c ->
+            Text(c.title, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+            Text(c.detail, color = Glass.Text.copy(alpha = .78f), fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
 }
 
 private fun open(context: Context, url: String) {
