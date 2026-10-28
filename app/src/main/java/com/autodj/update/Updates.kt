@@ -49,6 +49,9 @@ object Updates {
     private const val PREFS = "updates"
     private const val DAY_MS = 24 * 60 * 60 * 1000L
 
+    /** The version the user chose to install before Android asked for the install permission. */
+    private const val PENDING = "pendingInstall"
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state
@@ -78,6 +81,7 @@ object Updates {
             // A known newer release from an earlier check is still worth offering.
             p.getString("latest", null)?.let { json -> runCatching { parse(JSONObject(json)) }.getOrNull() }
                 ?.takeIf { newer(it.version, current) }?.let { if (_state.value == UpdateState.Idle) _state.value = UpdateState.Available(it) }
+            resume(context)
             return
         }
         check(context)
@@ -106,17 +110,38 @@ object Updates {
                     UpdateState.Failed("Couldn't reach GitHub. Check the connection and try again.", null)
                 },
             )
+            resume(app)
         }
+    }
+
+    private fun canInstall(context: Context) =
+        Build.VERSION.SDK_INT < 26 || context.packageManager.canRequestPackageInstalls()
+
+    /**
+     * Carries on with an update that was waiting for the install permission, once it's allowed:
+     * called when the app comes back to the front (from Android's permission screen) and when a
+     * check finds the release again (Android may have restarted the app when the switch changed).
+     */
+    fun resume(context: Context) {
+        val app = context.applicationContext
+        if (!canInstall(app)) return
+        val s = _state.value
+        val waiting = (s as? UpdateState.NeedsPermission)?.release
+            ?: (s as? UpdateState.Available)?.release?.takeIf { it.version == prefs(app).getString(PENDING, null) }
+        if (waiting != null) install(app, waiting)
     }
 
     /** Downloads [release] into the installer and asks Android to install it. */
     fun install(context: Context, release: Release) {
         val app = context.applicationContext
-        if (Build.VERSION.SDK_INT >= 26 && !app.packageManager.canRequestPackageInstalls()) {
+        if (!canInstall(app)) {
+            // Remembered in case Android restarts the app when the permission is switched on.
+            prefs(app).edit().putString(PENDING, release.version).apply()
             _state.value = UpdateState.NeedsPermission(release)
             return
         }
         download?.cancel()
+        prefs(app).edit().remove(PENDING).apply()
         _state.value = UpdateState.Downloading(release, 0)
         download = scope.launch {
             val installer = app.packageManager.packageInstaller

@@ -60,4 +60,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /** Back from Android's "Install unknown apps" screen: an update waiting on it starts downloading. */
+    override fun onResume() {
+        super.onResume()
+        com.autodj.update.Updates.resume(this)
+    }
 }
