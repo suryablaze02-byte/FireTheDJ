@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.3.1",
+            "See what changed in every version, right in Settings.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("What's new in Settings", "Settings shows every change in the version you have, and the changes in earlier versions, on phone and TV. It works offline, straight after an update."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.3.0",
             "Lyrics on screen, mixes on the words, transitions that sound like the genre, and a fix for sets going silent.",
             listOf(
