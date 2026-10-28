@@ -149,29 +149,25 @@ fun TvSettingsDialog(
 }
 
 /**
- * Every change, newest version first: one card per change so the remote steps through them
+ * Every change in the installed version: one card per change so the remote steps through them
  * and the list scrolls with it.
  */
 @Composable
 fun TvWhatsNewDialog(onDismiss: () -> Unit) {
+    val v = Changelog.of(Updates.current) ?: Changelog.versions.first()
     TvGlassDialog(onDismiss = onDismiss, width = 960.dp) { first ->
-        Text("What's new", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
+        Text("What's new in ${v.version}", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
+        Text(v.summary, color = Glass.Muted, fontSize = 16.sp, lineHeight = 22.sp, modifier = Modifier.padding(start = TV_EDGE, top = 4.dp))
         LazyColumn(Modifier.heightIn(max = 470.dp), contentPadding = PaddingValues(horizontal = TV_EDGE, vertical = 12.dp)) {
-            Changelog.versions.forEachIndexed { vi, v ->
+            v.sections.forEachIndexed { si, section ->
                 item {
-                    Text(
-                        if (v.version == Updates.current) "Version ${v.version} · installed" else "Version ${v.version}",
-                        color = Glass.EmberText, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = if (vi == 0) 0.dp else 22.dp),
-                    )
-                    Text(v.summary, color = Glass.Muted, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 2.dp, bottom = 6.dp))
+                    Text(section.title.uppercase(), color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = if (si == 0) 0.dp else 16.dp, bottom = 4.dp))
                 }
-                v.sections.forEach { section ->
-                    items(section.changes.size) { i ->
-                        val c = section.changes[i]
-                        val focus = if (vi == 0 && section === v.sections.first() && i == 0) Modifier.focusRequester(first) else Modifier
-                        TvCard(c.title, c.detail, Modifier.padding(vertical = 6.dp).fillMaxWidth().then(focus), subtitleLines = 4) {}
-                    }
+                items(section.changes.size) { i ->
+                    val c = section.changes[i]
+                    val focus = if (si == 0 && i == 0) Modifier.focusRequester(first) else Modifier
+                    TvCard(c.title, c.detail, Modifier.padding(vertical = 6.dp).fillMaxWidth().then(focus), subtitleLines = 4) {}
                 }
             }
         }

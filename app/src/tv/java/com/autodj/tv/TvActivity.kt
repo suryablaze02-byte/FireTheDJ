@@ -62,6 +62,12 @@ class TvActivity : ComponentActivity() {
             }
         }
     }
+
+    /** Back from Android's "Install unknown apps" screen: an update waiting on it starts downloading. */
+    override fun onResume() {
+        super.onResume()
+        com.autodj.update.Updates.resume(this)
+    }
 }
 
 /** The TV app's first-launch tour, over the home screen, driven by the remote. */

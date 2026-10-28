@@ -14,6 +14,19 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.3.2",
+            "Updates start downloading as soon as installing is allowed.",
+            listOf(
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Updating for the first time", "After you allow FireTheDJ to install apps, the update starts downloading by itself when you come back, instead of asking again."),
+                        Change("A simpler What's new", "Settings shows just the changes in the version you have."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.3.1",
             "See what changed in every version, right in Settings.",
             listOf(
