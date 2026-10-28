@@ -16,6 +16,7 @@ import com.autodj.analysis.GenreLookup
 import com.autodj.analysis.Genres
 import com.autodj.analysis.TrackAnalyzer
 import com.autodj.dj.EngineHolder
+import com.autodj.lyrics.LyricsStore
 import com.autodj.dj.MixEngine
 import com.autodj.dj.MixMode
 import com.autodj.dj.MixService
@@ -34,6 +35,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -93,6 +95,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         }, "analysis")
     }.asCoroutineDispatcher()
     private val artworkQueue = Channel<TrackInfo>(Channel.UNLIMITED)
+    private val lyricsQueue = Channel<TrackInfo>(Channel.UNLIMITED)
 
     private val _library = MutableStateFlow<List<LibraryItem>>(emptyList())
     val library: StateFlow<List<LibraryItem>> = _library
@@ -149,6 +152,14 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
                 if (track.uri in _artwork.value) continue
                 val file = withContext(Dispatchers.IO) { artworkRepo.fetch(track, remoteLibrary.track(track.uri)?.artworkUrl) } ?: continue
                 _artwork.update { it + (track.uri to file.path) }
+            }
+        }
+        // Timed lyrics for the lyric looks (and word-play mixes on the phone), one gentle request at a time.
+        LyricsStore.init(app)
+        viewModelScope.launch(Dispatchers.IO) {
+            for (track in lyricsQueue) {
+                runCatching { LyricsStore.fetch(track) }.onFailure { Log.w("AutoDJ", "lyrics for \"${track.title}\": ${it.message}") }
+                delay(LYRICS_GAP_MS)
             }
         }
         // Rescan saved folders so songs added to them since last time show up.
@@ -358,6 +369,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
             setItem(uri) { it.copy(status = AnalysisStatus.READY, info = info, name = info.title) }
             offerToPlayingSet(info)
             artworkQueue.trySend(info)
+            lyricsQueue.trySend(info)
         } catch (e: Exception) {
             setItem(uri) { it.copy(status = AnalysisStatus.FAILED, error = e.message ?: e.javaClass.simpleName) }
         }
@@ -394,5 +406,8 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         const val KEY_MODE = "mode"
         const val KEY_VISUALIZER = "visualizer"
         const val KEY_FOLDERS = "folders"
+
+        /** Pause between lyrics requests, to go easy on the free catalogue. */
+        const val LYRICS_GAP_MS = 400L
     }
 }

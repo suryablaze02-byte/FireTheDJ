@@ -84,11 +84,11 @@ class PlannerTest {
         assertEquals(a.barTime(t.exitBar + 4), t.endSec, 1e-9)
         val echo = t.aPlan.events.first { it.type == FxType.ECHO }
         assertEquals(t.exitSec, echo.end, 1e-9)
-        // Even a cut is a bar-long crossfade: both decks heard together, neither slams.
-        assertTrue(t.aPlan.gain.at(t.exitSec + a.barSec / 2) in 0.1f..0.9f)
-        assertEquals(0f, t.aPlan.gain.at(t.exitSec + a.barSec), 1e-6f)
-        assertTrue(t.bPlan.gain.at(t.entrySec + a.barSec / 2) in 0.3f..0.9f)
-        assertEquals(1f, t.bPlan.gain.at(t.entrySec + a.barSec), 1e-6f)
+        // Even a cut is a short crossfade (half a bar, beats locked): neither slams, neither lingers.
+        assertTrue(t.aPlan.gain.at(t.exitSec + a.barSec / 4) in 0.1f..0.9f)
+        assertEquals(0f, t.aPlan.gain.at(t.exitSec + a.barSec / 2), 1e-6f)
+        assertTrue(t.bPlan.gain.at(t.entrySec + a.barSec / 4) in 0.3f..0.9f)
+        assertEquals(1f, t.bPlan.gain.at(t.entrySec + a.barSec / 2), 1e-6f)
     }
 
     @Test
@@ -248,12 +248,13 @@ class PlannerTest {
 
     @Test
     fun tricksterFillsPhrasesWithTricks() {
-        val rap = track("a", 92.0, Genres.HIPHOP, vocalBars = 0 until 112)
+        // Rapped up to bar 40, a beat tape after: scratches only where nobody is rapping.
+        val rap = track("a", 92.0, Genres.HIPHOP, vocalBars = 0 until 40)
         val p = Performer.plan(rap, entryBar = 0, startSpeed = 1.0, masterBpm = 92.0, mode = MixMode.TRICKSTER)
-        // A fill at nearly every phrase end from bar 16 to the outro: 16, 24, … 80 minus busy spots.
+        // A fill every other phrase end, a few per track, never over the rapping.
         val fills = p.tricks.filter { it.label !in setOf("Roll into drop", "Hook replay") && !it.label.startsWith("Tempo") && !it.label.startsWith("Glide") }
-        assertTrue("fills: ${fills.map { it.label }}", fills.size >= 5)
-        assertTrue(p.events.any { it.type == FxType.SCRATCH })
+        assertTrue("fills: ${fills.map { it.label }}", fills.size >= 2)
+        assertTrue(p.events.filter { it.type == FxType.SCRATCH }.all { rap.vocalIn(rap.barAt(it.start + 0.01), rap.barAt(it.start + 0.01) + 1) < 0.5 })
         // Every fill ends on a phrase boundary (the horn starts on one).
         for (f in fills) {
             val edge = if (f.label in setOf("Air horn", "Crash", "Gunshot")) f.startSec else f.endSec
@@ -268,7 +269,7 @@ class PlannerTest {
         for (h in listOf(emptyList(), listOf(Recipe.BASS_SWAP_BLEND), listOf(Recipe.BASS_DROP, Recipe.PHASER_BLEND))) {
             assertTrue(TransitionPlanner.plan(a, 0, 10.0, b, history = h, mode = MixMode.SMOOTH).recipe.smooth)
         }
-        val trick = TransitionPlanner.plan(a, 0, 10.0, b, mode = MixMode.TRICKSTER)
+        val trick = TransitionPlanner.plan(a, 0, 10.0, b, history = listOf(Recipe.BASS_SWAP_BLEND, Recipe.HARD_CUT), mode = MixMode.TRICKSTER)
         assertTrue(trick.recipe.cut)
         assertTrue(trick.aPlan.events.any { it.type.isSfx && it.end == trick.exitSec })
         assertTrue(trick.bPlan.events.any { it.type.isSfx && it.start == trick.entrySec })
@@ -336,15 +337,24 @@ class PlannerTest {
     }
 
     @Test
-    fun tricksterPrefersCutsEvenWhenAVocalSwapFits() {
+    fun aTeluguSetBlendsAfterTwoDrumFillCuts() {
+        val t1 = track("t1", 96.0, Genres.POP, genre = "Telugu")
+        val t2 = track("t2", 97.0, Genres.POP, genre = "Telugu")
+        val s = DecisionEngine.scores(t1, t2, true, 1.0, listOf(Recipe.DRUM_FILL_CUT, Recipe.DRUM_FILL_CUT), mode = MixMode.TRICKSTER)
+        val best = s.maxBy { it.value }.key
+        assertTrue("$best", best.smooth)
+    }
+
+    @Test
+    fun tricksterBlendsAgainAfterTwoCuts() {
         // Pop pair where B has an early sung phrase and the keys fit: Smooth takes the vocal swap…
         val a = track("a", 124.0, Genres.POP, keyConfidence = 0.8f)
         val b = track("b", 124.0, Genres.POP, vocalBars = 16 until 48, keyConfidence = 0.8f)
         val smooth = TransitionPlanner.plan(a, 0, 10.0, b, history = listOf(Recipe.BASS_DROP))
         assertEquals(Recipe.VOCAL_SWAP, smooth.recipe)
-        // …Trickster goes for a cut trick.
-        val trick = TransitionPlanner.plan(a, 0, 10.0, b, mode = MixMode.TRICKSTER)
-        assertTrue("${trick.recipe}", trick.recipe.cut)
+        // …and so does Trickster after two cuts in a row: a third would stop the set flowing.
+        val trick = TransitionPlanner.plan(a, 0, 10.0, b, history = listOf(Recipe.HARD_CUT, Recipe.ECHO_OUT), mode = MixMode.TRICKSTER)
+        assertTrue("${trick.recipe}", trick.recipe.smooth)
     }
 
     @Test
@@ -483,5 +493,142 @@ class PlannerTest {
             assertTrue(SfxDressing.build(t, 80, 8, turn).all { it.end == t.barTime(80) })
             assertTrue(SfxDressing.hit(t, 80, turn).all { it.start == t.barTime(80) })
         }
+    }
+
+    @Test
+    fun indianTagsGoToPopAndGetRegionalDrums() {
+        assertEquals(Genres.POP, Genres.family("Telugu Folk"))
+        assertEquals(Genres.POP, Genres.family("Telangana folk"))
+        assertEquals(Genres.ROCK, Genres.family("Folk"))
+        assertEquals(Genres.HIPHOP, Genres.family("Telugu Hip Hop"))
+        assertEquals(Genres.Region.INDIAN, Genres.region("", "Maala (From \"Aadarsha Kutumbam\")"))
+        assertEquals(Genres.Region.SOUTH, Genres.region("Tollywood"))
+        assertEquals(Genres.Region.NORTH, Genres.region("Bhangra"))
+        // YouTube titles and artists, with no genre tag at all.
+        assertEquals(Genres.Region.SOUTH, Genres.region("", "Time To Party Full Video Song | Attarintiki Daredi || Pawan Kalyan, Samantha || DSP"))
+        assertEquals(Genres.Region.SOUTH, Genres.region("", "Kissik", "Devi Sri Prasad, Sublahshini"))
+        assertEquals(Genres.Region.INDIAN, Genres.region("", "Chuttamalle Lyrical"))
+        assertEquals(null, Genres.region("", "Strobe", "deadmau5"))
+        val telugu = track("t", 96.0, Genres.POP, genre = "Telugu")
+        val types = (0 until 3).flatMap { SfxDressing.build(telugu, 80, 4, it) + SfxDressing.hit(telugu, 80, it) }.map { it.type }.toSet()
+        assertTrue(types.any { it == FxType.DAPPU || it == FxType.MARFA })
+        assertFalse(FxType.SNARE_ROLL in types) // no EDM dressing
+        assertFalse(FxType.DHOL in types) // the dhol is the north's
+    }
+
+    @Test
+    fun drumFillCutIsForIndianMusicOnly() {
+        val h1 = track("h1", 124.0)
+        val h2 = track("h2", 124.0)
+        assertEquals(Double.NEGATIVE_INFINITY, DecisionEngine.scores(h1, h2, true, 1.0, emptyList())[Recipe.DRUM_FILL_CUT]!!, 0.0)
+        val t1 = track("t1", 96.0, Genres.POP, genre = "Telugu")
+        val t2 = track("t2", 96.0, Genres.POP, genre = "Telugu")
+        val scores = DecisionEngine.scores(t1, t2, true, 1.0, emptyList(), mode = MixMode.TRICKSTER)
+        assertEquals(Recipe.DRUM_FILL_CUT, scores.maxBy { it.value }.key)
+        val tr = TransitionPlanner.plan(t1, 0, 30.0, t2, forced = Recipe.DRUM_FILL_CUT, mode = MixMode.TRICKSTER)
+        val drums = setOf(FxType.DAPPU, FxType.MARFA)
+        assertTrue(tr.aPlan.events.any { it.type in drums && it.end == tr.exitSec }) // the fill runs into the cut
+        assertTrue(tr.bPlan.events.any { it.type in drums && it.start == tr.entrySec }) // its accents land on B's one
+        assertTrue(tr.description, tr.description.contains("fill cut"))
+    }
+
+    @Test
+    fun newMovesLandWhereTheyBelong() {
+        val a = track("a", 126.0)
+        val b = track("b", 126.0)
+        // Drop swap: leaves at A's own drop, half a beat of silence, into B at full swing.
+        val swap = TransitionPlanner.plan(a, 0, 30.0, b, forced = Recipe.DROP_SWAP)
+        assertEquals(Recipe.DROP_SWAP, swap.recipe)
+        assertTrue(a.energyIn(swap.exitBar - 4, swap.exitBar) < 0.65 && a.energyIn(swap.exitBar, swap.exitBar + 4) >= 0.85)
+        val gap = swap.aPlan.events.single { it.type == FxType.MUTE }
+        assertEquals(swap.exitSec + 0.024, gap.end, 1e-9) // held until A has faded
+        assertEquals(a.beatSec / 2, swap.exitSec - gap.start, 1e-9)
+        assertTrue(b.energyIn(swap.entryBar, swap.entryBar + 4) >= 0.8)
+        // Brake stop: the platter stops, then silence until the cut.
+        val brake = TransitionPlanner.plan(a, 0, 30.0, b, forced = Recipe.BRAKE_STOP)
+        assertTrue(brake.aPlan.uses(FxType.BRAKE) && brake.aPlan.uses(FxType.MUTE))
+        // Hard cut: nothing added, even in Trickster, and A is gone straight after the line.
+        val cut = TransitionPlanner.plan(a, 0, 30.0, b, forced = Recipe.HARD_CUT, mode = MixMode.TRICKSTER)
+        assertTrue(cut.aPlan.events.isEmpty() && cut.bPlan.events.isEmpty())
+        assertEquals(0f, cut.aPlan.gain.at(cut.exitSec + 0.02), 0f)
+        // Breakdown swap: starts at A's breakdown, under B's beat.
+        val bd = TransitionPlanner.plan(a, 0, 30.0, b, forced = Recipe.BREAKDOWN_SWAP)
+        assertEquals(Recipe.BREAKDOWN_SWAP, bd.recipe)
+        assertEquals(64, bd.exitBar)
+        assertTrue(b.energyIn(bd.entryBar, bd.entryBar + 4) >= 0.6)
+    }
+
+    @Test
+    fun keyLiftsUpTheWheelIntoBiggerTracks() {
+        val a = track("a", 124.0, keyPc = 0, keyConfidence = 0.9f) // C major, 8B
+        val up1 = track("g", 124.0, keyPc = 7, keyConfidence = 0.9f) // G major, 9B
+        val up2 = track("d", 124.0, keyPc = 2, keyConfidence = 0.9f) // D major, 10B
+        val quieter = track("q", 124.0, keyPc = 7, keyConfidence = 0.9f, loudness = -16.0)
+        assertEquals(1, TransitionPlanner.keyLift(a, 0, up1))
+        assertEquals(2, TransitionPlanner.keyLift(a, 0, up2))
+        assertEquals(0, TransitionPlanner.keyLift(a, 0, quieter))
+        assertEquals(0, TransitionPlanner.keyLift(up1, 0, a)) // stepping down isn't a lift
+        val same = track("c", 124.0, keyPc = 0, keyConfidence = 0.9f)
+        assertTrue(SetPlanner.transitionCost(a, up1) < SetPlanner.transitionCost(a, same))
+        val tr = TransitionPlanner.plan(a, 0, 30.0, up2, forced = Recipe.ECHO_OUT)
+        assertTrue(tr.description, tr.description.contains("key lift +2"))
+        assertEquals(0, tr.bPitchSemis) // a cut plays B as it is, a step up
+    }
+
+    @Test
+    fun indianTracksGetRegionalFillsAndARewind() {
+        val t = track("t", 96.0, Genres.HIPHOP, genre = "Telugu Hip Hop")
+        val p = Performer.plan(t, 0, 1.0, 96.0, mode = MixMode.TRICKSTER)
+        assertTrue(p.events.any { it.type == FxType.DAPPU || it.type == FxType.MARFA || it.type == FxType.THAVIL })
+        val r = p.replay!!
+        assertTrue(r.cut)
+        assertEquals(8, r.atBar - r.toBar)
+        assertTrue(p.events.any { it.type == FxType.BACKSPIN && it.end == t.barTime(r.atBar) })
+        assertTrue(p.tricks.any { it.label == "Rewind" })
+        // Smooth mode leaves the track alone.
+        assertEquals(null, Performer.plan(t, 0, 1.0, 96.0, mode = MixMode.SMOOTH).replay)
+    }
+
+    @Test
+    fun eachGenreSoundsLikeItself() {
+        val techno = track("t", 130.0, Genres.TECHNO)
+        val house = track("h", 124.0, Genres.HOUSE)
+        val chill = track("c", 90.0, Genres.CHILL)
+        fun sfx(t: TrackInfo) = (0 until 3).flatMap { SfxDressing.build(t, 80, 4, it) + SfxDressing.hit(t, 80, it) }.map { it.type }.toSet()
+        // No horns, sirens or gunshots outside the genres that use them; chill barely any.
+        for (t in listOf(techno, house)) assertTrue(sfx(t).none { it in setOf(FxType.HORN, FxType.SIREN, FxType.GUNSHOT, FxType.LASER) })
+        assertTrue(sfx(chill).all { it in setOf(FxType.REVERSE_CYMBAL, FxType.WHOOSH, FxType.DOWNLIFTER) })
+        // The set's crate styles a mix: a hip-hop set dresses even a house song in horns and shots.
+        val hiphopStyle = (0 until 3).flatMap { SfxDressing.hit(house, 80, it, family = Genres.HIPHOP) }.map { it.type }.toSet()
+        assertTrue(FxType.HORN in hiphopStyle)
+        // Scratch cuts are hip-hop's alone; with All genres the incoming song decides.
+        assertEquals(Double.NEGATIVE_INFINITY, DecisionEngine.scores(house, house, true, 1.0, emptyList(), mode = MixMode.TRICKSTER)[Recipe.SCRATCH_CUT]!!, 0.0)
+        assertTrue(DecisionEngine.scores(house, house, true, 1.0, emptyList(), mode = MixMode.TRICKSTER, family = Genres.HIPHOP)[Recipe.SCRATCH_CUT]!!.isFinite())
+        // In-track fills: no scratches outside hip-hop.
+        for (t in listOf(techno, house, track("p", 124.0, Genres.POP), track("r", 120.0, Genres.ROCK))) {
+            assertFalse(Performer.plan(t, 0, 1.0, t.bpm, mode = MixMode.TRICKSTER).events.any { it.type == FxType.SCRATCH })
+        }
+    }
+
+    @Test
+    fun theGapBeforeACutStaysSilentThroughTheCut() {
+        // After the brake (or a drop swap's build) A must stay silent: no blip of A as B comes in.
+        val a = track("a", 126.0)
+        val b = track("b", 126.0)
+        for (r in listOf(Recipe.BRAKE_STOP, Recipe.DROP_SWAP)) {
+            val tr = TransitionPlanner.plan(a, 0, 30.0, b, forced = r)
+            val gap = tr.aPlan.events.single { it.type == FxType.MUTE }
+            // A's sound is gone (gain 0) before the gap lets go.
+            assertEquals("$r", 0f, tr.aPlan.gain.at(gap.end), 0f)
+        }
+    }
+
+    @Test
+    fun aBackspunRecordDoesNotResume() {
+        val a = track("a", 126.0)
+        val tr = TransitionPlanner.plan(a, 0, 30.0, track("b", 126.0), forced = Recipe.BACKSPIN_DROP)
+        // A is gone as soon as the spin ends; B is in at full on the one.
+        assertEquals(0f, tr.aPlan.gain.at(tr.exitSec + 0.05), 0f)
+        assertEquals(1f, tr.bPlan.gain.at(tr.entrySec + 0.05), 0f)
     }
 }

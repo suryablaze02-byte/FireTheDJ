@@ -6,7 +6,11 @@ import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.autodj.analysis.Camelot
+import com.autodj.analysis.Genres
 import com.autodj.dj.fx.FxEvent
+import com.autodj.BuildConfig
+import com.autodj.lyrics.LyricsStore
+import com.autodj.lyrics.TimedLyrics
 import com.autodj.dj.fx.FxPlan
 import com.autodj.dj.fx.FxType
 import com.autodj.dj.fx.Lane
@@ -62,9 +66,15 @@ class DeckVisual(
     val fx: List<ActiveFx>,
     /** The deck being mixed in (or the hook replay), not the one carrying the set. */
     val incoming: Boolean,
+    /** The track on this deck and where it is, for the lyric looks. */
+    val uri: String = "",
+    val positionSec: Double = 0.0,
+    val beatSec: Double = 0.5,
+    val downbeatSec: Double = 0.0,
 )
 
-class VisualFrame(val decks: List<DeckVisual>, val paused: Boolean)
+/** [cue]: a word-play mix about to happen ("Word play “party”"), for the lyric looks to announce. */
+class VisualFrame(val decks: List<DeckVisual>, val paused: Boolean, val cue: String? = null)
 
 /** One card in the effects rack. */
 data class FxStatus(val name: String, val active: Boolean, val detail: String)
@@ -133,6 +143,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     /** Played + now + the order the rest would play in; recomputed only when the queue moves. */
     private var queue: List<TrackInfo> = emptyList()
     private var crate: String? = null
+    private var styleFamily: String? = null
     private var mode = MixMode.SMOOTH
     private var mainEntryBar = 0
     private var perf: Performance? = null
@@ -140,6 +151,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private var masterBpm = 0.0
     private var plan: Transition? = null
     private val history = mutableListOf<Recipe>()
+
+    /** Timed words for planning word-play mixes: the phone app only for now; the TV shows lyrics but mixes without them. */
+    private val wordPlayLyrics: (TrackInfo) -> TimedLyrics? = if (BuildConfig.FLAVOR == "phone") LyricsStore::get else { _ -> null }
     private var loaded = false
     private var started = false
     private var paused = false
@@ -183,7 +197,15 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val out = ArrayList<DeckVisual>(2)
         decks[main].visual(incoming = false)?.let { out += it }
         if (bPlaying) decks[1 - main].visual(incoming = true)?.let { out += it }
-        return if (out.isEmpty()) null else VisualFrame(out, paused)
+        // Announce a word-play mix in the 8 seconds before its cut.
+        val p = plan
+        val posA = decks[main].positionSec
+        val cue = if (p != null && p.recipe == Recipe.WORD_PLAY && posA >= p.exitSec - WORD_CUE_SEC && posA < p.exitSec) {
+            p.description.substringBefore(" · ")
+        } else {
+            null
+        }
+        return if (out.isEmpty()) null else VisualFrame(out, paused, cue)
     }
 
     private fun Deck.visual(incoming: Boolean): DeckVisual? {
@@ -204,6 +226,10 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             barInPhrase = Math.floorMod(bar - t.phraseOffsetBars, 8),
             fx = active,
             incoming = incoming,
+            uri = t.uri,
+            positionSec = pos,
+            beatSec = t.beatSec,
+            downbeatSec = t.downbeatSec,
         )
     }
 
@@ -212,6 +238,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         stop()
         if (tracks.isEmpty()) return
         this.crate = crate
+        // A one-genre set is styled by its genre; "All genres" styles each mix by the incoming song.
+        styleFamily = crate.substringAfterLast(" · ").takeIf { it in Genres.families }
         this.mode = mode
         setSize = tracks.size
         val opener = SetPlanner.opener(tracks)
@@ -283,7 +311,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     /** Plans the tricks inside a track that has just become the main deck. */
     private fun beginTrack(deck: Deck, t: TrackInfo, entryBar: Int) {
         // A hook replay is a treat: never on two tracks in a row.
-        val p = Performer.plan(t, entryBar, deck.speed, masterBpm, allowReplay = perf?.replay == null, mode = mode)
+        val p = Performer.plan(t, entryBar, deck.speed, masterBpm, allowReplay = perf?.replay == null, mode = mode, lyrics = wordPlayLyrics(t))
         perf = p
         Log.i(TAG, "track \"${t.title}\" from bar $entryBar · tricks: ${p.tricks.joinToString { "${it.label} @${formatSec(it.startSec)}" }.ifEmpty { "none" }}")
         replayState = if (p.replay != null) ReplayState.PENDING else ReplayState.DONE
@@ -304,6 +332,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val b = decks[1 - main]
         val ta = a.track ?: return
         if (paused) return publish()
+        if (rescue(a, b, ta)) return publish()
 
         val posA = a.positionSec
         val aEnded = a.player.playbackState == Player.STATE_ENDED
@@ -311,7 +340,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         // 0. Decide what plays next as soon as a track starts, so the listener can see it; the
         //    transition itself is planned once the track's own tricks (a hook replay) are done.
         if (next == null && remaining.isNotEmpty()) {
-            next = SetPlanner.pickNext(ta, remaining, Random.Default)
+            next = SetPlanner.pickNext(ta, remaining, Random.Default, wordPlayLyrics)
             refreshQueue(ta)
         }
 
@@ -330,7 +359,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         // 2. As soon as the track's own tricks allow, decide what follows it and how.
         if (plan == null && remaining.isNotEmpty()) {
             val chosen = next!!
-            plan = TransitionPlanner.plan(ta, mainEntryBar, posA, chosen, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default)
+            plan = TransitionPlanner.plan(
+                ta, mainEntryBar, posA, chosen, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default, lyrics = wordPlayLyrics, styleFamily = styleFamily,
+            )
                 .also {
                     a.plan = mergedPlan(ta, perf, it)
                     Log.i(
@@ -377,6 +408,86 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         if (++ticks % PUBLISH_EVERY == 0) publish()
     }
 
+    /**
+     * A deck that failed (a source or decoder error) or stopped moving while it should play
+     * would otherwise leave the set "playing" in silence for good. It is opened again where it
+     * was, once; if it fails again the set moves on: past a broken incoming track (the playing
+     * one carries on), or out of a broken playing track straight into the next one.
+     * True when it changed the decks, so this tick stops there.
+     */
+    private fun rescue(a: Deck, b: Deck, ta: TrackInfo): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val bLive = started || replayState == ReplayState.PLAYING
+        val bWhy = b.error ?: if (bLive && b.stuckMs(now) > STALL_MS) "stuck at ${formatSec(b.positionSec)}" else null
+        if (b.track != null && bWhy != null && (loaded || replayState != ReplayState.DONE)) {
+            Log.w(TAG, "incoming \"${b.track?.title}\" failed: $bWhy")
+            if (b.retries < 1) {
+                b.retry()
+                return false
+            }
+            dropIncoming(a, b, ta)
+            return true
+        }
+        val aWhy = a.error ?: if (a.stuckMs(now) > STALL_MS) "stuck at ${formatSec(a.positionSec)}" else null
+        if (aWhy == null) return false
+        Log.w(TAG, "playing \"${ta.title}\" failed: $aWhy")
+        if (a.retries < 1) {
+            a.retry()
+            return false
+        }
+        val p = plan
+        if (p != null && started && b.error == null) {
+            // The next track is already in: let it take over now.
+            finishTransition(p)
+            return true
+        }
+        skipAhead(a, b, ta)
+        return true
+    }
+
+    /** Gives up on the incoming track (or the hook replay): the playing one carries on at full volume. */
+    private fun dropIncoming(a: Deck, b: Deck, ta: TrackInfo) {
+        Log.w(TAG, "skipping \"${b.track?.title}\"; \"${ta.title}\" plays on")
+        if (replayState == ReplayState.DONE) next?.let { remaining.remove(it) }
+        b.unload()
+        perf?.let { a.plan = performancePlan(ta, it) }
+        plan = null
+        next = null
+        loaded = false
+        started = false
+        replayState = ReplayState.DONE
+        lastLoggedBeat = -1
+        refreshQueue(ta)
+    }
+
+    /** The playing track can't be played: cut straight to the next one from its start. */
+    private fun skipAhead(a: Deck, b: Deck, ta: TrackInfo) {
+        val t = next ?: remaining.firstOrNull()
+        played += ta
+        a.unload()
+        b.unload()
+        if (t == null) {
+            stop()
+            return
+        }
+        Log.w(TAG, "skipping \"${ta.title}\": straight into \"${t.title}\"")
+        remaining.remove(t)
+        next = null
+        plan = null
+        loaded = false
+        started = false
+        replayState = ReplayState.DONE
+        lastLoggedBeat = -1
+        phaseErrSec = 0.0
+        main = 1 - main
+        masterBpm = t.bpm
+        mainEntryBar = 0
+        b.load(t, 0.0, 1.0, FxPlan.EMPTY)
+        beginTrack(b, t, 0)
+        b.player.play()
+        refreshQueue(t)
+    }
+
     /** Loads the hook on the spare deck, starts it on the jump bar, crossfades, then swaps decks. */
     private fun runReplay(a: Deck, b: Deck, t: TrackInfo, posA: Double) {
         val p = perf ?: return
@@ -389,7 +500,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                     replayState = ReplayState.DONE // too late to set up cleanly; skip it
                 } else {
                     // Equal-power crossfade over two beats: both decks play the same track in sync.
-                    val fade = 2 * t.beatSec
+                    // A rewind cuts instead, straight out of its spinback.
+                    val fade = if (r.cut) 0.012 else 2 * t.beatSec
                     a.plan = performancePlan(t, p, gain = listOf(Ramp(at, at + fade, 1f, 0f, Law.CONSTANT_POWER)))
                     b.load(t, to, a.speed, performancePlan(t, p, gain = listOf(Ramp(to, to + fade, 0f, 1f, Law.CONSTANT_POWER))), a.pitchSemis)
                     replayState = ReplayState.LOADED
@@ -400,7 +512,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                 b.setSpeed(baseSpeedB)
                 b.player.play()
                 replayState = ReplayState.PLAYING
-                Log.i(TAG, "hook replay in \"${t.title}\": ${formatSec(at)} → back to ${formatSec(to)}")
+                Log.i(TAG, "${if (r.cut) "rewind" else "hook replay"} in \"${t.title}\": ${formatSec(at)} → back to ${formatSec(to)}")
             }
             ReplayState.PLAYING -> {
                 lockPhase(a, b, 1.0)
@@ -409,7 +521,14 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                     main = 1 - main
                     // The hook played twice: count those bars as played for pacing the exit.
                     mainEntryBar -= r.atBar - r.toBar
-                    decks[main].plan = performancePlan(t, p)
+                    // The rewind's spinback is a one-off: the second pass plays through.
+                    val after = if (r.cut) {
+                        Performance(p.events.filterNot { it.type == FxType.BACKSPIN && it.end == at }, p.speed, p.replay, p.tricks, p.targetSpeed)
+                    } else {
+                        p
+                    }
+                    perf = after
+                    decks[main].plan = performancePlan(t, after)
                     phaseErrSec = 0.0
                     replayState = ReplayState.DONE
                 }
@@ -552,7 +671,14 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             current = a.toState(posA, a.plan),
             incoming = if (started && posB != null) b.toState(posB, b.plan) else null,
             next = next,
-            recipe = p?.recipe?.label,
+            recipe = p?.let {
+                when (it.recipe) {
+                    // Name the word, and the drum, rather than the move in general.
+                    Recipe.WORD_PLAY -> it.description.substringBefore(" · ")
+                    Recipe.DRUM_FILL_CUT -> it.description.substringBefore(" at ")
+                    else -> it.recipe.label
+                }
+            },
             transition = p?.description,
             secondsToMix = if (p != null && posA < p.startSec) (p.startSec - posA) / a.speed else null,
             mixing = mixing,
@@ -611,12 +737,18 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
 
     private companion object {
         const val TAG = "AutoDJ"
+
+        /** How long before a word-play cut the visualizer announces it. */
+        const val WORD_CUE_SEC = 8.0
         const val TICK_MS = 15L
         const val ADJUST_MS = 150L
         const val LOCK_STEP = 0.005
         const val PRELOAD_SEC = 8.0
         const val REPLAY_PRELOAD_SEC = 6.0
         const val PUBLISH_EVERY = 3
+
+        /** A deck meant to be playing whose position hasn't moved for this long has stalled. */
+        const val STALL_MS = 4000L
 
         /** Master tempo rises this much per track through the first [ARC_SHARE] of the set. */
         /** Smooth leans on tempo for energy; Trickster on tricks. */

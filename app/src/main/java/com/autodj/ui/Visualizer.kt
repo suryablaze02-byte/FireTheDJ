@@ -89,7 +89,7 @@ fun DjVisualizer(
         while (true) {
             withFrameNanos { now ->
                 val f = frame()
-                scene.update(f?.let { v -> VisualFrame(v.decks.filter { only == null || it.incoming == only }, v.paused) }, now)
+                scene.update(f?.let { v -> VisualFrame(v.decks.filter { only == null || it.incoming == only }, v.paused, v.cue) }, now)
                 if (scene.labels != labels) labels = scene.labels
                 val t = now / 1e9f
                 if (f != null && !f.paused && turn[1] > 0f) turn[0] = (turn[0] + (t - turn[1]) * RECORD_DEG_PER_S) % 360f

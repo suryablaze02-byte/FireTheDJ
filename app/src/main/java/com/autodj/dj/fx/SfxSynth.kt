@@ -25,6 +25,19 @@ import kotlin.random.Random
  * - **Whoosh:** a noise sweep up and back down, peaking mid-event: a transition swoosh.
  * - **Gunshot:** a crack, a thump and a tail, one every [FxEvent.p1] beats ("pull up").
  *
+ * Indian regional sounds, played as patterns on the track's own beat ([Drum] says which part):
+ *
+ * - **Dappu** (Telugu teenmaar frame drum): open "DHA" strokes (a ~185 Hz membrane bending down,
+ *   with a bright slap) and muted "ka" slaps in a 6/8 triplet feel; the fill doubles up into the
+ *   bar line, and the hit is three accented strokes, the "teen maar".
+ * - **Marfa** (Hyderabadi wedding drums): a low pot drum and daff slaps in a driving LOW-slap-slap
+ *   cell with steel-pot clicks on the off-beats, rolling faster into the cut.
+ * - **Dhol** (Punjabi bhangra): the bass head booming on beats one and four of the triplet chaal,
+ *   the treble head cracking in between; the fill is all treble triplets, then a unison hit.
+ * - **Thavil** (South Indian barrel drum): hard, high stick cracks, "ta-ka-dhim".
+ * - **Nadaswaram** (South Indian wedding reed): a nasal reed voice that slides up into each note
+ *   (gamaka), climbing four notes of the track's own key to a held, wavering top note.
+ *
  * Each effect has its own oscillators and filters, so effects that overlap (a horn on the
  * same beat as an impact) don't garble each other.
  */
@@ -40,7 +53,15 @@ class SfxSynth(sampleRate: Int) {
         var hpState = 0f
         val partials = DoubleArray(METAL_HZ.size)
         val bandPass = Biquad(1)
+        val bandPass2 = Biquad(1)
+
+        /** A percussion event's strokes, worked out once per event. */
+        var strokesFor: FxEvent? = null
+        var strokes: List<Stroke> = emptyList()
     }
+
+    /** One drum stroke [at] beats into the event: [kind] names the stroke, [vel] its strength. */
+    private class Stroke(val at: Double, val kind: Char, val vel: Float)
 
     private val voices = HashMap<FxType, Voice>()
 
@@ -59,24 +80,45 @@ class SfxSynth(sampleRate: Int) {
                 FxType.DOWNLIFTER -> 6000.0 * (1.0 / 20.0).pow(x)
                 FxType.WHOOSH -> 400.0 * 15.0.pow(sin(PI * x))
                 FxType.SNARE_ROLL -> 1800.0
+                FxType.DAPPU -> 2200.0
+                FxType.MARFA -> 1800.0
+                FxType.DHOL -> 3000.0
+                FxType.THAVIL -> 3200.0
+                FxType.NADASWARAM -> {
+                    // Two formants make the reed's nasal "aa".
+                    voice(e.type).bandPass2.bandPass(min(2600.0, 0.45 * sr), 5.0, sr)
+                    1100.0
+                }
                 else -> continue
             }
-            val q = if (e.type == FxType.SNARE_ROLL) 0.8 else 4.0
+            val q = when (e.type) {
+                FxType.SNARE_ROLL -> 0.8
+                FxType.DAPPU, FxType.MARFA -> 1.2
+                FxType.DHOL, FxType.THAVIL -> 1.5
+                FxType.NADASWARAM -> 5.0
+                else -> 4.0
+            }
             voice(e.type).bandPass.bandPass(min(fc, 0.45 * sr), q, sr)
         }
     }
 
-    /** One mono sample of all active effects at time [t]. */
-    fun sample(events: List<FxEvent>, t: Double, beatSec: Double): Float {
+    /**
+     * One mono sample of all active effects at time [t]. [duck] (0..1) is the kick sidechain,
+     * so the effects pump with the track.
+     */
+    fun sample(events: List<FxEvent>, t: Double, beatSec: Double, duck: Float = 1f): Float {
         var out = 0.0
         for (e in events) {
+            // Events are picked per block, so a sample can fall just outside one: silent there.
+            if (t < e.start || t >= e.end) continue
             val x = t - e.start
             val left = e.end - t
             val len = e.end - e.start
             val u = (x / len).coerceIn(0.0, 1.0)
             val edge = min(1.0, min(x / 0.01, left / 0.03)) // click-free start and end
             val v = voice(e.type)
-            out += GAIN * e.amount(t) * edge * when (e.type) {
+            val pump = duck
+            out += GAIN * e.amount(t) * edge * pump * when (e.type) {
                 FxType.SIREN -> siren(v, x, if (e.p1 > 0) e.p1.toDouble() else 3.5)
                 FxType.HORN -> horn(v, x / beatSec)
                 FxType.LASER -> laser(v, x, (if (e.p1 > 0) e.p1 else 0.5f) * beatSec)
@@ -89,6 +131,8 @@ class SfxSynth(sampleRate: Int) {
                 FxType.DOWNLIFTER -> downlifter(v, u)
                 FxType.WHOOSH -> whoosh(v, u)
                 FxType.GUNSHOT -> gunshot(v, x % ((if (e.p1 > 0) e.p1 else 1f) * beatSec))
+                FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL -> drum(v, e, x, beatSec)
+                FxType.NADASWARAM -> reed(v, x, left, beatSec, if (e.p1 > 0) e.p1.toDouble() else 330.0, e.p2 >= 1f)
                 else -> 0.0
             }
         }
@@ -206,6 +250,149 @@ class SfxSynth(sampleRate: Int) {
         val tail = v.lp * 2.0 * exp(-x * 5)
         return 0.8 * crack + 0.7 * thump + 0.4 * tail
     }
+
+    /** All strokes of a percussion event, in beats from its start. */
+    private fun strokesOf(e: FxEvent, beatSec: Double): List<Stroke> {
+        val lenBeats = (e.end - e.start) / beatSec
+        val out = mutableListOf<Stroke>()
+        val fillBeats = when (e.p1) {
+            Drum.HIT -> 0.0
+            Drum.FILL_AND_HIT -> 4.0
+            else -> lenBeats
+        }
+        // Groove bars, then the fill bar ending on the bar line, louder as it goes.
+        val bars = maxOf(1, Math.round(fillBeats / 4).toInt())
+        if (fillBeats > 0) {
+            for (b in 0 until bars) {
+                val last = b == bars - 1
+                val from = fillBeats - (bars - b) * 4.0
+                for (s in barStrokes(e.type, last)) {
+                    val at = from + s.at
+                    if (at < 0) continue
+                    val swell = (0.65 + 0.35 * at / fillBeats).toFloat()
+                    out += Stroke(at, s.kind, s.vel * swell)
+                }
+            }
+        }
+        if (e.p1 != Drum.FILL) for (s in hitStrokes(e.type)) out += Stroke(fillBeats + s.at, s.kind, s.vel)
+        return out.sortedBy { it.at }
+    }
+
+    /** One bar of the groove ([fill] = false) or the fill into the bar line. */
+    private fun barStrokes(type: FxType, fill: Boolean): List<Stroke> = when (type) {
+        // 12 triplet slots per bar, 6/8 feel.
+        FxType.DAPPU -> slots(if (fill) "D.kD.kDkDkDk" else "D.kD.kD.kD.k", 3)
+        FxType.DHOL -> if (fill) {
+            listOf(Stroke(0.0, 'x', 1.1f)) + (0 until 12).map { Stroke(it / 3.0, 't', (0.55 + 0.5 * it / 11).toFloat()) }
+        } else {
+            // Chaal: bass head on beats one and four, treble in between.
+            slots("xttx.txttxtt", 3).map { if (it.kind == 'x' && (it.at == 0.0 || it.at == 3.0)) Stroke(it.at, 'x', 1.2f) else it }
+        }
+        FxType.MARFA -> if (fill) {
+            // Two beats of the cell, then slaps rolling in 16ths and 32nds into the cut.
+            slots("LssL", 2) + (0 until 4).map { Stroke(2 + it / 4.0, 's', 0.7f + 0.05f * it) } +
+                (0 until 8).map { Stroke(3 + it / 8.0, 's', 0.75f + 0.04f * it) }
+        } else {
+            slots("LssLssLs", 2) + (0 until 4).map { Stroke(it + 0.5, 'c', 0.6f) }
+        }
+        // Stick strokes in 16ths, accented in threes.
+        FxType.THAVIL -> (0 until 16).map { Stroke(it / 4.0, 'T', if (it % 3 == 0 || it == 15) 1.05f else 0.55f) }
+        else -> emptyList()
+    }
+
+    /** What lands on the bar line. */
+    private fun hitStrokes(type: FxType): List<Stroke> = when (type) {
+        // "Teen maar": three accented strokes on beats one, two and three.
+        FxType.DAPPU -> listOf(Stroke(0.0, 'A', 1.25f), Stroke(1.0, 'A', 1.15f), Stroke(2.0, 'A', 1.3f))
+        FxType.MARFA -> listOf(Stroke(0.0, 'X', 1.3f), Stroke(0.0, 'c', 0.8f))
+        FxType.DHOL -> listOf(Stroke(0.0, 'X', 1.3f))
+        // "Ta-ka-dhim".
+        FxType.THAVIL -> listOf(Stroke(0.0, 'T', 1f), Stroke(0.5, 'T', 0.7f), Stroke(0.75, 'T', 1.15f))
+        else -> emptyList()
+    }
+
+    /** A pattern string, one character per slot ('.' = rest), [perBeat] slots to a beat. */
+    private fun slots(pattern: String, perBeat: Int) =
+        pattern.mapIndexedNotNull { i, c -> if (c == '.') null else Stroke(i / perBeat.toDouble(), c, if (c.isUpperCase()) 1f else 0.85f) }
+
+    /** Every stroke of a percussion event still sounding at [x] seconds in, summed. */
+    private fun drum(v: Voice, e: FxEvent, x: Double, beatSec: Double): Double {
+        if (v.strokesFor !== e) {
+            v.strokesFor = e
+            v.strokes = strokesOf(e, beatSec)
+        }
+        var tone = 0.0
+        var slap = 0.0
+        var clang = 0.0
+        for (s in v.strokes) {
+            val since = x - s.at * beatSec
+            if (since < 0) break
+            if (since > 0.7) continue
+            val atk = min(1.0, since / 0.001)
+            val vel = s.vel * atk
+            when (e.type) {
+                FxType.DAPPU -> {
+                    if (s.kind != 'k') tone += vel * 0.9 * membrane(since, 185.0, 158.0, 0.04, 0.12)
+                    slap += vel * (if (s.kind == 'k') 0.75 else 0.8) * exp(-since / (if (s.kind == 'k') 0.025 else 0.03))
+                }
+                FxType.MARFA -> {
+                    if (s.kind == 'L' || s.kind == 'X') tone += vel * membrane(since, 98.0, 75.0, 0.06, 0.25)
+                    if (s.kind == 's' || s.kind == 'X') {
+                        tone += vel * 0.5 * membrane(since, 235.0, 205.0, 0.03, 0.06)
+                        slap += vel * 0.7 * exp(-since / 0.028)
+                    }
+                    if (s.kind == 'c') clang += vel * 0.35 * exp(-since / 0.02)
+                }
+                FxType.DHOL -> {
+                    if (s.kind == 'x' || s.kind == 'X') tone += vel * membrane(since, 88.0, 62.0, 0.05, 0.30)
+                    if (s.kind == 't' || s.kind == 'X') {
+                        slap += vel * 0.8 * exp(-since / 0.04)
+                        tone += vel * 0.35 * membrane(since, 520.0, 500.0, 0.02, 0.05)
+                    }
+                }
+                FxType.THAVIL -> {
+                    slap += vel * 0.9 * exp(-since / 0.02)
+                    tone += vel * 0.6 * membrane(since, 360.0, 330.0, 0.02, 0.08)
+                }
+                else -> Unit
+            }
+        }
+        val noise = if (slap > 1e-4) v.bandPass.process(white(), 0) * 2.2 * slap else 0.0
+        val metal = if (clang > 1e-4) metal(v) * clang else 0.0
+        return 0.75 * tanh(1.3 * tone) + noise + metal
+    }
+
+    /**
+     * A struck drum head [since] seconds after the stroke: pitch bending from [f0] down to [f1]
+     * (time constant [tau]), decaying with time constant [decay]. Closed form, so strokes overlap freely.
+     */
+    private fun membrane(since: Double, f0: Double, f1: Double, tau: Double, decay: Double): Double {
+        val phase = f1 * since + (f0 - f1) * tau * (1 - exp(-since / tau))
+        return sin(2 * PI * phase) * exp(-since / decay)
+    }
+
+    /**
+     * The nadaswaram figure: four notes of the key (half a beat each), each slid up into from
+     * 1.5 semitones below, then the octave held with a vibrato that grows; [left]: seconds to the end.
+     */
+    private fun reed(v: Voice, x: Double, left: Double, beatSec: Double, tonic: Double, minor: Boolean): Double {
+        val steps = if (minor) intArrayOf(0, 3, 5, 7) else intArrayOf(0, 2, 4, 7)
+        val b = x / beatSec
+        val idx = floor(b / 0.5).toInt().coerceIn(0, 4)
+        val noteStart = idx * 0.5 * beatSec
+        val since = x - noteStart
+        val semis = if (idx < 4) steps[idx].toDouble() else 12.0
+        val glide = -1.5 * exp(-since / 0.05)
+        val vibrato = (if (idx < 4) 0.08 else 0.3 * min(1.0, since / 0.4)) * sin(2 * PI * 5.5 * x)
+        val f = tonic * 2.0.pow((semis + glide + vibrato) / 12)
+        v.phase1 = (v.phase1 + f / sr) % 1.0
+        val saw = 2 * (v.phase1 - floor(v.phase1 + 0.5))
+        val voiced = 0.9 * v.bandPass.process(saw.toFloat(), 0) + 0.6 * v.bandPass2.process(saw.toFloat(), 0) + 0.12 * saw
+        // Tongued notes: a quick attack and a slight lift-off before the next one.
+        val shape = if (idx < 4) 1 - 0.35 * (since / (0.5 * beatSec)).coerceIn(0.0, 1.0).pow(3.0) else 1.0
+        return 1.6 * voiced * min(1.0, since / 0.015) * shape * min(1.0, left / 0.2)
+    }
+
 
     private companion object {
         /** Effects sit roughly level with the music (the deck output is soft-limited). */

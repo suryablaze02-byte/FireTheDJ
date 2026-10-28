@@ -260,4 +260,52 @@ class FxChainTest {
         assertEquals(200.0, FxPlan.highPassHz(0.5f), 1e-6)
         assertEquals(2000.0, FxPlan.highPassHz(1f), 1e-6)
     }
+
+    @Test
+    fun muteLeavesAGapWithoutClicks() {
+        val input = sine(220.0, 1.5, amp = 0.5)
+        val out = run(plan(listOf(FxEvent(FxType.MUTE, 0.5, 0.75))), input)
+        assertTrue(rms(out, 0.51, 0.74) < 0.005)
+        assertTrue(rms(out, 0.8, 1.0) > 0.25)
+        val natural = (1 until input.size).maxOf { abs(input[it] - input[it - 1]) }
+        for (edge in listOf(0.5, 0.75)) {
+            val worst = (((edge - 0.005) * sr).toInt() until ((edge + 0.005) * sr).toInt()).maxOf { abs(out[it] - out[it - 1]) }
+            assertTrue("jump $worst at $edge s", worst < 2.5f * natural)
+        }
+    }
+
+    @Test
+    fun regionalDrumsPlayOnTheBeat() {
+        // Dappu "teen maar": accents on beats one, two and three (0, 0.5, 1.0 s at 120 BPM), not on four.
+        val hits = run(plan(listOf(FxEvent(FxType.DAPPU, 0.0, 2.0, p1 = Drum.HIT))), FloatArray(sr * 2))
+        val accent = rms(hits, 1.005, 1.06)
+        for (beat in listOf(0.0, 0.5, 1.0)) assertTrue("beat at $beat", rms(hits, beat + 0.005, beat + 0.06) > 0.05)
+        assertTrue(rms(hits, 1.6, 1.9) < 0.3 * accent)
+        // A fill gets busier and louder into the bar line.
+        val fill = run(plan(listOf(FxEvent(FxType.DAPPU, 0.0, 2.0, 0.6f, 1f, p1 = Drum.FILL))), FloatArray(sr * 2))
+        assertTrue(rms(fill, 1.5, 2.0) > rms(fill, 0.0, 0.5))
+    }
+
+    @Test
+    fun soundEffectsSampledJustOutsideTheirTimeAreSilentNotACrash() {
+        // Effects are picked per block, so the first samples of a block can come before an effect starts.
+        val synth = SfxSynth(44100)
+        val types = FxType.entries.filter { it.isSfx }
+        for (type in types) {
+            val e = FxEvent(type, 10.0, 12.0, p1 = if (type == FxType.NADASWARAM) 330f else 1f)
+            assertEquals("$type", 0f, synth.sample(listOf(e), 9.999, 0.5), 0f)
+            assertEquals("$type", 0f, synth.sample(listOf(e), 12.0, 0.5), 0f)
+        }
+    }
+
+    @Test
+    fun aDeckPlaysThroughABlockThatStartsJustBeforeTheReed() {
+        val sr = 44100
+        val chain = FxChain(sr, 2)
+        chain.plan = FxPlan(0.5, 0.0, Lane(emptyList(), 1f), Lane(emptyList(), 1f), listOf(FxEvent(FxType.NADASWARAM, 1.0003, 3.0, p1 = 330f)))
+        chain.reset(0.99)
+        val buf = FloatArray(2 * sr) { 0.1f * sin(it * 0.05).toFloat() }
+        chain.process(buf, sr)
+        assertTrue(buf.all { it.isFinite() })
+    }
 }

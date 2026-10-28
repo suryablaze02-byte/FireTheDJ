@@ -14,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import com.autodj.lyrics.LyricsStore
 import com.autodj.openAppIntent
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -51,6 +52,7 @@ class MixService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         engine = EngineHolder.get(this)
+        LyricsStore.init(this)
         crates = CrateLibrary(this)
         val openApp = PendingIntent.getActivity(
             this,

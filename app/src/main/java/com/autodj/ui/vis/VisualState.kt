@@ -62,6 +62,23 @@ class VisualState {
     var slowBass = 0f
         private set
 
+    /** The song the room hears most (the louder deck), for the lyric looks: its uri and grid. */
+    var songUri = ""
+        private set
+    var songPos = 0.0
+        private set
+    var songBeatSec = 0.5
+        private set
+    var songDownbeat = 0.0
+        private set
+
+    /** A word-play mix about to happen, or null. */
+    var cue: String? = null
+        private set
+
+    /** Where the lyrics are held while a [HOLDS_LYRICS] effect plays, or null. */
+    private var holdAt: Double? = null
+
     private var lastNanos = 0L
     private var lastKickBeat = -1
 
@@ -83,6 +100,19 @@ class VisualState {
             }
         }
         for (b in 0 until n) mix[b] = max(bands[0][b], bands[1][b])
+        cue = f?.cue
+        val heard = listOfNotNull(decks[0], decks[1]).maxByOrNull { it.gain }
+        if (heard != null) {
+            // While an effect bends the audio (a loop repeating a word, a spinback, a brake, a
+            // scratch, the silent gap), the song isn't moving on, so the words hold where the
+            // effect began; they catch up when the music plays on.
+            val held = heard.fx.any { it.type in HOLDS_LYRICS }
+            if (heard.uri != songUri) holdAt = null
+            songPos = if (held) (holdAt ?: heard.positionSec).also { holdAt = it } else heard.positionSec.also { holdAt = null }
+            songUri = heard.uri
+            songBeatSec = heard.beatSec
+            songDownbeat = heard.downbeatSec
+        }
         val lead = decks[0] ?: decks[1]
         if (lead != null && !paused) {
             beat = lead.beat
@@ -115,6 +145,9 @@ class VisualState {
     fun frac(x: Float) = x - floor(x)
 
     companion object {
+        /** Effects that stop the song moving on (a loop, a spin, a brake, a scratch, a gap): the lyrics hold through them. */
+        private val HOLDS_LYRICS = setOf(FxType.LOOP_ROLL, FxType.SCRATCH, FxType.BACKSPIN, FxType.BRAKE, FxType.MUTE)
+
         val PALETTE = listOf(
             Color(0xFFFF7A45) to Color(0xFFFF3D8B),
             Color(0xFFB45AFF) to Color(0xFF5AA8FF),

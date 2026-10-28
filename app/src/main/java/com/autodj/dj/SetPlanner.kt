@@ -1,6 +1,7 @@
 package com.autodj.dj
 
 import com.autodj.analysis.Genres
+import com.autodj.lyrics.TimedLyrics
 import com.autodj.model.TrackInfo
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -40,8 +41,14 @@ object SetPlanner {
         // Building energy is fine; dropping it suddenly kills a dance floor.
         val energy = if (dE >= 0) dE * 0.3 else -dE * 0.6
         // Harmonic mixing: keys that sit together on the Camelot wheel (a ±2 st shift allowed).
+        // Stepping up the wheel into a track that's at least as big lifts the floor, so it's
+        // sought out: one step costs less than staying put, two steps (played as a cut) are fine.
         val (shift, fits) = TransitionPlanner.keyShift(a, 0, b)
-        val key = if (fits) abs(shift) * 0.4 else 2.5
+        val key = when (TransitionPlanner.keyLift(a, 0, b)) {
+            1 -> -0.6
+            2 -> 0.6
+            else -> if (fits) abs(shift) * 0.4 else 2.5
+        }
         return tempo + genre + sound + bass + energy + key
     }
 
@@ -53,15 +60,34 @@ object SetPlanner {
      * that are nearly as good a match as the best one (within [VARIETY_MARGIN]), so sets vary
      * without taking a worse transition; without it, always the best.
      */
-    fun pickNext(current: TrackInfo, remaining: List<TrackInfo>, random: Random? = null): TrackInfo? {
+    fun pickNext(
+        current: TrackInfo,
+        remaining: List<TrackInfo>,
+        random: Random? = null,
+        /** Timed words per track: a song that can answer a word of [current] is a better next pick. */
+        lyrics: (TrackInfo) -> TimedLyrics? = { null },
+    ): TrackInfo? {
         if (remaining.isEmpty()) return null
-        val costs = remaining.associateWith { transitionCost(current, it) }
+        val mine = lyrics(current)
+        val costs = remaining.associateWith {
+            transitionCost(current, it) - if (mine != null && wordFriendly(current, it) && WordPlay.hasLink(mine, lyrics(it), it.durationSec)) WORD_LINK_BONUS else 0.0
+        }
         val best = costs.values.min()
         if (random == null) return costs.minBy { it.value }.key
         return costs.filterValues { it <= best + VARIETY_MARGIN }.keys.random(random)
     }
 
     private const val VARIETY_MARGIN = 1.0
+
+    /**
+     * How much a shared word makes up for. The word comes first: it outweighs a tempo or groove
+     * mismatch (the word-play mix bridges those), but only between songs that belong together.
+     */
+    private const val WORD_LINK_BONUS = 5.0
+
+    /** The same or a neighbouring genre, and no big drop in loudness: a word never pulls in a stranger. */
+    private fun wordFriendly(a: TrackInfo, b: TrackInfo) =
+        Genres.distance(a.genreFamily, b.genreFamily) <= 1 && b.loudnessDb >= a.loudnessDb - 3.0
 
     /** The order the queue would play in from here, for display. */
     fun upcoming(current: TrackInfo, remaining: List<TrackInfo>): List<TrackInfo> {

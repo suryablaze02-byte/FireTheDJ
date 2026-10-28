@@ -65,6 +65,9 @@ enum class FxType(val label: String) {
     /** Turntable stop: the platter slows to a halt (pitch falls with it). */
     BRAKE("Brake"),
 
+    /** Silence: the music (and effects) drop out, the gap before a drop. Echo and reverb tails ring on. */
+    MUTE("Gap"),
+
     // Synthesised DJ sound effects, mixed on top of the deck.
     SIREN("Siren"),
     HORN("Air horn"),
@@ -78,6 +81,14 @@ enum class FxType(val label: String) {
     DOWNLIFTER("Downlifter"),
     WHOOSH("Whoosh"),
     GUNSHOT("Gunshot"),
+
+    // Indian regional percussion and reed (see [SfxSynth]).
+    DAPPU("Dappu"),
+    MARFA("Marfa"),
+    DHOL("Dhol"),
+    THAVIL("Thavil"),
+    NADASWARAM("Nadaswaram"),
+
     ;
 
     val isSfx get() = ordinal >= SIREN.ordinal
@@ -100,8 +111,10 @@ enum class FxType(val label: String) {
  * | LOFI | intensity | lowest bit depth | highest decimation |
  * | VOCAL_CUT | how much centre above ~180 Hz is removed | | |
  * | VOCAL_ISOLATE | blend to centre-only 250 Hz–5 kHz | | |
- * | BRAKE | | | |
+ * | BRAKE, MUTE | | | |
  * | SIREN, HORN, LASER, RISER, IMPACT, SNARE_ROLL, … | level | rate (siren LFO Hz; laser zaps, gunshots: beats apart) | |
+ * | DAPPU, MARFA, DHOL, THAVIL | level | [Drum.FILL], [Drum.HIT] or [Drum.FILL_AND_HIT] | |
+ * | NADASWARAM | level | tonic, Hz | 1 = minor key |
  */
 class FxEvent(
     val type: FxType,
@@ -114,6 +127,18 @@ class FxEvent(
 ) {
     fun isActive(t: Double) = t >= start && t < end
     fun amount(t: Double) = from + (to - from) * ((t - start) / (end - start)).toFloat().coerceIn(0f, 1f)
+}
+
+/** What a percussion event ([FxType.DAPPU], [FxType.MARFA], [FxType.DHOL], [FxType.THAVIL]) plays, as its p1. */
+object Drum {
+    /** The groove, then a fill ending on the event's end (the bar line). */
+    const val FILL = 0f
+
+    /** Only the accents that land on the bar line: "teen maar" three hits, or one unison hit. */
+    const val HIT = 1f
+
+    /** Fill into the bar line, then the accents on it: one bar before, a bar after. */
+    const val FILL_AND_HIT = 2f
 }
 
 /** Everything one deck does during a transition, timed against that deck's own track. */
