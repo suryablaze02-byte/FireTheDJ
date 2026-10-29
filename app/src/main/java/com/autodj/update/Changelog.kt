@@ -14,6 +14,35 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.4.0",
+            "Trickster tricks you can hear, lyrics ready as songs are analysed, sounds that follow the music's language, and a skip button.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Trickster, rebuilt", "A trick about every 30 seconds, stacked into drops, with a showpiece at the biggest one. Over the singing, only tricks that sit on top of the voice. Mixes stay clean: never two songs at full volume, one bassline at a time."),
+                        Change("Bass boost and EQ tricks", "Bass boosts on choruses, bass kills that slam back on the drop, mids out, and a muffle that opens up on the downbeat."),
+                        Change("Pitch tricks", "Loops that rise in pitch into a drop, tape stops, a half-time bar, and a key lift on the last chorus."),
+                        Change("Sets that follow the language", "Each song's language comes from the YT Music chip its playlist was picked from, the playlist's name, its lyrics or its tags, and shows on the song and the set."),
+                        Change("Latin and Arabic sounds", "Spanish and Portuguese songs get timbales, cowbell, güira, shaker and samba whistles; Arabic songs get darbuka, claps and the mizmar; Telugu and Tamil songs get whistle calls with their drums. Always on top of the genre's own tricks."),
+                        Change("Skip button", "Next to play: the song mixes out at its next phrase, tap again for the next bar. The song's tricks still to come are dropped; the next song and the mix stay. Next buttons on headphones, cars and the notification skip too."),
+                        Change("Lyrics ready sooner", "Lyrics are fetched and lined up while each song is analysed, so word-play mixes can happen from the first set. When the lyrics catalogue is busy, FireTheDJ asks again later."),
+                        Change("Better word play (phone)", "Words that sound alike or rhyme count too, and the song's title and hook words count most."),
+                        Change("Analysis in the background", "Keeps going with the screen off, 4 songs at a time (2 while a set plays). Settings › Analysis turns it off, sets how many songs at once and shows how many have lyrics."),
+                    ),
+                ),
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Hi-res FLAC", "Large and 24-bit FLAC libraries no longer crash the app while it reads them."),
+                        Change("Full songs from YouTube", "Songs that came through as a 59-second preview are swapped for a full-length upload."),
+                        Change("Right lyrics for remixes", "A remix shows its own lyrics, never the original's."),
+                        Change("Full titles", "YouTube titles with a dash inside brackets, like \"(Club Mix - Extended Version)\", keep their whole title."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.3.2",
             "Updates start downloading as soon as installing is allowed.",
             listOf(
