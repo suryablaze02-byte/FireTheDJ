@@ -16,8 +16,11 @@ class FoundLyrics(val lrc: String, val source: String, val durationSec: Double?)
  * means adding one of these.
  */
 fun interface LyricsSource {
-    /** [title] and [artist] already cleaned of upload notes; [durationSec] is our track's length. */
-    fun find(title: String, artist: String, durationSec: Double): FoundLyrics?
+    /**
+     * [title] and [artist] already cleaned of upload notes; [durationSec] is our track's length;
+     * [version] the remix or edit it is ("gaullin"), whose lyrics must be that version's, or null.
+     */
+    fun find(title: String, artist: String, durationSec: Double, version: String?): FoundLyrics?
 }
 
 object LyricsSources {
@@ -29,15 +32,27 @@ object LyricsSources {
     /** Tried first to last. LRCLIB is an open, community-built catalogue made for apps like this. */
     val chain: List<LyricsSource> = listOf(Lrclib(::httpGet))
 
-    /** The first timed lyrics any source has for the song, or null. */
+    /** No source could be asked (offline, timed out, the catalogue overloaded): not the same as "no lyrics". */
+    class LookupFailed(cause: Throwable) : java.io.IOException(cause.message, cause)
+
+    /**
+     * The first timed lyrics any source has for the song, or null when the sources answered and
+     * none has it. Throws [LookupFailed] when no source could answer, so the song is asked about
+     * again later instead of being written off.
+     */
     fun find(title: String, artist: String, durationSec: Double): FoundLyrics? {
+        val version = versionOf(title)
         val t = cleanTitle(title)
         val a = cleanArtist(artist)
         if (t.isBlank()) return null
+        var failure: Throwable? = null
+        var answered = false
         for (source in chain) {
-            val found = runCatching { source.find(t, a, durationSec) }.getOrNull()
-            if (found != null) return found
+            val result = runCatching { source.find(t, a, durationSec, version) }
+            result.getOrNull()?.let { return it }
+            if (result.isSuccess) answered = true else failure = result.exceptionOrNull()
         }
+        if (!answered && failure != null) throw LookupFailed(failure)
         return null
     }
 
@@ -56,19 +71,81 @@ object LyricsSources {
         .replace(Regex("""\s+"""), " ")
         .trim()
 
+    /** Notes that keep the original arrangement: its lyrics still line up. */
+    private val SAME_ARRANGEMENT = Regex("""\b(radio|original|extended|clean|explicit|single|album|official)\b""", RegexOption.IGNORE_CASE)
+
+    /** A bracketed or dashed note naming a remix, bootleg, edit or other rework, with the words before it. */
+    private val VERSION_NOTE = Regex("""[(\[]([^)\]]*?)\s*\b(remix|rmx|bootleg|flip|rework|edit|mix|vip|mashup|cover|remake)\b[^)\]]*[)\]]|\s-\s(.*?)\s*\b(remix|rmx|bootleg|flip|rework|edit|mix|vip)\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The remix or rework a title names, as the word its lyrics must carry too: "Sweater
+     * Weather (Gaullin Remix)" → "gaullin", "Titanium (David Guetta & MORTEN Future Rave Remix)"
+     * → "guetta". Null for the original arrangement ("Radio Edit", "Original Mix", "Extended Mix").
+     */
+    fun versionOf(title: String): String? {
+        val m = VERSION_NOTE.find(title) ?: return null
+        val note = m.value
+        if (SAME_ARRANGEMENT.containsMatchIn(note)) return null
+        val who = (m.groups[1]?.value ?: m.groups[3]?.value).orEmpty()
+        // A word of the remixer's name: the longest in the note once styles ("Future Rave") are left out.
+        val words = who.lowercase().split(Regex("""[^\p{L}\p{N}]+""")).filter { it.length >= 3 && it !in VERSION_STOP }
+        return words.maxByOrNull { it.length } ?: m.groups[2]?.value?.lowercase() ?: m.groups[4]?.value?.lowercase()
+    }
+
+    /** Words in a remix note that aren't the remixer's name. */
+    private val VERSION_STOP = setOf("feat", "featuring", "the", "and", "future", "rave", "house", "club", "dance", "deep", "tech", "remix", "edit", "mix", "version", "live")
+
     /** Record labels and "- Topic" channels aren't the artist; leave those out of the search. */
     fun cleanArtist(artist: String): String {
         val a = artist.replace(Regex("""\s*-\s*topic$""", RegexOption.IGNORE_CASE), "").trim()
         return if (Regex("""\b(music|records|series|official|films|movies|entertainment)\b""", RegexOption.IGNORE_CASE).containsMatchIn(a)) "" else a
     }
 
+    /** When the last request went out: requests from songs analysed side by side are spaced out, to go easy on a free catalogue. */
+    private var lastRequest = 0L
+    private val pace = Any()
+    private const val REQUEST_GAP_MS = 400L
+
+    /** Spacing after the catalogue said it was busy, kept for [BUSY_FOR_MS]. */
+    private const val BUSY_GAP_MS = 1500L
+    private const val BUSY_FOR_MS = 60_000L
+    private var busyUntil = 0L
+
+    /** Waits before each retry of a request the catalogue turned away. */
+    private val RETRY_WAITS_MS = longArrayOf(2_000, 5_000, 10_000)
+
     private fun httpGet(url: String): String? {
+        var attempt = 0
+        while (true) {
+            try {
+                return request(url)
+            } catch (e: java.io.IOException) {
+                // A busy catalogue ("503 overloaded") or a dropped connection: slow down, wait, try again.
+                if (attempt >= RETRY_WAITS_MS.size || e.message == "HTTP 400") throw e
+                busyUntil = System.currentTimeMillis() + BUSY_FOR_MS
+                Thread.sleep(RETRY_WAITS_MS[attempt++])
+            }
+        }
+    }
+
+    private fun request(url: String): String? {
+        synchronized(pace) {
+            val gap = if (System.currentTimeMillis() < busyUntil) BUSY_GAP_MS else REQUEST_GAP_MS
+            val wait = lastRequest + gap - System.currentTimeMillis()
+            if (wait > 0) Thread.sleep(wait)
+            lastRequest = System.currentTimeMillis()
+        }
         val c = URL(url).openConnection() as HttpURLConnection
         return try {
             c.connectTimeout = 8000
             c.readTimeout = 10000
             c.setRequestProperty("User-Agent", USER_AGENT)
-            if (c.responseCode == 200) c.inputStream.bufferedReader().readText() else null
+            // 404 is the catalogue saying it hasn't got the song; any other error is a failed request.
+            when (val code = c.responseCode) {
+                200 -> c.inputStream.bufferedReader().readText()
+                404 -> null
+                else -> throw java.io.IOException("HTTP $code")
+            }
         } finally {
             c.disconnect()
         }
@@ -84,26 +161,29 @@ object LyricsSources {
  * the length must match closely instead. Of the results that pass, the closest in length wins.
  */
 class Lrclib(private val get: (String) -> String?) : LyricsSource {
-    override fun find(title: String, artist: String, durationSec: Double): FoundLyrics? {
+    override fun find(title: String, artist: String, durationSec: Double, version: String?): FoundLyrics? {
         val base = "https://lrclib.net/api"
-        val pick = { body: String -> pick(JSONArray(body), durationSec, title, artist) }
+        val pick = { body: String -> pick(JSONArray(body), durationSec, title, artist, version) }
         if (artist.isNotBlank()) {
             get("$base/get?track_name=${LyricsSources.enc(title)}&artist_name=${LyricsSources.enc(artist)}&duration=${durationSec.toInt()}")
-                ?.let { pick(JSONArray().put(JSONObject(it)), durationSec, title, artist) }?.let { return it }
+                ?.let { pick(JSONArray().put(JSONObject(it)), durationSec, title, artist, version) }?.let { return it }
             get("$base/search?track_name=${LyricsSources.enc(title)}&artist_name=${LyricsSources.enc(artist)}")?.let(pick)?.let { return it }
         }
         return get("$base/search?q=${LyricsSources.enc(title)}")?.let(pick)
     }
 
     /** The timed result for our song closest in length to ours, within [LyricsSources.MAX_LENGTH_GAP_SEC]. */
-    fun pick(results: JSONArray, durationSec: Double, title: String, artist: String): FoundLyrics? {
+    fun pick(results: JSONArray, durationSec: Double, title: String, artist: String, version: String? = null): FoundLyrics? {
         var best: FoundLyrics? = null
         var bestGap = Double.MAX_VALUE
         for (i in 0 until results.length()) {
             val o = results.optJSONObject(i) ?: continue
             val lrc = o.optString("syncedLyrics", "")
             if (lrc.isBlank() || lrc == "null") continue
-            if (!sameTitle(title, o.optString("trackName", ""))) continue
+            val theirs = o.optString("trackName", "")
+            if (!sameTitle(title, theirs)) continue
+            // A remix is arranged differently: only lyrics timed to that remix line up with it.
+            if (version != null && !theirs.lowercase().contains(version)) continue
             val len = o.optDouble("duration", Double.NaN)
             val gap = if (len.isNaN()) LyricsSources.MAX_LENGTH_GAP_SEC else abs(len - durationSec)
             val known = artist.isNotBlank()

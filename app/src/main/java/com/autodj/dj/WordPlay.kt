@@ -7,9 +7,22 @@ import kotlin.math.abs
 import kotlin.math.min
 
 /** A word A sings that B answers: the same word ([rhyme] = false) or one that rhymes with it. */
-class WordLink(val aWord: LyricWord, val bWord: LyricWord, val rhyme: Boolean, val score: Double) {
-    /** "“party”", or "“love” → “above”" for a rhyme. */
-    val label get() = if (rhyme) "“${aWord.text}” → “${bWord.text}”" else "“${aWord.text}”"
+class WordLink(val aWord: LyricWord, val bWord: LyricWord, val rhyme: Boolean, val score: Double, val kind: Kind = if (rhyme) Kind.RHYME else Kind.SAME) {
+    /** "“party”", "“night” ~ “knight”" for words that sound alike, "“fire” → “higher”" for a rhyme. */
+    val label get() = when (kind) {
+        Kind.SAME -> "“${aWord.text}”"
+        Kind.SOUNDS_ALIKE -> "“${aWord.text}” ~ “${bWord.text}”"
+        Kind.RHYME -> "“${aWord.text}” → “${bWord.text}”"
+    }
+}
+
+/** How B's word answers A's, strongest first: [base] is where its score starts. */
+enum class Kind(val base: Double) {
+    SAME(3.0),
+
+    /** Spelled differently, sounds the same ("night", "knight"; "tonight", "tonite"). */
+    SOUNDS_ALIKE(2.7),
+    RHYME(2.0),
 }
 
 /**
@@ -25,6 +38,16 @@ object WordPlay {
     /** A link worth a transition: a clear same-word match, or a rhyme with everything going for it. */
     const val MIN_SCORE = 3.0
 
+    /** Trickster takes a looser link than [MIN_SCORE]: word play is one of its tricks. */
+    const val TRICKSTER_MIN_SCORE = 2.5
+
+    private const val TITLE_BONUS = 1.0
+
+    /** The linkable words of a song title, as keys: "If I Lose Myself (Alesso vs OneRepublic)" → lose, myself. */
+    fun titleKeys(title: String): Set<String> =
+        title.substringBefore(" (").substringBefore(" - ").split(Regex("""[^\p{L}\p{N}']+"""))
+            .map(WordKey::of).filter(WordKey::linkable).toSet()
+
     fun find(
         a: TimedLyrics,
         b: TimedLyrics,
@@ -36,31 +59,65 @@ object WordPlay {
         targetSec: Double,
         /** B's energy at a time, 0..1: a line that comes in over light drums enters more gently. */
         bEnergyAt: (Double) -> Double = { 0.5 },
-    ): WordLink? {
+    ): WordLink? = search(a, b, aFromSec, aToSec, bFromSec, bToSec, targetSec, bEnergyAt).link?.takeIf { it.score >= MIN_SCORE }
+
+    /**
+     * What a search found, good enough or not, for saying why a mix did or didn't use word play:
+     * the best link, how many of A's words could end it, and how many of B's line openers could answer.
+     */
+    class Search(val link: WordLink?, val aWords: Int, val bOpeners: Int)
+
+    fun search(
+        a: TimedLyrics,
+        b: TimedLyrics,
+        aFromSec: Double,
+        aToSec: Double,
+        bFromSec: Double,
+        bToSec: Double,
+        targetSec: Double,
+        bEnergyAt: (Double) -> Double = { 0.5 },
+        /** Keys of the words in both songs' titles (see [titleKeys]). */
+        titleWords: Set<String> = emptySet(),
+    ): Search {
         val openers = b.words.withIndex()
             .filter { (i, w) -> w.startSec in bFromSec..bToSec && WordKey.linkable(w.key) && opensLine(b.words, i) }
             .map { it.value }
-        if (openers.isEmpty()) return null
+        val aWords = a.words.count { it.endSec in aFromSec..aToSec && WordKey.linkable(it.key) }
+        if (openers.isEmpty()) return Search(null, aWords, 0)
         val byKey = openers.groupBy { it.key }
-        val byRhyme = openers.filter { it.key.length >= 4 }.groupBy { it.key.takeLast(3) }
+        val bySound = openers.groupBy { WordKey.sound(it.text) }
+        val byRhyme = openers.groupBy { WordKey.rhyme(WordKey.sound(it.text)) }
         var best: WordLink? = null
         for (w in a.words) {
             if (w.endSec !in aFromSec..aToSec || !WordKey.linkable(w.key)) continue
-            val same = byKey[w.key].orEmpty().map { it to false }
-            val rhymes = if (w.key.length >= 4) byRhyme[w.key.takeLast(3)].orEmpty().filter { it.key != w.key }.map { it to true } else emptyList()
-            for ((bw, rhyme) in same + rhymes) {
-                var s = if (rhyme) 2.0 else 3.0
+            val sound = WordKey.sound(w.text)
+            val rhymeKey = WordKey.rhyme(sound)
+            // The same word; then one that sounds the same, spelled otherwise; then a rhyme.
+            val same = byKey[w.key].orEmpty().map { it to Kind.SAME }
+            val alike = bySound[sound].orEmpty().filter { it.key != w.key }.map { it to Kind.SOUNDS_ALIKE }
+            val rhymes = if (rhymeKey != null && sound.length >= 3) {
+                byRhyme[rhymeKey].orEmpty().filter { it.key != w.key && WordKey.sound(it.text) != sound }.map { it to Kind.RHYME }
+            } else {
+                emptyList()
+            }
+            for ((bw, kind) in same + alike + rhymes) {
+                val rhyme = kind == Kind.RHYME
+                var s = kind.base
                 s += 0.1 * min(6, w.key.length - 3)
                 if (w.lineEnd) s += 0.6
-                // A hook both songs keep coming back to is the one people recognise.
-                if ((a.counts[w.key] ?: 0) >= 3 && (b.counts[bw.key] ?: 0) >= 3) s += 0.8
+                // A hook both songs keep coming back to is the one people recognise; one song's hook still helps.
+                val aHook = (a.counts[w.key] ?: 0) >= 3
+                val bHook = (b.counts[bw.key] ?: 0) >= 3
+                if (aHook && bHook) s += 0.8 else if (aHook || bHook) s += 0.4
+                // A word from either song's title ("lose" into "If I Lose Myself") is the one the crowd knows.
+                if (w.key in titleWords || bw.key in titleWords) s += TITLE_BONUS
                 s -= abs(w.endSec - targetSec) / 60
                 s -= (bw.startSec - bFromSec) / 120
                 s += (0.7 - bEnergyAt(bw.startSec)) * 0.5
-                if (s > (best?.score ?: Double.NEGATIVE_INFINITY)) best = WordLink(w, bw, rhyme, s)
+                if (s > (best?.score ?: Double.NEGATIVE_INFINITY)) best = WordLink(w, bw, rhyme, s, kind)
             }
         }
-        return best?.takeIf { it.score >= MIN_SCORE }
+        return Search(best, aWords, openers.size)
     }
 
     /**
@@ -81,14 +138,18 @@ object WordPlay {
     }
 
     /**
-     * Quick check for choosing the next song: does a word A sings after its first
+     * Quick check for choosing the next song: does a word A sings (or one that sounds like it) after its first
      * [TransitionPlanner.MIN_PLAY_SEC] open a line in the part of B that may be skipped to
      * (its first 40%)? The planner then looks for the exact moment.
      */
     fun hasLink(a: TimedLyrics?, b: TimedLyrics?, bDurationSec: Double): Boolean {
         if (a == null || b == null) return false
-        val aKeys = a.words.filter { it.endSec >= TransitionPlanner.MIN_PLAY_SEC && WordKey.linkable(it.key) }.mapTo(HashSet()) { it.key }
-        if (aKeys.isEmpty()) return false
-        return b.words.withIndex().any { (i, w) -> w.startSec <= 0.4 * bDurationSec && w.key in aKeys && opensLine(b.words, i) }
+        val aWords = a.words.filter { it.endSec >= TransitionPlanner.MIN_PLAY_SEC && WordKey.linkable(it.key) }
+        if (aWords.isEmpty()) return false
+        val aKeys = aWords.mapTo(HashSet()) { it.key }
+        val aSounds = aWords.mapTo(HashSet()) { WordKey.sound(it.text) }
+        return b.words.withIndex().any { (i, w) ->
+            w.startSec <= 0.4 * bDurationSec && (w.key in aKeys || WordKey.sound(w.text) in aSounds) && opensLine(b.words, i)
+        }
     }
 }

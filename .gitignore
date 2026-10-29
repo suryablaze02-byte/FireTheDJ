@@ -18,3 +18,12 @@ launch/cards/
 launch/*.mp4
 launch/*.wav
 launch/instagram/
+
+# Reference reels for audio analysis: other DJs' mixes, never commit.
+research/adi_wav/
+
+# Explainer video: the Kokoro voice model (~340 MB, downloaded by voice.py), the rendered
+# frames and browser profile, and the spoken lines. Scripts and script.json stay.
+launch/voice/
+launch/explainer-*/render/
+launch/explainer-*/wav/

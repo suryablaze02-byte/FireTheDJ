@@ -89,6 +89,7 @@ class RemoteLibrary(dir: File) {
             for (p in list) put(
                 JSONObject()
                     .put("link", p.link).put("providerId", p.providerId).put("playlistId", p.playlistId).put("name", p.name)
+                    .putOpt("origin", p.origin)
                     .put("tracks", JSONArray().apply {
                         for (t in p.tracks) put(
                             JSONObject()
@@ -109,6 +110,7 @@ class RemoteLibrary(dir: File) {
                 providerId = p.getString("providerId"),
                 playlistId = p.getString("playlistId"),
                 name = p.getString("name"),
+                origin = p.optString("origin").ifBlank { null },
                 tracks = (0 until tracks.length()).map { j ->
                     val t = tracks.getJSONObject(j)
                     RemoteTrack(

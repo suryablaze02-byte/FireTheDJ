@@ -150,7 +150,7 @@ class EffectLayer {
             }
             FxType.BACKSPIN, FxType.BRAKE -> shake = max(shake, 0.3f)
             // The regional drums: a marigold shockwave and a shake on every fill.
-            FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL -> {
+            FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.TIMBALES, FxType.DARBUKA -> {
                 shake = max(shake, 0.6f)
                 waves += Wave(Color(0xFFFFB020), t, 0.8f, 9f)
                 if (s.energy > 0.45f) fireCannons(t, chase = true)
@@ -347,7 +347,7 @@ class EffectLayer {
             FxType.RISER, FxType.SNARE_ROLL -> scale *= 0.85f + 0.2f * min(1f, age)
             FxType.BACKSPIN -> rot = -360f * min(1f, age * 1.2f)
             FxType.SCRATCH -> dx = sin(age * 60f) * w * 0.04f
-            FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL -> scale *= 1f + 0.08f * abs(sin(age * 12f))
+            FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.TIMBALES, FxType.DARBUKA -> scale *= 1f + 0.08f * abs(sin(age * 12f))
             else -> Unit
         }
         val color = if (type == FxType.SIREN) (if ((age * 8).toInt() % 2 == 0) SIREN_RED else SIREN_BLUE) else calloutColor
@@ -375,7 +375,7 @@ class EffectLayer {
     companion object {
         private const val CALLOUT_SEC = 1.7f
         private val BUILDS = setOf(FxType.RISER, FxType.SNARE_ROLL, FxType.REVERSE_CYMBAL)
-        private val HOT = setOf(FxType.IMPACT, FxType.SUB_DROP, FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL)
+        private val HOT = setOf(FxType.IMPACT, FxType.SUB_DROP, FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.TIMBALES, FxType.DARBUKA)
         private val SIREN_RED = Color(0xFFFF2D4A)
         private val SIREN_BLUE = Color(0xFF2D6BFF)
         private val LASER_GREEN = Color(0xFF3DFF6E)
@@ -389,6 +389,10 @@ class EffectLayer {
             // The regional drums burn marigold; the reed glows warm.
             FxType.DAPPU to Color(0xFFFFB020), FxType.MARFA to Color(0xFFFFB020), FxType.DHOL to Color(0xFFFFB020),
             FxType.THAVIL to Color(0xFFFFD36B), FxType.NADASWARAM to Color(0xFFFFE6A0),
+            // Latin sounds in carnival green and gold, Arabic ones in turquoise.
+            FxType.TIMBALES to Color(0xFFFFD23D), FxType.COWBELL to Color(0xFFFFD23D), FxType.WHISTLE to Color(0xFF3DFF9E),
+            FxType.GUIRA to Color(0xFF3DFF9E), FxType.SHAKER to Color(0xFF3DFF9E),
+            FxType.DARBUKA to Color(0xFF3DE0D0), FxType.CLAPS to Color(0xFF3DE0D0), FxType.MIZMAR to Color(0xFF8FF5EA),
         )
 
         /** What the screen shouts when an effect kicks in. */
@@ -408,6 +412,10 @@ class EffectLayer {
             FxType.LOFI -> "LO-FI"
             FxType.VOCAL_CUT -> "VOCALS OUT"
             FxType.VOCAL_ISOLATE -> "ACAPELLA"
+            FxType.BASS_BOOST -> "BASS BOOST"
+            FxType.BASS_KILL -> "BASS OUT"
+            FxType.MID_CUT -> "MIDS OUT"
+            FxType.TREBLE_CUT -> "MUFFLED"
             FxType.SIREN -> "SIREN"
             FxType.HORN -> "AIR HORN"
             FxType.LASER -> "LASERS"
@@ -426,6 +434,14 @@ class EffectLayer {
             FxType.DHOL -> "DHOL"
             FxType.THAVIL -> "THAVIL"
             FxType.NADASWARAM -> "NADASWARAM"
+            FxType.WHISTLE -> "WHISTLE"
+            FxType.TIMBALES -> "TIMBALES"
+            FxType.COWBELL -> "COWBELL"
+            FxType.GUIRA -> "GÜIRA"
+            FxType.SHAKER -> "SHAKER"
+            FxType.CLAPS -> "CLAPS"
+            FxType.DARBUKA -> "DARBUKA"
+            FxType.MIZMAR -> "MIZMAR"
         }
     }
 }

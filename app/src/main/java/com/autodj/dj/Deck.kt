@@ -157,6 +157,13 @@ class Deck(context: Context) {
         applyParameters()
     }
 
+    /** Shifts the key while playing (the tempo stays): a key lift. Goes through the same stretcher as speed changes, so it's seamless. */
+    fun setPitch(semis: Int) {
+        if (semis == pitchSemis) return
+        pitchSemis = semis
+        applyParameters()
+    }
+
     private fun applyParameters() {
         player.playbackParameters = PlaybackParameters(speed.toFloat(), 2.0.pow(pitchSemis / 12.0).toFloat())
     }

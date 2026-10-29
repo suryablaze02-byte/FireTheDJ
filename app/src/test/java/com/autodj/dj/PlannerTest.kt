@@ -3,11 +3,14 @@ package com.autodj.dj
 import com.autodj.analysis.AudioFeatures
 import com.autodj.analysis.Genres
 import com.autodj.dj.fx.FxType
+import com.autodj.dj.fx.Lane
+import com.autodj.dj.fx.Ramp
 import com.autodj.model.TrackInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
@@ -84,11 +87,11 @@ class PlannerTest {
         assertEquals(a.barTime(t.exitBar + 4), t.endSec, 1e-9)
         val echo = t.aPlan.events.first { it.type == FxType.ECHO }
         assertEquals(t.exitSec, echo.end, 1e-9)
-        // Even a cut is a short crossfade (half a bar, beats locked): neither slams, neither lingers.
-        assertTrue(t.aPlan.gain.at(t.exitSec + a.barSec / 4) in 0.1f..0.9f)
-        assertEquals(0f, t.aPlan.gain.at(t.exitSec + a.barSec / 2), 1e-6f)
-        assertTrue(t.bPlan.gain.at(t.entrySec + a.barSec / 4) in 0.3f..0.9f)
-        assertEquals(1f, t.bPlan.gain.at(t.entrySec + a.barSec / 2), 1e-6f)
+        // Even a cut is a bar-long equal-power crossfade (beats locked): neither slams.
+        assertTrue(t.aPlan.gain.at(t.exitSec + a.barSec / 2) in 0.1f..0.9f)
+        assertEquals(0f, t.aPlan.gain.at(t.exitSec + a.barSec), 1e-6f)
+        assertTrue(t.bPlan.gain.at(t.entrySec + a.barSec / 2) in 0.3f..0.9f)
+        assertEquals(1f, t.bPlan.gain.at(t.entrySec + a.barSec), 1e-6f)
     }
 
     @Test
@@ -222,9 +225,13 @@ class PlannerTest {
         assertEquals(1f, p.speed.at(0.0), 1e-6f)
         assertEquals((126.0 / 124.0).toFloat(), p.speed.at(t.barTime(12)), 1e-6f)
         assertTrue(p.speed.at(t.barTime(60)) > p.speed.at(t.barTime(12)))
-        // Roll build into the drop at bar 80, tightening to 1/8 beat, landing with horn and impact.
-        val dropRolls = p.events.filter { it.type == FxType.LOOP_ROLL && it.end == t.barTime(80) }
-        assertEquals(0.125f, dropRolls.single().p1, 0f)
+        // Roll build into the drop at bar 80, tightening and rising in pitch, set up by a gap, a bass
+        // kill or a tape stop that ends on the drop.
+        val drop = t.barTime(80)
+        val dropRolls = p.events.filter { it.type == FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end >= drop - 2 * t.beatSec - 1e-9 }
+        assertTrue(dropRolls.maxBy { it.end }.p1 <= 0.5f)
+        assertTrue(dropRolls.all { it.p2 > 0f })
+        assertTrue(p.events.any { it.type in setOf(FxType.MUTE, FxType.BASS_KILL, FxType.BRAKE) && it.end == drop })
         // Dressed with a build that ends on the drop and a hit that lands on it.
         assertTrue(p.events.any { it.type.isSfx && it.end == t.barTime(80) })
         assertTrue(p.events.count { it.type.isSfx && it.start == t.barTime(80) } == 2)
@@ -252,7 +259,7 @@ class PlannerTest {
         val rap = track("a", 92.0, Genres.HIPHOP, vocalBars = 0 until 40)
         val p = Performer.plan(rap, entryBar = 0, startSpeed = 1.0, masterBpm = 92.0, mode = MixMode.TRICKSTER)
         // A fill every other phrase end, a few per track, never over the rapping.
-        val fills = p.tricks.filter { it.label !in setOf("Roll into drop", "Hook replay") && !it.label.startsWith("Tempo") && !it.label.startsWith("Glide") }
+        val fills = p.tricks.filter { it.label !in setOf("Hook replay", "Bass boost", "Key lift +1") && "drop" !in it.label && !it.label.startsWith("Tempo") && !it.label.startsWith("Glide") }
         assertTrue("fills: ${fills.map { it.label }}", fills.size >= 2)
         assertTrue(p.events.filter { it.type == FxType.SCRATCH }.all { rap.vocalIn(rap.barAt(it.start + 0.01), rap.barAt(it.start + 0.01) + 1) < 0.5 })
         // Every fill ends on a phrase boundary (the horn starts on one).
@@ -575,6 +582,71 @@ class PlannerTest {
         assertEquals(0, tr.bPitchSemis) // a cut plays B as it is, a step up
     }
 
+
+
+    @Test
+    fun aSkipLandsTheMixOnTheAskedBar() {
+        val a = track("a", 124.0)
+        val b = track("b", 124.0)
+        // Tapped two bars before a phrase: B comes in on it, with a move whose lead-in has room.
+        val now = a.barTime(30) + 0.1
+        for (mode in MixMode.entries) {
+            val tr = TransitionPlanner.plan(a, 0, now, b, exitAt = 32, mode = mode)
+            assertEquals("$mode", 32, tr.exitBar)
+            assertTrue("$mode ${tr.description}", tr.startSec >= now)
+            assertTrue(tr.recipe != Recipe.WORD_PLAY)
+        }
+        // Early in a song (still in its intro) a skip still gets a proper mix, not just the fallback cut.
+        val early = TransitionPlanner.plan(a, 0, a.barTime(6) + 0.1, b, exitAt = 8, mode = MixMode.SMOOTH)
+        assertEquals(8, early.exitBar)
+        assertTrue(early.description, early.recipe != Recipe.HARD_CUT)
+        // Tapped again a beat before the next bar: only a move without a lead-in fits.
+        val late = a.barTime(33) - a.beatSec
+        val tr = TransitionPlanner.plan(a, 0, late, b, exitAt = 33)
+        assertEquals(33, tr.exitBar)
+        assertTrue(tr.description, tr.startSec >= late - 1e-9)
+        // The speed lane after a skip holds where it got to.
+        val lane = Lane(listOf(Ramp(1.0, 1.01, 1f, 0.5f), Ramp(2.0, 2.01, 0.5f, 1f)), 1f)
+        assertEquals(1f, lane.until(2.5).at(3.0), 0f)
+        assertEquals(0.5f, lane.until(1.5).at(3.0), 0f)
+    }
+    @Test
+    fun theLanguageSungPicksThePartySounds() {
+        val latinTypes = setOf(FxType.TIMBALES, FxType.WHISTLE, FxType.COWBELL, FxType.GUIRA, FxType.SHAKER)
+        val arabicTypes = setOf(FxType.DARBUKA, FxType.CLAPS, FxType.MIZMAR)
+        val regional = latinTypes + arabicTypes + setOf(FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.NADASWARAM)
+        fun dressing(t: TrackInfo) = (0 until 3).flatMap { SfxDressing.build(t, 80, 4, it) + SfxDressing.hit(t, 80, it) }.map { it.type }.toSet()
+        val saved = SfxDressing.languageOf
+        try {
+            // Reggaeton names Spanish: Latin sounds, and timbales for the drum-fill cut.
+            val reggaeton = track("r", 96.0, Genres.LATIN, genre = "Reggaeton")
+            assertEquals(SfxDressing.Flavour.LATIN, SfxDressing.flavour(reggaeton))
+            assertTrue(dressing(reggaeton).any { it in latinTypes })
+            assertEquals(FxType.TIMBALES, SfxDressing.drum(reggaeton, 0))
+            // A techno track sung in Arabic stays techno, with the darbuka on top.
+            SfxDressing.languageOf = { "Arabic" }
+            val techno = track("a", 128.0, Genres.TECHNO)
+            assertEquals(SfxDressing.Flavour.ARABIC, SfxDressing.flavour(techno))
+            assertTrue(dressing(techno).any { it in arabicTypes })
+            val p = Performer.plan(techno, 0, 1.0, 128.0, mode = MixMode.TRICKSTER)
+            assertTrue(p.events.any { it.type in arabicTypes })
+            assertTrue(p.tricks.any { it.label in setOf("Gate stutter", "Mids out", "Roll fill", "Echo throw", "Muffle") })
+            // Telugu by language alone gets the south's drums; an English house track nothing regional.
+            SfxDressing.languageOf = { "Telugu" }
+            assertEquals(SfxDressing.Flavour.SOUTH_INDIAN, SfxDressing.flavour(track("t", 96.0, Genres.POP)))
+            SfxDressing.languageOf = { "English" }
+            val house = track("h", 124.0)
+            assertEquals(null, SfxDressing.flavour(house))
+            assertTrue(dressing(house).none { it in regional })
+            // A song whose language isn't known follows the set's.
+            SfxDressing.languageOf = { null }
+            SfxDressing.setLanguage = "Spanish"
+            assertEquals(SfxDressing.Flavour.LATIN, SfxDressing.flavour(house))
+        } finally {
+            SfxDressing.languageOf = saved
+            SfxDressing.setLanguage = null
+        }
+    }
     @Test
     fun indianTracksGetRegionalFillsAndARewind() {
         val t = track("t", 96.0, Genres.HIPHOP, genre = "Telugu Hip Hop")
@@ -630,5 +702,85 @@ class PlannerTest {
         // A is gone as soon as the spin ends; B is in at full on the one.
         assertEquals(0f, tr.aPlan.gain.at(tr.exitSec + 0.05), 0f)
         assertEquals(1f, tr.bPlan.gain.at(tr.entrySec + 0.05), 0f)
+    }
+
+    @Test
+    fun tricksterKeepsATrickComingAndOnlyVoiceSafeOnesOverSinging() {
+        // Sung all the way through: tricks still come, but only ones that sit on top of the voice.
+        val sung = track("sung", 124.0, Genres.HOUSE, bars = 160, outro = 144, vocalBars = 0 until 160)
+        val p = Performer.plan(sung, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.TRICKSTER)
+        val fills = p.tricks.filterNot { it.label.startsWith("Tempo") || it.label.startsWith("Glide") || "drop" in it.label || it.label in setOf("Hook replay", "Rewind", "Bass boost", "Key lift +1") }
+        assertTrue("fills: ${fills.map { it.label }}", fills.size in 3..6)
+        val bending = setOf(FxType.LOOP_ROLL, FxType.SCRATCH, FxType.GATE, FxType.BRAKE, FxType.BACKSPIN)
+        val builds = p.tricks.filter { "drop" in it.label }.map { it.startSec..it.endSec }
+        // Only the builds into drops (the showpieces) bend the track.
+        val wrong = p.events.filter { e -> e.type in bending && builds.none { e.start in it } }
+        assertTrue("bending: ${wrong.map { "${it.type} @${it.start}" }} tricks ${p.tricks.map { "${it.label} @${it.startSec}" }}", wrong.isEmpty())
+        // About a trick every 16 bars: never two within 8 bars.
+        val starts = fills.map { it.startSec }.sorted()
+        assertTrue(starts.zipWithNext().all { (x, y) -> y - x >= 8 * sung.barSec - 1e-6 })
+    }
+
+    @Test
+    fun aSongWithoutAClearDropStillGetsAShowpiece() {
+        // Energy steps up at bar 48 but never from quiet: no textbook drop.
+        val t = track("steady", 124.0, Genres.HOUSE, bars = 128, outro = 112, drop = 48)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.TRICKSTER)
+        assertTrue("tricks: ${p.tricks.map { it.label }}", p.tricks.any { "drop" in it.label })
+    }
+
+    @Test
+    fun noMixPlaysBothSongsNearFullOrTwoBasslinesAtOnce() {
+        val a = track("a", 124.0, Genres.HOUSE, keyConfidence = 0.8f, vocalBars = 40 until 56)
+        val b = track("b", 124.0, Genres.HOUSE, keyConfidence = 0.8f, vocalBars = 16 until 48)
+        val recipes = Recipe.entries.filter { it != Recipe.WORD_PLAY && it != Recipe.LOOP_RAMP && it != Recipe.DRUM_FILL_CUT }
+        for (r in recipes) {
+            val t = runCatching { TransitionPlanner.plan(a, 0, 10.0, b, forced = r, mode = MixMode.TRICKSTER) }.getOrNull() ?: continue
+            if (t.recipe != r) continue
+            var s = t.exitSec
+            while (s < t.handoverSec) {
+                val bSec = t.entrySec + (s - t.exitSec)
+                val aG = t.aPlan.gain.at(s)
+                val bG = t.bPlan.gain.at(bSec)
+                assertFalse("$r at ${"%.2f".format(s)}: A $aG and B $bG both near full", aG > 0.75f && bG > 0.75f)
+                // A high-pass takes a deck's bass out as surely as its bass control.
+                val aCut = (t.aPlan.active(FxType.HIGH_PASS, s)?.amount(s) ?: 0f) > 0.3f
+                val bCut = (t.bPlan.active(FxType.HIGH_PASS, bSec)?.amount(bSec) ?: 0f) > 0.3f
+                val aLow = if (aCut) 0f else aG * t.aPlan.bass.at(s)
+                val bLow = if (bCut) 0f else bG * t.bPlan.bass.at(bSec)
+                assertFalse("$r at ${"%.2f".format(s)}: two basslines (A $aLow, B $bLow)", aLow > 0.5f && bLow > 0.5f)
+                s += 0.05
+            }
+        }
+    }
+
+    @Test
+    fun theLastSungChorusStepsUpAKey() {
+        // A loud, sung chorus at bars 112–127, before the outro at 144.
+        val t = track("chorus", 124.0, Genres.POP, bars = 160, outro = 144, vocalBars = 112 until 128)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.TRICKSTER)
+        val at = p.keyLiftSec
+        assertNotNull(at)
+        assertTrue(t.isPhraseStart(t.barAt(at!! + 0.01)))
+        assertTrue(t.barAt(at + 0.01) in 112 until 128)
+        assertTrue(p.tricks.any { it.label == "Key lift +1" })
+        // Smooth leaves the key alone.
+        assertNull(Performer.plan(t, 0, 1.0, 124.0, mode = MixMode.SMOOTH).keyLiftSec)
+    }
+
+    @Test
+    fun aHalfTimeBarSlowsToHalfSpeedAndSnapsBackOnTheDownbeat() {
+        // Bass music, no singing: some song in the crate gets a half-time bar in its rotation.
+        val p = (0 until 12).asSequence().map { n ->
+            val t = track("bass$n", 140.0, Genres.BASS, bars = 160, outro = 144)
+            t to Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 140.0, mode = MixMode.TRICKSTER)
+        }.firstOrNull { (_, p) -> p.tricks.any { it.label.startsWith("Half-time") } }
+        assertNotNull("no half-time in 12 songs", p)
+        val (t, perf) = p!!
+        val trick = perf.tricks.first { it.label.startsWith("Half-time") }
+        val before = perf.speed.at(trick.startSec - 0.05)
+        assertEquals(before / 2, perf.speed.at(trick.startSec + 0.5), 1e-4f)
+        assertEquals(before, perf.speed.at(trick.endSec + 0.05), 1e-4f)
+        assertTrue(t.isPhraseStart(t.barAt(trick.endSec + 0.01)))
     }
 }

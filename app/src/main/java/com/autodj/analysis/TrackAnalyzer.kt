@@ -15,7 +15,12 @@ object TrackAnalyzer {
      * a stream has no file tags to read (and fetching them would download it twice). [audio] is
      * where to read the sound from when it isn't [uri] itself (a stream's stored copy).
      */
-    fun analyze(context: Context, uri: Uri, known: RemoteTrack? = null, audio: Uri = uri): TrackInfo {
+    fun analyze(context: Context, uri: Uri, known: RemoteTrack? = null, audio: Uri = uri): TrackInfo = analyzeWithSinging(context, uri, known, audio).info
+
+    /** A track's analysis and how much singing there is through it, from one decode (the singing lines up its lyrics). */
+    class Analysed(val info: TrackInfo, val singing: FloatArray)
+
+    fun analyzeWithSinging(context: Context, uri: Uri, known: RemoteTrack? = null, audio: Uri = uri): Analysed {
         val (tagTitle, tagArtist, tagGenre) = if (known != null) Triple(known.title, known.artist, known.genre) else readTags(context, uri)
         // Untagged files are often named "Artist - Title".
         val fileName = displayName(context, uri)
@@ -60,7 +65,7 @@ object TrackAnalyzer {
             keyConfidence = beat.harmony.keyConfidence,
             hookBar = beat.harmony.hookBar,
             tempoMap = beat.tempoMap,
-        )
+        ).let { Analysed(it, BeatAnalyzer.vocalCurve(pcm.samples, pcm.sampleRate)) }
     }
 
     private fun readTags(context: Context, uri: Uri): Triple<String?, String?, String?> {

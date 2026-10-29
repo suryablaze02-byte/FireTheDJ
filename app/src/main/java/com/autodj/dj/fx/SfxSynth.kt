@@ -38,6 +38,19 @@ import kotlin.random.Random
  * - **Nadaswaram** (South Indian wedding reed): a nasal reed voice that slides up into each note
  *   (gamaka), climbing four notes of the track's own key to a held, wavering top note.
  *
+ * Latin and Arabic party sounds, on the same beat patterns:
+ *
+ * - **Whistle** (samba apito): a pea whistle warbling around 3 kHz, calling "long, short-short".
+ * - **Timbales:** two ringing metal-shelled drums and a cascara stick on the shell; the fill
+ *   is the 16th-note roll every salsa and reggaeton break ends on.
+ * - **Cowbell:** two square tones (540 and 800 Hz) through a band-pass, the 808 bell.
+ * - **Güira** (merengue scraper): a long scrape on the beat, two short ones after it.
+ * - **Shaker:** bright noise with a soft attack in 16ths, the "and" accented.
+ * - **Claps:** three quick noise bursts and a short room tail, on two and four.
+ * - **Darbuka** (Arabic goblet drum): the deep "dum" in the middle of the head and the sharp
+ *   "tek" on its rim, playing maqsum ("dum-tek, tek, dum, tek").
+ * - **Mizmar** (Egyptian wedding reed): the reed voice brighter, climbing the hijaz scale.
+ *
  * Each effect has its own oscillators and filters, so effects that overlap (a horn on the
  * same beat as an impact) don't garble each other.
  */
@@ -89,12 +102,25 @@ class SfxSynth(sampleRate: Int) {
                     voice(e.type).bandPass2.bandPass(min(2600.0, 0.45 * sr), 5.0, sr)
                     1100.0
                 }
+                FxType.MIZMAR -> {
+                    voice(e.type).bandPass2.bandPass(min(3200.0, 0.45 * sr), 4.0, sr)
+                    1500.0
+                }
+                FxType.WHISTLE -> 3000.0
+                FxType.TIMBALES -> 2500.0
+                FxType.COWBELL -> 2000.0
+                FxType.GUIRA -> 5000.0
+                FxType.SHAKER -> 6500.0
+                FxType.CLAPS -> 1200.0
+                FxType.DARBUKA -> 3500.0
                 else -> continue
             }
             val q = when (e.type) {
-                FxType.SNARE_ROLL -> 0.8
-                FxType.DAPPU, FxType.MARFA -> 1.2
+                FxType.SNARE_ROLL, FxType.SHAKER -> 0.8
+                FxType.DAPPU, FxType.MARFA, FxType.CLAPS, FxType.DARBUKA -> 1.2
                 FxType.DHOL, FxType.THAVIL -> 1.5
+                FxType.TIMBALES, FxType.COWBELL, FxType.GUIRA -> 1.0
+                FxType.WHISTLE -> 3.0
                 FxType.NADASWARAM -> 5.0
                 else -> 4.0
             }
@@ -131,8 +157,10 @@ class SfxSynth(sampleRate: Int) {
                 FxType.DOWNLIFTER -> downlifter(v, u)
                 FxType.WHOOSH -> whoosh(v, u)
                 FxType.GUNSHOT -> gunshot(v, x % ((if (e.p1 > 0) e.p1 else 1f) * beatSec))
-                FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL -> drum(v, e, x, beatSec)
-                FxType.NADASWARAM -> reed(v, x, left, beatSec, if (e.p1 > 0) e.p1.toDouble() else 330.0, e.p2 >= 1f)
+                FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.WHISTLE, FxType.TIMBALES, FxType.COWBELL,
+                FxType.GUIRA, FxType.SHAKER, FxType.CLAPS, FxType.DARBUKA -> drum(v, e, x, beatSec)
+                FxType.NADASWARAM -> reed(v, x, left, beatSec, if (e.p1 > 0) e.p1.toDouble() else 330.0, if (e.p2 >= 1f) MINOR else MAJOR)
+                FxType.MIZMAR -> reed(v, x, left, beatSec, if (e.p1 > 0) e.p1.toDouble() else 330.0, HIJAZ)
                 else -> 0.0
             }
         }
@@ -297,6 +325,31 @@ class SfxSynth(sampleRate: Int) {
         }
         // Stick strokes in 16ths, accented in threes.
         FxType.THAVIL -> (0 until 16).map { Stroke(it / 4.0, 'T', if (it % 3 == 0 || it == 15) 1.05f else 0.55f) }
+        // "Long, short-short" calls; the fill blows 8ths, then 16ths.
+        FxType.WHISTLE -> slots(if (fill) "w.w.w.w.wwwwwwww" else "W...w.w.W...w.w.", 4)
+        // Cascara on the shell with the low drum answering; the fill rolls 16ths, the low drum closing each beat.
+        FxType.TIMBALES -> if (fill) {
+            (0 until 16).map { Stroke(it / 4.0, if (it % 4 == 3) 'l' else 'h', (0.55 + 0.5 * it / 15).toFloat()) }
+        } else {
+            slots("r.rr.rlr", 2)
+        }
+        FxType.COWBELL -> slots(if (fill) "BbbbBbbbBbBbBbBb" else "B.bbB.b.", if (fill) 4 else 2)
+        FxType.GUIRA -> slots(if (fill) "L.ssL.ssssssssss" else "L.ssL.ssL.ssL.ss", 4)
+        FxType.SHAKER -> if (fill) {
+            (0 until 12).map { Stroke(it / 4.0, 's', (0.5 + 0.4 * it / 11).toFloat()) } +
+                (0 until 8).map { Stroke(3 + it / 8.0, 's', 0.9f + 0.03f * it) }
+        } else {
+            slots("ssSsssSsssSsssSs", 4)
+        }
+        // On two and four; the fill claps 8ths, then 16ths.
+        FxType.CLAPS -> slots(if (fill) "C.C.C.C.CCCCCCCC" else ".C.C", if (fill) 4 else 1)
+        // Maqsum; the fill is a tek-ka roll in 16ths, then 32nds.
+        FxType.DARBUKA -> if (fill) {
+            (0 until 12).map { Stroke(it / 4.0, if (it % 2 == 0) 'T' else 'k', (0.55 + 0.35 * it / 11).toFloat()) } +
+                (0 until 8).map { Stroke(3 + it / 8.0, if (it % 2 == 0) 'T' else 'k', 0.85f + 0.03f * it) }
+        } else {
+            slots("DT.TD.T.", 2)
+        }
         else -> emptyList()
     }
 
@@ -308,6 +361,13 @@ class SfxSynth(sampleRate: Int) {
         FxType.DHOL -> listOf(Stroke(0.0, 'X', 1.3f))
         // "Ta-ka-dhim".
         FxType.THAVIL -> listOf(Stroke(0.0, 'T', 1f), Stroke(0.5, 'T', 0.7f), Stroke(0.75, 'T', 1.15f))
+        FxType.WHISTLE -> listOf(Stroke(0.0, 'X', 1.2f))
+        FxType.TIMBALES -> listOf(Stroke(0.0, 'X', 1.3f))
+        FxType.COWBELL -> listOf(Stroke(0.0, 'B', 1.3f))
+        FxType.GUIRA, FxType.SHAKER -> listOf(Stroke(0.0, 'L', 1.2f))
+        FxType.CLAPS -> listOf(Stroke(0.0, 'C', 1.3f))
+        // "Dum, tek-tek".
+        FxType.DARBUKA -> listOf(Stroke(0.0, 'D', 1.3f), Stroke(0.5, 'T', 1f), Stroke(0.75, 'T', 1.1f))
         else -> emptyList()
     }
 
@@ -324,6 +384,8 @@ class SfxSynth(sampleRate: Int) {
         var tone = 0.0
         var slap = 0.0
         var clang = 0.0
+        var bell = 0.0
+        var blow = 0.0
         for (s in v.strokes) {
             val since = x - s.at * beatSec
             if (since < 0) break
@@ -354,12 +416,73 @@ class SfxSynth(sampleRate: Int) {
                     slap += vel * 0.9 * exp(-since / 0.02)
                     tone += vel * 0.6 * membrane(since, 360.0, 330.0, 0.02, 0.08)
                 }
+                FxType.WHISTLE -> {
+                    val dur = when (s.kind) {
+                        'X' -> min(0.6, beatSec)
+                        'W' -> 0.4 * beatSec
+                        else -> 0.16 * beatSec
+                    }
+                    if (since < dur) blow = maxOf(blow, vel * min(1.0, (dur - since) / 0.01))
+                }
+                FxType.TIMBALES -> {
+                    // 'h' high shell, 'l' low shell, 'r' the stick on the shell's side, 'X' both shells and the rim.
+                    if (s.kind == 'h' || s.kind == 'X') tone += vel * 0.8 * membrane(since, 560.0, 520.0, 0.01, 0.16)
+                    if (s.kind == 'l' || s.kind == 'X') tone += vel * 0.8 * membrane(since, 390.0, 360.0, 0.01, 0.2)
+                    if (s.kind == 'r') clang += vel * 0.3 * exp(-since / 0.012)
+                    if (s.kind == 'X') clang += vel * 0.35 * exp(-since / 0.25)
+                    slap += vel * (if (s.kind == 'r') 0.5 else 0.6) * exp(-since / 0.012)
+                }
+                FxType.COWBELL -> bell += vel * (0.6 * exp(-since / 0.02) + 0.5 * exp(-since / (if (s.kind == 'B') 0.16 else 0.09)))
+                FxType.CLAPS -> slap += vel * clap(since)
+                FxType.SHAKER -> slap += vel * 0.7 * min(1.0, since / 0.012) * exp(-since / (if (s.kind == 'L') 0.18 else 0.045))
+                FxType.GUIRA -> {
+                    val dur = (if (s.kind == 'L') 0.4 else 0.12) * beatSec
+                    val held = if (since < dur) 1.0 else exp(-(since - dur) / 0.01)
+                    // The scraper's ridges ticking past the stick.
+                    slap += vel * 0.6 * held * (0.55 + 0.45 * sin(2 * PI * 110 * since)) * min(1.0, since / 0.005)
+                }
+                FxType.DARBUKA -> if (s.kind == 'D') {
+                    tone += vel * membrane(since, 120.0, 82.0, 0.03, 0.28)
+                } else {
+                    // 'T' tek, 'k' the softer ka of the other hand.
+                    tone += vel * (if (s.kind == 'T') 0.55 else 0.35) * membrane(since, 640.0, 590.0, 0.01, 0.035)
+                    slap += vel * (if (s.kind == 'T') 0.8 else 0.5) * exp(-since / 0.012)
+                }
                 else -> Unit
             }
         }
         val noise = if (slap > 1e-4) v.bandPass.process(white(), 0) * 2.2 * slap else 0.0
         val metal = if (clang > 1e-4) metal(v) * clang else 0.0
-        return 0.75 * tanh(1.3 * tone) + noise + metal
+        val bells = if (bell > 1e-4) cowbell(v) * bell else 0.0
+        val whistle = if (blow > 1e-4) whistle(v, x) * blow else 0.0
+        return 0.75 * tanh(1.3 * tone) + noise + metal + bells + whistle
+    }
+
+    /** Three quick bursts (hands not quite together) and a short room tail; times the band-passed noise. */
+    private fun clap(since: Double): Double {
+        var e = 0.0
+        for (k in 0 until 3) {
+            val d = since - k * 0.011
+            if (d >= 0) e += exp(-d / 0.004)
+        }
+        if (since > 0.022) e += 0.7 * exp(-(since - 0.022) / 0.08)
+        return 0.8 * e
+    }
+
+    /** The 808 cowbell: two square tones through the voice's band-pass. */
+    private fun cowbell(v: Voice): Double {
+        v.phase1 = (v.phase1 + 540 / sr) % 1.0
+        v.phase2 = (v.phase2 + 800 / sr) % 1.0
+        val sq = (if (v.phase1 < 0.5) 0.5f else -0.5f) + (if (v.phase2 < 0.5) 0.5f else -0.5f)
+        return 1.4 * v.bandPass.process(sq, 0)
+    }
+
+    /** A pea whistle: a tone warbling around 3 kHz as the pea spins, with some breath. */
+    private fun whistle(v: Voice, x: Double): Double {
+        val warble = sin(2 * PI * 28 * x)
+        v.phase1 = (v.phase1 + (3000 + 180 * warble) / sr) % 1.0
+        val breath = v.bandPass.process(white(), 0)
+        return 0.45 * (0.75 + 0.25 * warble) * sin(2 * PI * v.phase1) + 0.12 * breath
     }
 
     /**
@@ -375,8 +498,7 @@ class SfxSynth(sampleRate: Int) {
      * The nadaswaram figure: four notes of the key (half a beat each), each slid up into from
      * 1.5 semitones below, then the octave held with a vibrato that grows; [left]: seconds to the end.
      */
-    private fun reed(v: Voice, x: Double, left: Double, beatSec: Double, tonic: Double, minor: Boolean): Double {
-        val steps = if (minor) intArrayOf(0, 3, 5, 7) else intArrayOf(0, 2, 4, 7)
+    private fun reed(v: Voice, x: Double, left: Double, beatSec: Double, tonic: Double, steps: IntArray): Double {
         val b = x / beatSec
         val idx = floor(b / 0.5).toInt().coerceIn(0, 4)
         val noteStart = idx * 0.5 * beatSec
@@ -396,8 +518,13 @@ class SfxSynth(sampleRate: Int) {
 
     private companion object {
         /** Effects sit roughly level with the music (the deck output is soft-limited). */
-        const val GAIN = 0.8
+        const val GAIN = 1.0
 
         val METAL_HZ = doubleArrayOf(3170.0, 4230.0, 5410.0, 6870.0, 8190.0)
+
+        /** The reed's four notes up from the tonic, in a major key, a minor one, and maqam hijaz. */
+        val MAJOR = intArrayOf(0, 2, 4, 7)
+        val MINOR = intArrayOf(0, 3, 5, 7)
+        val HIJAZ = intArrayOf(0, 1, 4, 5)
     }
 }

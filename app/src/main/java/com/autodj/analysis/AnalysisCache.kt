@@ -78,6 +78,11 @@ class AnalysisCache(context: Context) {
         fileFor(t.uri).writeText(o.toString())
     }
 
+    /** Forgets one track's analysis, so it is analysed again. */
+    fun remove(uri: String) {
+        fileFor(uri).delete()
+    }
+
     fun clear() {
         dir.listFiles()?.forEach { it.delete() }
     }

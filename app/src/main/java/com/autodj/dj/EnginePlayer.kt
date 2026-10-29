@@ -15,7 +15,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Presents the two-deck [MixEngine] to a MediaSession as one ordinary player: the set is the
- * playlist and play/pause pauses the mix. There is no skip: AutoDJ decides when to mix.
+ * playlist and play/pause pauses the mix. "Next" is the skip: the song mixes out at its next
+ * phrase (pressed again: its next bar), the way [MixEngine.skip] does from the app.
  * Setting a crate's media item (Android Auto's browse list) starts a set from it via [onPlayCrate].
  */
 @UnstableApi
@@ -28,7 +29,7 @@ class EnginePlayer(
         // Engine state ticks every few ms; only re-read when something the session shows changes.
         scope.launch {
             engine.state
-                .map { listOf(it.running, it.paused, it.index, it.set) }
+                .map { listOf(it.running, it.paused, it.index, it.set, it.next != null) }
                 .distinctUntilChanged()
                 .collect { invalidateState() }
         }
@@ -36,7 +37,7 @@ class EnginePlayer(
 
     override fun getState(): State {
         val s = engine.state.value
-        // No skip/next: when to mix is AutoDJ's decision, not the listener's.
+        // "Next" skips (while a skip can still do something); there is no going back.
         val commands = Player.Commands.Builder()
             .addAll(
                 COMMAND_PLAY_PAUSE,
@@ -50,6 +51,9 @@ class EnginePlayer(
                 COMMAND_CHANGE_MEDIA_ITEMS,
                 COMMAND_PREPARE,
             )
+            // Kept while there's a next song, so the notification's buttons don't jump about.
+            .addIf(COMMAND_SEEK_TO_NEXT, s.running && s.next != null)
+            .addIf(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM, s.running && s.next != null)
             .build()
         val builder = State.Builder()
             .setAvailableCommands(commands)
@@ -84,6 +88,11 @@ class EnginePlayer(
 
     override fun handleSetMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long): ListenableFuture<*> {
         mediaItems.getOrNull(startIndex.coerceAtLeast(0))?.mediaId?.let(onPlayCrate)
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> {
+        if (seekCommand == COMMAND_SEEK_TO_NEXT || seekCommand == COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) engine.skip()
         return Futures.immediateVoidFuture()
     }
 

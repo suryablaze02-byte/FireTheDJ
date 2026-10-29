@@ -18,6 +18,7 @@ import com.autodj.dj.fx.Law
 import com.autodj.dj.fx.Ramp
 import com.autodj.model.TrackInfo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,6 +119,10 @@ data class EngineState(
     val nextPitchSemis: Int = 0,
     /** How the coming transition handles tempo, e.g. "+1.3%" or "128 → 113 BPM". */
     val tempoChange: String? = null,
+    /** Skip taps on the playing song: 1 = mixing out at the next phrase, 2 = at the next bar. */
+    val skipping: Int = 0,
+    /** Whether a skip tap would still do something (a next song, the mix not yet begun, not already at the next bar). */
+    val canSkip: Boolean = false,
 )
 
 /**
@@ -148,6 +153,13 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private var mainEntryBar = 0
     private var perf: Performance? = null
     private var replayState = ReplayState.DONE
+
+    /** The current track's key lift has happened (or it has none). */
+    private var lifted = true
+
+    /** Skip taps on the playing song (1 = out at the next phrase, 2 = at the next bar), and how many have been planned. */
+    private var skipAsked = 0
+    private var skipDone = 0
     private var masterBpm = 0.0
     private var plan: Transition? = null
     private val history = mutableListOf<Recipe>()
@@ -258,6 +270,22 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                 delay(TICK_MS)
             }
         }
+        if (BuildConfig.FLAVOR == "phone") logWordPlayChances(tracks)
+    }
+
+    /**
+     * How much word play this set can have: songs with lyrics, and pairs where one song sings a
+     * word another opens a line with. Logged once per set, off the main thread.
+     */
+    private fun logWordPlayChances(tracks: List<TrackInfo>) {
+        scope.launch(Dispatchers.Default) {
+            val withLyrics = tracks.mapNotNull { t -> wordPlayLyrics(t)?.let { t to it } }
+            var pairs = 0
+            for ((a, la) in withLyrics) for ((b, lb) in withLyrics) {
+                if (a !== b && WordPlay.hasLink(la, lb, b.durationSec)) pairs++
+            }
+            Log.i(TAG, "word play: lyrics for ${withLyrics.size} of ${tracks.size} songs; $pairs song pairs share a word")
+        }
     }
 
     fun togglePause() {
@@ -266,6 +294,17 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         if (paused && !focus.request()) return
         resumeOnFocus = false
         setPaused(!paused)
+    }
+
+    /**
+     * Skip: the playing song mixes out at its next phrase (tapped again: its next bar) into the
+     * song already lined up, with whichever of the style's moves has room. The song's queued
+     * tricks are dropped; the mix and the next song stay. Media "next" buttons come here too.
+     */
+    fun skip() {
+        if (loop == null || next == null || started || skipAsked >= 2) return
+        skipAsked++
+        publish()
     }
 
     private fun setPaused(p: Boolean) {
@@ -290,6 +329,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         plan = null
         perf = null
         replayState = ReplayState.DONE
+        skipAsked = 0
+        skipDone = 0
         history.clear()
         played.clear()
         remaining.clear()
@@ -315,16 +356,19 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         perf = p
         Log.i(TAG, "track \"${t.title}\" from bar $entryBar · tricks: ${p.tricks.joinToString { "${it.label} @${formatSec(it.startSec)}" }.ifEmpty { "none" }}")
         replayState = if (p.replay != null) ReplayState.PENDING else ReplayState.DONE
+        lifted = p.keyLiftSec == null
+        skipAsked = 0
+        skipDone = 0
         deck.plan = performancePlan(t, p)
     }
 
     private fun performancePlan(t: TrackInfo, p: Performance, gain: List<Ramp> = emptyList()) =
         FxPlan(t.beatSec, t.downbeatSec, Lane(gain, 1f), Lane(emptyList(), 1f), p.events)
 
-    /** The track's own tricks, up to a bar before the transition takes over, plus the transition. */
+    /** The track's own tricks, ending [CLEAR_BARS] before the transition starts so the run-up to a mix stays clean, plus the transition. */
     private fun mergedPlan(t: TrackInfo, p: Performance?, tr: Transition) = FxPlan(
         t.beatSec, t.downbeatSec, tr.aPlan.gain, tr.aPlan.bass,
-        p?.events.orEmpty().filter { it.end <= tr.startSec - t.barSec } + tr.aPlan.events,
+        p?.events.orEmpty().filter { it.end <= tr.startSec - CLEAR_BARS * t.barSec } + tr.aPlan.events,
     )
 
     private fun tick() {
@@ -341,7 +385,25 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         //    transition itself is planned once the track's own tricks (a hook replay) are done.
         if (next == null && remaining.isNotEmpty()) {
             next = SetPlanner.pickNext(ta, remaining, Random.Default, wordPlayLyrics)
+            next?.let { nx ->
+                if (BuildConfig.FLAVOR == "phone") {
+                    val mine = wordPlayLyrics(ta)
+                    val theirs = wordPlayLyrics(nx)
+                    Log.i(TAG, "next \"${nx.title}\": " + when {
+                        mine == null -> "no lyrics for the playing song"
+                        theirs == null -> "no lyrics for it"
+                        WordPlay.hasLink(mine, theirs, nx.durationSec) -> "shares a word with the playing song"
+                        else -> "no shared word"
+                    })
+                }
+            }
             refreshQueue(ta)
+        }
+
+        // A skip tap: once a hook replay under way has finished, the mix out is moved up.
+        if (skipAsked > skipDone && replayState != ReplayState.PLAYING) {
+            applySkip(a, b, ta, posA)
+            return publish()
         }
 
         // 1. Hook replay, before any transition is planned for this track.
@@ -360,7 +422,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         if (plan == null && remaining.isNotEmpty()) {
             val chosen = next!!
             plan = TransitionPlanner.plan(
-                ta, mainEntryBar, posA, chosen, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default, lyrics = wordPlayLyrics, styleFamily = styleFamily,
+                ta, mainEntryBar, posA, chosen, history, aPitchSemis = a.pitchSemis + if (lifted) 0 else 1, mode = mode, random = Random.Default, lyrics = wordPlayLyrics, styleFamily = styleFamily,
             )
                 .also {
                     a.plan = mergedPlan(ta, perf, it)
@@ -369,6 +431,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                         "plan \"${ta.title}\" → \"${chosen.title}\": ${it.description} · effects ${formatSec(it.startSec)}, " +
                             "B in ${formatSec(it.exitSec)} (B from ${formatSec(it.entrySec)}), done ${formatSec(it.endSec)}",
                     )
+                    if (BuildConfig.FLAVOR == "phone") Log.i(TAG, "word play: ${TransitionPlanner.wordPlayNote}")
                 }
             refreshQueue(ta)
         }
@@ -398,11 +461,13 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                     return publish()
                 }
             }
+            liftKey(a, posA, p.startSec)
             if (posA < p.startSec) followPerformanceSpeed(a, posA) else logCrossfade(a, b, p, posA)
         } else if (aEnded) {
             stop()
             return
         } else {
+            liftKey(a, posA, Double.MAX_VALUE)
             followPerformanceSpeed(a, posA)
         }
         if (++ticks % PUBLISH_EVERY == 0) publish()
@@ -443,6 +508,51 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         }
         skipAhead(a, b, ta)
         return true
+    }
+
+    /**
+     * Plans the mix out of [ta] to land on its next phrase (second tap: its next bar), at least a
+     * beat ahead so the move can be set up. The tricks still queued in the song go (one playing
+     * now finishes, and a half-time bar gets back to speed), with its hook replay and key lift;
+     * the next song stays. Nothing changes once the mix has begun, or when it already lands as soon.
+     */
+    private fun applySkip(a: Deck, b: Deck, ta: TrackInfo, posA: Double) {
+        skipDone = skipAsked
+        val nx = next ?: return
+        val old = plan
+        if (started || (old != null && posA >= old.startSec)) return
+        val bar = ta.barAt(posA)
+        val ahead = { j: Int -> ta.barTime(j) - posA >= ta.beatSec }
+        val exit = if (skipAsked >= 2) {
+            (bar + 1..bar + 2).first(ahead)
+        } else {
+            (bar + 1..bar + 9).firstOrNull { ta.isPhraseStart(it) && ahead(it) } ?: (bar + 1..bar + 2).first(ahead)
+        }
+        if (old != null && old.exitBar <= exit) return
+        if (replayState == ReplayState.LOADED || loaded) b.unload()
+        replayState = ReplayState.DONE
+        loaded = false
+        lifted = true
+        perf = perf?.let { p ->
+            Performance(
+                p.events.filter { it.start <= posA }, p.speed.until(posA + ta.barSec), null,
+                p.tricks.filter { it.startSec <= posA }, p.targetSpeed, null,
+            )
+        }
+        val tr = TransitionPlanner.plan(
+            ta, mainEntryBar, posA, nx, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default,
+            lyrics = wordPlayLyrics, styleFamily = styleFamily, exitAt = exit,
+        )
+        plan = tr
+        // No run-up to clear here: the trick playing now finishes, and the mix's effects that
+        // would have started before the tap are left out.
+        a.plan = FxPlan(ta.beatSec, ta.downbeatSec, tr.aPlan.gain, tr.aPlan.bass, perf?.events.orEmpty() + tr.aPlan.events.filter { it.start >= posA })
+        Log.i(
+            TAG,
+            "skip at the next ${if (skipAsked >= 2) "bar" else "phrase"}: \"${ta.title}\" → \"${nx.title}\": ${tr.description} · " +
+                "B in ${formatSec(tr.exitSec)} (bar ${tr.exitBar}, B from ${formatSec(tr.entrySec)})",
+        )
+        refreshQueue(ta)
     }
 
     /** Gives up on the incoming track (or the hook replay): the playing one carries on at full volume. */
@@ -523,7 +633,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                     mainEntryBar -= r.atBar - r.toBar
                     // The rewind's spinback is a one-off: the second pass plays through.
                     val after = if (r.cut) {
-                        Performance(p.events.filterNot { it.type == FxType.BACKSPIN && it.end == at }, p.speed, p.replay, p.tricks, p.targetSpeed)
+                        Performance(p.events.filterNot { it.type == FxType.BACKSPIN && it.end == at }, p.speed, p.replay, p.tricks, p.targetSpeed, p.keyLiftSec)
                     } else {
                         p
                     }
@@ -537,12 +647,28 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    /**
+     * Steps the playing track up a key for its last chorus. The mix out of it was planned for the
+     * lifted key, so if the mix starts first, the lift happens on the mix's first beat instead.
+     */
+    private fun liftKey(a: Deck, posA: Double, mixStartSec: Double) {
+        if (lifted) return
+        val at = perf?.keyLiftSec ?: return
+        if (posA >= minOf(at, mixStartSec)) {
+            a.setPitch(a.pitchSemis + 1)
+            lifted = true
+            Log.i(TAG, "key lift +1 on \"${a.track?.title}\" at ${formatSec(posA)}")
+        }
+    }
+
     /** Applies the performance's speed lane (master-tempo glide, tempo push), rate-limited. */
     private fun followPerformanceSpeed(deck: Deck, pos: Double) {
         val p = perf ?: return
         val now = SystemClock.uptimeMillis()
-        if (now - lastSpeedSet < ADJUST_MS) return
         val s = p.speed.at(pos).toDouble()
+        // A big jump is a trick (a half-time bar) and must land on its beat: no waiting.
+        val jump = abs(s - deck.speed) > 0.1
+        if (!jump && now - lastSpeedSet < ADJUST_MS) return
         if (abs(s - deck.speed) > 0.0015) {
             deck.setSpeed(s)
             lastSpeedSet = now
@@ -660,7 +786,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val tricks = perf?.tricks.orEmpty()
         val now = tricks.firstOrNull { posA >= it.startSec && posA < it.endSec }
             ?: if (replayState == ReplayState.PLAYING) tricks.firstOrNull { it.label == "Hook replay" } else null
-        val upcoming = tricks.filter { it.startSec > posA && (p == null || it.endSec <= p.startSec) }.minByOrNull { it.startSec }
+        val upcoming = tricks.filter { it.startSec > posA && (p == null || it.endSec <= p.startSec - CLEAR_BARS * ta.barSec) }.minByOrNull { it.startSec }
         _state.value = EngineState(
             running = true,
             paused = paused,
@@ -699,6 +825,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             secondsToTrick = upcoming?.let { (it.startSec - posA) / a.speed },
             nextPitchSemis = p?.bPitchSemis ?: 0,
             tempoChange = if (p != null && next != null) tempoChange(p, ta, a.speed, next) else null,
+            skipping = skipAsked,
+            canSkip = next != null && !started && (p == null || posA < p.startSec) && skipAsked < 2,
         )
     }
 
@@ -749,6 +877,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
 
         /** A deck meant to be playing whose position hasn't moved for this long has stalled. */
         const val STALL_MS = 4000L
+
+        /** Bars kept clear of the track's own tricks before a mix starts. */
+        const val CLEAR_BARS = 8
 
         /** Master tempo rises this much per track through the first [ARC_SHARE] of the set. */
         /** Smooth leans on tempo for energy; Trickster on tricks. */

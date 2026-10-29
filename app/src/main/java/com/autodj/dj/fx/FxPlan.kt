@@ -44,6 +44,9 @@ class Lane(ramps: List<Ramp>, private val default: Float) {
     fun movingAt(t: Double) = ramps.any { t >= it.start && t < it.end && it.from != it.to }
 
     val hasRamps get() = ramps.isNotEmpty()
+
+    /** This lane without the ramps that start after [t]: it holds where it gets to by then. */
+    fun until(t: Double) = Lane(ramps.filter { it.start <= t }, default)
 }
 
 enum class FxType(val label: String) {
@@ -68,6 +71,18 @@ enum class FxType(val label: String) {
     /** Silence: the music (and effects) drop out, the gap before a drop. Echo and reverb tails ring on. */
     MUTE("Gap"),
 
+    /** More low end to lift a chorus or drop (amount × [FxEvent.p1] dB), the rest eased down to make room. */
+    BASS_BOOST("Bass boost"),
+
+    /** The bass taken out (amount 1 = gone), to slam back on the drop. */
+    BASS_KILL("Bass kill"),
+
+    /** The mids (voice, melody) cut, leaving the beat (amount 1 = −18 dB). */
+    MID_CUT("Mid cut"),
+
+    /** The treble cut, muffled as if from the next room (amount 1 = −18 dB). */
+    TREBLE_CUT("Treble cut"),
+
     // Synthesised DJ sound effects, mixed on top of the deck.
     SIREN("Siren"),
     HORN("Air horn"),
@@ -88,6 +103,16 @@ enum class FxType(val label: String) {
     DHOL("Dhol"),
     THAVIL("Thavil"),
     NADASWARAM("Nadaswaram"),
+
+    // Latin and Arabic percussion, the samba whistle and the mizmar reed (see [SfxSynth]).
+    WHISTLE("Whistle"),
+    TIMBALES("Timbales"),
+    COWBELL("Cowbell"),
+    GUIRA("Güira"),
+    SHAKER("Shaker"),
+    CLAPS("Claps"),
+    DARBUKA("Darbuka"),
+    MIZMAR("Mizmar"),
 
     ;
 
@@ -112,9 +137,12 @@ enum class FxType(val label: String) {
  * | VOCAL_CUT | how much centre above ~180 Hz is removed | | |
  * | VOCAL_ISOLATE | blend to centre-only 250 Hz–5 kHz | | |
  * | BRAKE, MUTE | | | |
+ * | BASS_BOOST | how much of the boost | boost, dB | |
+ * | BASS_KILL, MID_CUT, TREBLE_CUT | how deep the cut (1 = full) | | |
  * | SIREN, HORN, LASER, RISER, IMPACT, SNARE_ROLL, … | level | rate (siren LFO Hz; laser zaps, gunshots: beats apart) | |
- * | DAPPU, MARFA, DHOL, THAVIL | level | [Drum.FILL], [Drum.HIT] or [Drum.FILL_AND_HIT] | |
+ * | DAPPU, MARFA, DHOL, THAVIL, WHISTLE, TIMBALES, COWBELL, GUIRA, SHAKER, CLAPS, DARBUKA | level | [Drum.FILL], [Drum.HIT] or [Drum.FILL_AND_HIT] | |
  * | NADASWARAM | level | tonic, Hz | 1 = minor key |
+ * | MIZMAR | level | tonic, Hz | |
  */
 class FxEvent(
     val type: FxType,
@@ -129,7 +157,7 @@ class FxEvent(
     fun amount(t: Double) = from + (to - from) * ((t - start) / (end - start)).toFloat().coerceIn(0f, 1f)
 }
 
-/** What a percussion event ([FxType.DAPPU], [FxType.MARFA], [FxType.DHOL], [FxType.THAVIL]) plays, as its p1. */
+/** What a percussion event ([FxType.DAPPU], [FxType.TIMBALES], [FxType.DARBUKA], …) plays, as its p1. */
 object Drum {
     /** The groove, then a fill ending on the event's end (the bar line). */
     const val FILL = 0f

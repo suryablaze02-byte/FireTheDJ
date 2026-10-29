@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Casting to a Chromecast: capturing FireTheDJ's own audio to stream it to the TV. -->
@@ -40,6 +41,12 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Keeps analysis going in the background while songs are queued. -->
+        <service
+            android:name=".analysis.AnalysisService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Streams the mix to a Chromecast while casting. -->
         <service
