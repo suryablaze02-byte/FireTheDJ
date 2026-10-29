@@ -42,6 +42,7 @@ import com.autodj.cast.TvPresentation
 @Composable
 fun DjScreen(vm: DjViewModel) {
     val library by vm.library.collectAsStateWithLifecycle()
+    val setLanguage by vm.setLanguage.collectAsStateWithLifecycle()
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val state by vm.engine.state.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
@@ -153,7 +154,7 @@ fun DjScreen(vm: DjViewModel) {
                         onAddFolder = { folderPicker.launch(null) },
                         onOpenYtMusic = { ytMusic = true },
                         importState = importState,
-                        onImport = vm::importPlaylist,
+                        onImport = { vm.importPlaylist(it) },
                         onImportClosed = vm::resetImport,
                         onRemoveFolder = { uri ->
                             if (pickedSource == uri) pickedSource = ALL_SOURCES
@@ -173,9 +174,11 @@ fun DjScreen(vm: DjViewModel) {
                                 hiddenFor = state.index
                             })
                         } else {
-                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, visual = vm.engine::visual,
+                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, onSkip = vm::skip, visual = vm.engine::visual,
                                 onFullscreen = { fullscreen = true },
                                 onCast = { castDialog = true },
+                                setLanguage = setLanguage,
+                                languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
                             )
                         }
                     }

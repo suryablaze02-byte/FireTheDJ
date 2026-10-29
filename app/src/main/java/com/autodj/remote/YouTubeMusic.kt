@@ -130,20 +130,38 @@ object YouTubeLinks {
         return id?.takeIf { VIDEO_ID.matches(it) }
     }
 
-    /**
-     * Artist and title from a playlist entry. YouTube Music's own uploads come from
-     * "<Artist> - Topic" channels with the plain song title; other videos are usually named
-     * "Artist - Title" and come from the artist's (or a label's) channel.
-     */
     /** The song title without notes about the upload ("(Official Video)", "[Lyrics]"). */
     fun cleanTitle(name: String) = name.replace(UPLOAD_NOTE, "").trim().ifEmpty { name.trim() }
 
+    /**
+     * Artist and title from a playlist entry. YouTube Music's own uploads come from
+     * "<Artist> - Topic" channels with the plain song title; other videos are usually named
+     * "Artist - Title" and come from the artist's (or a label's) channel. A dash inside
+     * brackets is part of a note ("Song (Club Mix - Extended Version)"), not that split.
+     */
     fun artistAndTitle(uploader: String, name: String): Pair<String, String> {
         val title = cleanTitle(name)
         if (uploader.endsWith(" - Topic")) return uploader.removeSuffix(" - Topic").trim() to title
-        val parts = title.split(" - ", limit = 2)
-        if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) return parts[0].trim() to parts[1].trim()
+        val dash = dashOutsideBrackets(title)
+        if (dash > 0) {
+            val artist = title.substring(0, dash).trim()
+            val song = title.substring(dash + 3).trim()
+            if (artist.isNotBlank() && song.isNotBlank()) return artist to song
+        }
         return uploader.removeSuffix("VEVO").trim() to title
+    }
+
+    /** Where the first " - " outside any brackets starts, or -1. */
+    private fun dashOutsideBrackets(s: String): Int {
+        var depth = 0
+        for (i in s.indices) {
+            when (s[i]) {
+                '(', '[' -> depth++
+                ')', ']' -> depth = maxOf(0, depth - 1)
+                ' ' -> if (depth == 0 && s.startsWith(" - ", i)) return i
+            }
+        }
+        return -1
     }
 }
 
@@ -231,7 +249,13 @@ object YouTubeStreams {
         recent[videoId] = stream to System.currentTimeMillis()
     }
 
-    private fun extract(videoId: String): ResolvedStream {
+    /**
+     * Some songs' videos only give out a short preview (about a minute) to apps like this one,
+     * though the video is the whole song. Then the same song is looked up and the first upload
+     * of the full length is played instead; with none, the song is refused rather than mixed as
+     * a clip. [allowSwap] is off for the stand-in itself, so a lookup never chains.
+     */
+    private fun extract(videoId: String, allowSwap: Boolean = true): ResolvedStream {
         val extractor = ServiceList.YouTube.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
         extractor.fetchPage()
         // Progressive only: DASH and HLS entries are manifests, not files.
@@ -242,13 +266,52 @@ object YouTubeStreams {
         val pick = best(candidates, MediaFormat.M4A) ?: best(candidates, MediaFormat.WEBMA_OPUS)
             ?: throw IOException("No playable audio for this track")
         val url = pick.content
+        val params = URI(url).rawQuery?.let { PlaylistUrlValidator.queryParams(it) }.orEmpty()
+        val songSec = runCatching { extractor.length }.getOrDefault(0L).toDouble()
+        val audioSec = params["dur"]?.toDoubleOrNull()
+        if (isPreview(audioSec, songSec)) {
+            if (!allowSwap) throw IOException("Only a preview")
+            val title = runCatching { extractor.name }.getOrNull().orEmpty()
+            val uploader = runCatching { extractor.uploaderName }.getOrNull().orEmpty()
+            val swap = fullLength(videoId, title, uploader, songSec)
+                ?: throw IOException("YouTube only gives a ${audioSec!!.toInt()}-second preview of this song")
+            Log.i(TAG, "YouTube $videoId gives a ${audioSec!!.toInt()} s preview of a ${songSec.toInt()} s song: playing ${swap.first} instead")
+            return swap.second
+        }
         return ResolvedStream(
             url = url,
             headers = mediaHeaders(url),
-            contentLength = URI(url).rawQuery?.let { PlaylistUrlValidator.queryParams(it)["clen"] }?.toLongOrNull(),
+            contentLength = params["clen"]?.toLongOrNull(),
             mimeType = pick.format?.mimeType.orEmpty(),
         )
     }
+
+    /** The audio stops well before the song does: under 60% of it, and at least half a minute short. */
+    internal fun isPreview(audioSec: Double?, songSec: Double): Boolean =
+        audioSec != null && songSec > 0 && audioSec < songSec * 0.6 && songSec - audioSec > 30
+
+    /**
+     * Another upload of the same song at the full length (within [LENGTH_SLACK_SEC]), searched
+     * by its title and artist; the uploads YouTube ranks first are tried in turn. Its id and
+     * audio, or null if none plays in full.
+     */
+    private fun fullLength(videoId: String, title: String, uploader: String, songSec: Double): Pair<String, ResolvedStream>? {
+        val artist = uploader.removeSuffix(" - Topic").trim()
+        val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
+        if (query.isBlank()) return null
+        val search = ServiceList.YouTube.getSearchExtractor(query).apply { fetchPage() }
+        val matches = search.initialPage.items.filterIsInstance<StreamInfoItem>()
+            .mapNotNull { item -> YouTubeLinks.videoId(item.url)?.takeIf { it != videoId }?.let { it to item.duration.toDouble() } }
+            .filter { (_, sec) -> kotlin.math.abs(sec - songSec) <= LENGTH_SLACK_SEC }
+            .take(SWAP_TRIES)
+        for ((id, _) in matches) {
+            runCatching { extract(id, allowSwap = false) }.getOrNull()?.let { return id to it }
+        }
+        return null
+    }
+
+    private const val LENGTH_SLACK_SEC = 15.0
+    private const val SWAP_TRIES = 3
 
     private fun best(streams: List<AudioStream>, format: MediaFormat) =
         streams.filter { it.format == format }.maxByOrNull { it.averageBitrate }

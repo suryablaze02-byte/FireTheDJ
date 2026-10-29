@@ -231,6 +231,21 @@ fun PauseIcon(color: Color, modifier: Modifier = Modifier.size(26.dp)) {
     }
 }
 
+/** Skip to the next song: a play triangle against a bar. */
+@Composable
+fun SkipIcon(color: Color, modifier: Modifier = Modifier.size(22.dp)) {
+    Canvas(modifier) {
+        val p = Path().apply {
+            moveTo(size.width * 0.21f, size.height * 0.23f)
+            lineTo(size.width * 0.6f, size.height * 0.5f)
+            lineTo(size.width * 0.21f, size.height * 0.77f)
+            close()
+        }
+        drawPath(p, color)
+        drawRoundRect(color, Offset(size.width * 0.69f, size.height * 0.23f), Size(size.width * 0.1f, size.height * 0.54f), CornerRadius(2f))
+    }
+}
+
 @Composable
 fun StopIcon(color: Color, modifier: Modifier = Modifier.size(18.dp)) {
     Canvas(modifier) {

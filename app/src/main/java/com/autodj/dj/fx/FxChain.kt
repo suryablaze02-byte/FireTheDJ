@@ -39,9 +39,13 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
 
     // EQ and filters (RBJ biquads).
     private val shelf = Biquad(channels)
+    private val mid = Biquad(channels)
+    private val treble = Biquad(channels)
     private val hp = Biquad(channels)
     private val lp = Biquad(channels)
     private var lastBassDb = Float.NaN
+    private var lastMidDb = Float.NaN
+    private var lastTrebleDb = Float.NaN
     private var lastHp = Float.NaN
     private var lastLp = Float.NaN
 
@@ -57,6 +61,9 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
     private var capMode: FxType? = null
     private var capPos = 0
     private var captured = 0
+
+    /** Where a loop roll is reading its loop, in frames; a rising roll moves it faster than one a frame. */
+    private var loopPhase = 0.0
 
     private var spinOn = false
     private var spinRead = 0.0
@@ -109,10 +116,10 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
     fun reset(startSec: Double) {
         baseSec = startSec
         frames = 0
-        listOf(shelf, hp, lp).forEach { it.reset() }
-        lastBassDb = Float.NaN; lastHp = Float.NaN; lastLp = Float.NaN
+        listOf(shelf, mid, treble, hp, lp).forEach { it.reset() }
+        lastBassDb = Float.NaN; lastMidDb = Float.NaN; lastTrebleDb = Float.NaN; lastHp = Float.NaN; lastLp = Float.NaN
         history.fill(0f); histWrite = 0
-        capMode = null; capPos = 0; captured = 0
+        capMode = null; capPos = 0; captured = 0; loopPhase = 0.0
         spinOn = false
         brakeOn = false
         sfx.reset()
@@ -158,8 +165,18 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
         val tMid = t0 + n / 2.0 / sr
         val beat = p.beatSec
 
-        val bassDb = (20 * log10(max(p.bass.at(tMid).orIf(1f), 0.02f).toDouble())).toFloat()
+        // The bass: the mix's bass swap, plus any boost or kill.
+        val boostDb = p.active(FxType.BASS_BOOST, tMid)?.let { it.amount(tMid) * it.p1 }?.orIf(0f) ?: 0f
+        val kill = p.active(FxType.BASS_KILL, tMid)?.amount(tMid)?.orIf(0f) ?: 0f
+        val bassLevel = max(p.bass.at(tMid).orIf(1f) * (1 - kill), 0.02f)
+        val bassDb = (20 * log10(bassLevel.toDouble())).toFloat() + boostDb
         if (bassDb != lastBassDb) { shelf.lowShelf(120.0, bassDb.toDouble(), sr); lastBassDb = bassDb }
+        // A boost adds weight, not loudness: the whole track eases down by part of it.
+        val headroom = 10.0.pow(-boostDb * BOOST_HEADROOM / 20.0).toFloat()
+        val midDb = -CUT_DB * (p.active(FxType.MID_CUT, tMid)?.amount(tMid)?.orIf(0f) ?: 0f)
+        if (midDb != lastMidDb) { mid.peaking(1000.0, midDb.toDouble(), 0.7, sr); lastMidDb = midDb }
+        val trebleDb = -CUT_DB * (p.active(FxType.TREBLE_CUT, tMid)?.amount(tMid)?.orIf(0f) ?: 0f)
+        if (trebleDb != lastTrebleDb) { treble.highShelf(4000.0, trebleDb.toDouble(), sr); lastTrebleDb = trebleDb }
         val hpAmt = (p.active(FxType.HIGH_PASS, tMid)?.amount(tMid) ?: 0f).orIf(0f)
         if (hpAmt != lastHp) { hp.highPass(FxPlan.highPassHz(hpAmt), 0.9, sr); lastHp = hpAmt }
         val lpAmt = (p.active(FxType.LOW_PASS, tMid)?.amount(tMid) ?: 0f).orIf(0f)
@@ -182,6 +199,7 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
             capMode = null
         } else if (capMode != capEvent.type) {
             capMode = capEvent.type
+            loopPhase = 0.0
             capPos = 0
             captured = 0
         }
@@ -274,9 +292,14 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
                         captured++
                     } else {
                         val len = min(rollLen, captured)
-                        val j = capPos % len
+                        // A rising roll reads its loop faster as it goes: the pitch climbs into the drop.
+                        val semis = capEvent!!.p2 * capEvent.amount(t)
+                        val rate = if (semis == 0f) 1.0 else 2.0.pow(semis / 12.0)
+                        if (loopPhase >= len) loopPhase %= len
+                        val j = loopPhase.toInt()
                         val w = min(1f, min(j / 48f, (len - j) / 48f))
-                        for (c in 0 until channels) src[c] = capture[j * channels + c] * w
+                        for (c in 0 until channels) src[c] = readRing(capture, len, loopPhase, c) * w
+                        loopPhase += rate
                     }
                     capPos++
                 }
@@ -362,12 +385,16 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
             }
             val effect = if (sfxEvents.isEmpty()) 0f else {
                 val sinceKick = frac((t - p.downbeatSec) / beat) * beat
-                sfx.sample(sfxEvents, t, beat, duck = 1f - SFX_DUCK * exp(-sinceKick / 0.09).toFloat()) * muteGain
+                // Stacked effects are capped together, so a pile of them never buries the track.
+                val raw = sfx.sample(sfxEvents, t, beat, duck = 1f - SFX_DUCK * exp(-sinceKick / 0.09).toFloat())
+                SFX_CAP * tanh(raw / SFX_CAP) * muteGain
             }
 
             for (c in 0 until channels) {
                 var x = src[c]
-                x = shelf.process(x, c)
+                x = shelf.process(x, c) * headroom
+                x = mid.process(x, c)
+                x = treble.process(x, c)
                 x = hp.process(x, c)
                 x = lp.process(x, c)
                 x *= gateGain
@@ -454,10 +481,19 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
         const val ECHO_WET = 0.85f
 
         // Sound-effect bus: dry level, reverb send and room size, and how far each kick ducks it.
-        const val SFX_DRY = 0.85f
+        const val SFX_DRY = 1.0f
         const val SFX_SEND = 0.35f
         const val SFX_RT60 = 1.4f
-        const val SFX_DUCK = 0.45f
+        const val SFX_DUCK = 0.25f
+
+        /** The loudest the effects bus gets, however many effects are stacked. */
+        const val SFX_CAP = 0.7f
+
+        /** The share of a bass boost the rest of the track gives back, so the boost adds weight, not distortion. */
+        const val BOOST_HEADROOM = 0.6f
+
+        /** How deep a full mid or treble cut goes. */
+        const val CUT_DB = 18f
 
         /** Crossfade into and out of a scratch, over the live beat: long enough to ease in, not snap. */
         const val SCRATCH_FADE = 0.12
@@ -505,6 +541,31 @@ class Biquad(channels: Int) {
         val w = 2 * PI * fc / sr
         val alpha = sin(w) / (2 * q)
         set(alpha, 0.0, -alpha, 1 + alpha, -2 * cos(w), 1 - alpha)
+    }
+
+    /** A bell around [fc]: boosts or cuts a band (0 dB leaves the sound as it is). */
+    fun peaking(fc: Double, gainDb: Double, q: Double, sr: Double) {
+        val a = 10.0.pow(gainDb / 40)
+        val w = 2 * PI * fc / sr
+        val alpha = sin(w) / (2 * q)
+        val cw = cos(w)
+        set(1 + alpha * a, -2 * cw, 1 - alpha * a, 1 + alpha / a, -2 * cw, 1 - alpha / a)
+    }
+
+    fun highShelf(fc: Double, gainDb: Double, sr: Double) {
+        val a = 10.0.pow(gainDb / 40)
+        val w = 2 * PI * fc / sr
+        val cw = cos(w)
+        val alpha = sin(w) / 2 * sqrt(2.0)
+        val sa = 2 * sqrt(a) * alpha
+        set(
+            a * ((a + 1) + (a - 1) * cw + sa),
+            -2 * a * ((a - 1) + (a + 1) * cw),
+            a * ((a + 1) + (a - 1) * cw - sa),
+            (a + 1) - (a - 1) * cw + sa,
+            2 * ((a - 1) - (a + 1) * cw),
+            (a + 1) - (a - 1) * cw - sa,
+        )
     }
 
     fun lowShelf(fc: Double, gainDb: Double, sr: Double) {

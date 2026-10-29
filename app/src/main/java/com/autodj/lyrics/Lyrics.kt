@@ -24,7 +24,13 @@ class LyricWord(
 )
 
 /** A track's timed words, already shifted onto the audio ([offsetSec] was added to the lyric times). */
-class TimedLyrics(val words: List<LyricWord>, val source: String, val offsetSec: Double) {
+class TimedLyrics(
+    val words: List<LyricWord>,
+    val source: String,
+    val offsetSec: Double,
+    /** The language they're sung in (see [com.autodj.analysis.Languages]), or null when unsure. */
+    val language: String? = null,
+) {
     /** How often each key is sung in the whole track: hooks and chants repeat. */
     val counts: Map<String, Int> = words.groupingBy { it.key }.eachCount()
 }
@@ -46,21 +52,84 @@ object WordKey {
         return out.toString()
     }
 
-    /** Words too common, or too short, to make a link on their own (keys). */
+    /**
+     * Words too common, or too short, to make a link on their own: filler a crowd wouldn't notice
+     * repeated. Written as sung and turned into keys like every lyric word ("what" → "vhat").
+     */
     private val STOP = setOf(
         // English
         "the", "and", "you", "your", "yor", "me", "my", "it", "its", "is", "in", "on", "to", "of", "we", "us", "oh", "yeah",
         "hey", "baby", "uh", "ah", "ohh", "ya", "yea", "but", "for", "with", "that", "this", "all", "are", "was", "be", "so",
         "do", "dont", "can", "cant", "get", "got", "just", "like", "now", "she", "he", "her", "him", "they", "them", "what",
         "when", "go", "na", "la", "da", "ho", "ye", "no", "not", "one", "out", "up", "down", "im", "ive", "let", "make",
+        "aint", "since", "know", "gonna", "wanna", "gotta", "cause", "cos", "bout", "would", "could", "should", "been",
+        "there", "here", "from", "have", "will", "these", "those", "then", "than", "into", "about", "said", "say", "says",
+        "some", "still", "yes", "ooh", "woah", "whoa", "only", "ever", "even", "really", "where", "who", "why", "how",
+        "were", "did", "does", "has", "had", "way", "too", "more", "much", "very", "said", "youre", "thats", "theres",
         // Telugu, Tamil and Hindi fillers and particles
         "ra", "ga", "re", "ani", "idi", "adi", "ne", "nu", "na", "nan", "e", "o", "a", "le", "lo", "ki", "ke", "ka", "ko",
         "hai", "hain", "mein", "main", "tu", "tum", "ham", "hum", "se", "ki", "ke", "ka", "de", "di", "ra", "ri", "ro",
         "ena", "enna", "inka", "ika", "ante", "kada", "kani", "mari", "ela", "ila", "ala", "aye", "oye", "hoy",
-    )
+    ).map(::of).toSet()
 
     /** True when [key] can carry a word-play link. */
     fun linkable(key: String) = key.length >= 3 && key !in STOP
+
+    /**
+     * How a word sounds rather than how it's spelled, roughly: silent letters dropped ("knight"
+     * → "nit"), "igh" said as "i" ("night", "nite" and "tonight", "tonite" meet), "ph" as "f",
+     * "c" as "k" or "s", vowel pairs that sound alike merged ("pray", "prey"), a silent final
+     * "e" dropped and a final "y" said as "i". Spelling rules only: "lose" and "loose" still differ.
+     */
+    fun sound(word: String): String {
+        var s = word.lowercase().filter { it in 'a'..'z' }
+        if (s.isEmpty()) return s
+        for ((from, to) in LEADING) if (s.startsWith(from)) { s = to + s.drop(from.length); break }
+        for ((from, to) in SOUNDS) s = s.replace(from, to)
+        s = s.replace(Regex("c(?=[eiy])"), "s").replace('c', 'k').replace('q', 'k').replace("x", "ks").replace('z', 's').replace('w', 'v')
+        // A silent final "e" after a consonant ("fire", "nite"), and a final "y" said as "i".
+        if (s.length > 3 && s.endsWith("e") && s[s.length - 2] !in VOWELS) s = s.dropLast(1)
+        if (s.length > 2 && s.endsWith("y")) s = s.dropLast(1) + "i"
+        val out = StringBuilder()
+        for (c in s) if (out.isEmpty() || out.last() != c) out.append(c)
+        return out.toString()
+    }
+
+    /**
+     * The part of a sound that rhymes: from its last vowel to the end ("fir" → "ir"), with a
+     * final "er" after a vowel heard as "r" ("hier" → "ir": "fire" and "higher" rhyme). When the
+     * word ends on its vowel ("bodi") the vowel before is taken too ("odi": "body", "nobody").
+     * Null for a sound too short to rhyme on.
+     */
+    fun rhyme(sound: String): String? {
+        val s = sound.replace(Regex("([aeiou])er$"), "$1r")
+        val last = s.indexOfLast { it in VOWELS }
+        if (last < 0) return null
+        var start = last
+        while (start > 0 && s[start - 1] in VOWELS) start--
+        if (last == s.length - 1) {
+            // Ends on a vowel: reach back to the vowel before it.
+            var i = start - 1
+            while (i >= 0 && s[i] !in VOWELS) i--
+            if (i < 0) return null
+            while (i > 0 && s[i - 1] in VOWELS) i--
+            start = i
+        }
+        return s.substring(start).takeIf { it.length >= 2 }
+    }
+
+    private const val VOWELS = "aeiouy"
+
+    /** Silent first letters. */
+    private val LEADING = listOf("kn" to "n", "wr" to "r", "gn" to "n", "ps" to "s")
+
+    /** Spellings of the same sound, longest first. */
+    private val SOUNDS = listOf(
+        "igh" to "i", "tch" to "ch", "ph" to "f", "ck" to "k", "qu" to "kv",
+        "ay" to "e", "ai" to "e", "ey" to "e", "ei" to "e",
+        "ee" to "i", "ea" to "i", "ie" to "i",
+        "oo" to "u", "ou" to "u", "ue" to "u", "oa" to "o",
+    )
 }
 
 /** Reads LRC lyrics ("[01:02.34] words", optionally with "<01:02.50>" word stamps). */
@@ -240,11 +309,11 @@ object LyricsAligner {
     /** How close the lyrics' own timing must fit to be kept over a slightly better fitting shift. */
     private const val PRIOR_MARGIN = 0.06
 
-    fun align(words: List<LyricWord>, t: TrackInfo, source: String, versionGapSec: Double? = null, vocal: FloatArray? = null, fps: Double = 10.0): TimedLyrics? {
+    fun align(words: List<LyricWord>, t: TrackInfo, source: String, versionGapSec: Double? = null, vocal: FloatArray? = null, fps: Double = 10.0, language: String? = null): TimedLyrics? {
         val off = vocal?.let { fineOffset(words, it, fps, versionGapSec) } ?: offset(words, t, versionGapSec) ?: return null
         return TimedLyrics(
             words.map { LyricWord(it.key, it.text, it.startSec + off, it.endSec + off, it.lineStart, it.lineEnd, it.line) },
-            source, off,
+            source, off, language,
         )
     }
 }

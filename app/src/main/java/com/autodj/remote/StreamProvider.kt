@@ -31,6 +31,8 @@ data class RemotePlaylist(
     val playlistId: String,
     val name: String,
     val tracks: List<RemoteTrack>,
+    /** Where in YT Music it was picked ("Telugu › Party today"), when it was: names its language. */
+    val origin: String? = null,
 )
 
 /** A validated link: which provider handles it and the playlist id it names. */

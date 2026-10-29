@@ -70,6 +70,7 @@ import com.autodj.ui.formatTime
 import com.autodj.ui.glass
 import com.autodj.ui.PauseIcon
 import com.autodj.ui.PlayIcon
+import com.autodj.ui.SkipIcon
 import com.autodj.ui.StopIcon
 import com.autodj.ui.vis.AmbientVisualizer
 import com.autodj.ui.vis.VisualizerStyle
@@ -209,6 +210,15 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
                     }
                     TvRoundButton(80.dp, Color.White, if (state.paused) "Play" else "Pause", Modifier.focusRequester(pauseFocus), onClick = { vm.engine.togglePause() }) {
                         if (state.paused) PlayIcon(INK, Modifier.size(38.dp)) else PauseIcon(INK, Modifier.size(38.dp))
+                    }
+                    // Skip: out at the next phrase, pressed again at the next bar.
+                    val skipLabel = when (state.skipping) {
+                        0 -> "Skip to the next song"
+                        1 -> "Skipping at the next phrase · press again for the next bar"
+                        else -> "Skipping at the next bar"
+                    }
+                    TvRoundButton(60.dp, if (state.skipping > 0) Glass.FillSelected else Glass.FillStrong, skipLabel, onClick = { vm.skip() }) {
+                        SkipIcon(if (state.canSkip || state.skipping > 0) Glass.Text else Glass.Muted, Modifier.size(28.dp))
                     }
                     // While the controls are up ◀ ▶ move between buttons, so the look has its own button.
                     LookButton(style.label) { changeLook(1); touched++ }

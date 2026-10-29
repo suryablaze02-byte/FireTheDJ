@@ -192,11 +192,85 @@ class WordPlayTest {
         val p = com.autodj.dj.Performer.plan(t, 0, 1.0, 120.0, mode = MixMode.TRICKSTER, lyrics = l)
         val drop = 16.0
         val rolls = p.events.filter { it.type == com.autodj.dj.fx.FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end > drop - 2 * t.barSec }
+        // (A tape stop into the drop ends the loop two beats early.)
         // Starts where the word does, at the word's own loop length, and tightens into the drop.
         assertEquals(13.5, rolls.minOf { it.start }, 1e-9)
         assertEquals(0.125f, rolls.maxBy { it.end }.p1, 1e-6f)
         assertTrue(p.tricks.any { it.label.startsWith("Word loop “Kissik”") })
         // Without lyrics, the plain roll.
         assertTrue(com.autodj.dj.Performer.plan(t, 0, 1.0, 120.0, mode = MixMode.TRICKSTER).tricks.none { it.label.startsWith("Word loop") })
+    }
+
+    @Test
+    fun fillerWordsNeverLinkWhateverTheirSpelling() {
+        // Keys turn "w" into "v": the list must match them all the same.
+        for (w in listOf("what", "with", "when", "now", "down", "ain't", "since", "know", "gonna")) {
+            assertFalse(w, WordKey.linkable(WordKey.of(w)))
+        }
+        assertTrue(WordKey.linkable(WordKey.of("lose")))
+        assertTrue(WordKey.linkable(WordKey.of("fire")))
+    }
+
+    @Test
+    fun aTitleWordScoresHigher() {
+        assertEquals(setOf(WordKey.of("lose"), WordKey.of("myself")), WordPlay.titleKeys("If I Lose Myself (Alesso vs OneRepublic)"))
+        val a = timed(100.0 to "I don't want to lose")
+        val b = timed(10.0 to "lose myself tonight")
+        val plain = WordPlay.search(a, b, 80.0, 200.0, 0.0, 60.0, 150.0).link!!
+        val titled = WordPlay.search(a, b, 80.0, 200.0, 0.0, 60.0, 150.0, titleWords = WordPlay.titleKeys("If I Lose Myself")).link!!
+        assertEquals(1.0, titled.score - plain.score, 1e-9)
+    }
+
+    @Test
+    fun tricksterTakesALooserLinkThanSmooth() {
+        assertTrue(WordPlay.TRICKSTER_MIN_SCORE < WordPlay.MIN_SCORE)
+        // A link between the two bars: found in a search, not good enough for find().
+        val a = timed(100.0 to "I see the fire")
+        val b = timed(50.0 to "fire in the sky")
+        val link = WordPlay.search(a, b, 80.0, 200.0, 0.0, 60.0, 140.0).link!!
+        assertTrue("score ${link.score}", link.score in WordPlay.TRICKSTER_MIN_SCORE..WordPlay.MIN_SCORE)
+        assertNull(WordPlay.find(a, b, 80.0, 200.0, 0.0, 60.0, 140.0))
+    }
+
+    @Test
+    fun wordsThatSoundAlikeMatchAndRhymesFollowTheSound() {
+        assertEquals(WordKey.sound("night"), WordKey.sound("knight"))
+        assertEquals(WordKey.sound("tonight"), WordKey.sound("tonite"))
+        assertEquals(WordKey.sound("high"), WordKey.sound("hi"))
+        assertEquals(WordKey.sound("pray"), WordKey.sound("prey"))
+        assertNotEquals(WordKey.sound("love"), WordKey.sound("live"))
+        // Rhymes by sound, not by the last letters.
+        assertEquals(WordKey.rhyme(WordKey.sound("fire")), WordKey.rhyme(WordKey.sound("higher")))
+        assertEquals(WordKey.rhyme(WordKey.sound("body")), WordKey.rhyme(WordKey.sound("nobody")))
+        assertNotEquals(WordKey.rhyme(WordKey.sound("party")), WordKey.rhyme(WordKey.sound("body")))
+    }
+
+    @Test
+    fun aSoundAlikeLinksBelowTheSameWordAndAboveARhyme() {
+        val a = timed(100.0 to "dancing through the night")
+        val same = WordPlay.search(a, timed(10.0 to "night is young"), 80.0, 200.0, 0.0, 60.0, 150.0).link!!
+        val alike = WordPlay.search(a, timed(10.0 to "knight in shining armour"), 80.0, 200.0, 0.0, 60.0, 150.0).link!!
+        val rhyme = WordPlay.search(a, timed(10.0 to "light it up"), 80.0, 200.0, 0.0, 60.0, 150.0).link!!
+        assertEquals(com.autodj.dj.Kind.SAME, same.kind)
+        assertEquals(com.autodj.dj.Kind.SOUNDS_ALIKE, alike.kind)
+        assertEquals(com.autodj.dj.Kind.RHYME, rhyme.kind)
+        assertTrue(same.score > alike.score && alike.score > rhyme.score)
+        assertEquals("“night” ~ “knight”", alike.label)
+    }
+
+    @Test
+    fun aRemixOnlyTakesLyricsTimedToThatRemix() {
+        assertEquals("gaullin", LyricsSources.versionOf("Sweater Weather (Gaullin Remix)"))
+        assertEquals("guetta", LyricsSources.versionOf("Titanium (feat. Sia) (David Guetta & MORTEN Future Rave Remix)"))
+        assertNull(LyricsSources.versionOf("Cheerleader (Felix Jaehn Remix Radio Edit)"))
+        assertNull(LyricsSources.versionOf("Reload (Radio Edit)"))
+        assertNull(LyricsSources.versionOf("Waiting For Love"))
+        val s = """"trackName":"Sweater Weather","artistName":"The Neighbourhood""""
+        val original = JSONArray("""[{$s,"syncedLyrics":"[00:01.00] original","duration":240}]""")
+        val lrclib = Lrclib { null }
+        // The original's timing doesn't fit the remix: no lyrics rather than wrong ones.
+        assertNull(lrclib.pick(original, 230.0, "Sweater Weather", "The Neighbourhood", version = "gaullin"))
+        val remix = JSONArray("""[{"trackName":"Sweater Weather (Gaullin Remix)","artistName":"The Neighbourhood","syncedLyrics":"[00:01.00] remix","duration":230}]""")
+        assertEquals("[00:01.00] remix", lrclib.pick(remix, 230.0, "Sweater Weather", "The Neighbourhood", version = "gaullin")?.lrc)
     }
 }

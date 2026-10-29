@@ -193,8 +193,8 @@ object DecisionEngine {
         base[Recipe.BASS_DROP] = if (mode == MixMode.SMOOTH) 3.4 else 1.8
         // Word play needs a word both songs sing; the planner finds that itself, from their lyrics.
         base[Recipe.WORD_PLAY] = Double.NEGATIVE_INFINITY
-        // The regional drums are for Indian music only.
-        val indian = SfxDressing.indian(a) || SfxDressing.indian(b)
+        // The regional drums are for music with a regional flavour (Indian, Latin, Arabic) only.
+        val indian = SfxDressing.regional(a) || SfxDressing.regional(b)
         if (indian) indianCuts.forEach { (r, s) -> base[r] = maxOf(base[r] ?: 0.0, s) }
         else base[Recipe.DRUM_FILL_CUT] = Double.NEGATIVE_INFINITY
         val crossGenre = a.genreFamily != b.genreFamily
@@ -274,11 +274,12 @@ internal class RecipeBuilder(
     private val ratio = if (beatmatched) tempoMultiple * b.beatSec / a.beatSec else 1.0
 
     /**
-     * How long A and B both sound when B drops in: half a bar when the beats are locked, one
-     * beat when they aren't (two tempos on top of each other for longer is a clash). The
+     * How long A and B both sound when B drops in: a bar when the beats are locked, two beats
+     * when they aren't. The crossfade is equal-power, so the two are never both near full volume,
+     * and B's bass only comes up as A fades (one bassline at a time). The
      * echo and reverb tails ring on after A's dry signal has gone.
      */
-    private val overlapSec = if (beatmatched) a.barSec / 2 else a.beatSec
+    private val overlapSec = if (beatmatched) a.barSec else 2 * a.beatSec
 
     /** The B track time that plays alongside A track time [aSec]. */
     private fun toB(aSec: Double) = entrySec + (aSec - exitSec) * ratio
@@ -291,7 +292,12 @@ internal class RecipeBuilder(
 
     /** B comes in on the exit point and crossfades up while A's dry signal fades out ([overlapSec]). */
     private fun bDropIn(extra: List<FxEvent> = emptyList()) =
-        bPlan(listOf(Ramp(entrySec, entrySec + overlapSec * ratio, 0f, 1f, Law.CONSTANT_POWER)), emptyList(), extra)
+        bPlan(
+            listOf(Ramp(entrySec, entrySec + overlapSec * ratio, 0f, 1f, Law.CONSTANT_POWER)),
+            // B's bass stays low while A still sounds, then rises as A goes.
+            listOf(Ramp(entrySec, entrySec + overlapSec * ratio, 0f, 1f, Law.POWER)),
+            extra,
+        )
 
     /** A's dry signal crossfades out over [overlapSec] from [at] (effect tails keep ringing). */
     private fun aOutAt(at: Double) = listOf(Ramp(at, at + overlapSec, 1f, 0f, Law.CONSTANT_POWER))
@@ -393,7 +399,8 @@ internal class RecipeBuilder(
         val (aGain, bGain) = crossfade(e, end)
         val aOut = aPlan(
             gain = aGain,
-            bass = emptyList(),
+            // The low-pass keeps A's bass: swap it out where B's high-pass opens, one bassline at a time.
+            bass = listOf(Ramp(mid - beat, mid, 1f, 0f)),
             events = listOf(
                 FxEvent(FxType.LOW_PASS, e, end, 0f, 0.85f),
                 FxEvent(FxType.REVERB, mid, end, 0f, 0.6f, p1 = 3.0f),
@@ -401,7 +408,7 @@ internal class RecipeBuilder(
         )
         val bIn = bPlan(
             gain = bGain,
-            bass = emptyList(),
+            bass = listOf(Ramp(toB(mid - beat), toB(mid), 0f, 1f)),
             events = listOf(FxEvent(FxType.HIGH_PASS, toB(e), toB(mid), 0.45f, 0f)),
         )
         return Built(aOut, bIn, e, end, listOf(Phase("Filters cross", e, mid), Phase("Reverb wash", mid, end)))
@@ -415,7 +422,8 @@ internal class RecipeBuilder(
         val (aGain, bGain) = crossfade(e, end)
         val aOut = aPlan(
             gain = aGain,
-            bass = emptyList(),
+            // One bassline at a time: A's goes as B's comes in, halfway.
+            bass = listOf(Ramp(mid - beat, mid, 1f, 0f)),
             events = listOf(
                 FxEvent(FxType.LOFI, e, end, 0f, 1f, p1 = 6f, p2 = 8f),
                 FxEvent(FxType.LOW_PASS, mid, end, 0f, 0.6f),
@@ -423,7 +431,7 @@ internal class RecipeBuilder(
         )
         val bIn = bPlan(
             gain = bGain,
-            bass = emptyList(),
+            bass = listOf(Ramp(toB(mid - beat), toB(mid), 0f, 1f)),
             events = listOf(FxEvent(FxType.HIGH_PASS, toB(e), toB(e + (mid - e) / 2), 0.4f, 0f)),
         )
         return Built(aOut, bIn, e, end, listOf(Phase("Lo-fi crush", e, mid), Phase("Fade out", mid, end)))
@@ -663,13 +671,15 @@ internal class RecipeBuilder(
 
     /**
      * Over A's breakdown (no beat, little bass), B's beat comes in within two bars and carries
-     * the floor while the breakdown fades out under a rising high-pass across eight bars.
+     * the floor while the breakdown drops back as it does, then fades out under a rising
+     * high-pass across the eight bars.
      */
     private fun breakdownSwap(): Built {
         val e = exitSec
         val end = e + 8 * bar
         val aOut = aPlan(
-            gain = listOf(Ramp(e, end, 1f, 0f, Law.CONSTANT_POWER)),
+            // Down as B's beat comes up over two bars (never both near full), then a quiet fade under B.
+            gain = listOf(Ramp(e, e + 2 * bar, 1f, 0.2f, Law.CONSTANT_POWER), Ramp(e + 2 * bar, end, 0.2f, 0f)),
             bass = listOf(Ramp(e, e + beat, 1f, 0f)),
             events = listOf(FxEvent(FxType.HIGH_PASS, e + 4 * bar, end, 0f, 0.5f)),
         )

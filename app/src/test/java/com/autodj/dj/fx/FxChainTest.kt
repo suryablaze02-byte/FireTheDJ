@@ -231,7 +231,8 @@ class FxChainTest {
     fun soundEffectsDuckUnderTheKick() {
         val out = run(plan(listOf(FxEvent(FxType.WHOOSH, 0.0, 2.0, 1f, 1f)), beatSec = 0.5), FloatArray(2 * sr))
         // Right on the beat (1.0 s) the effect dips; mid-beat it is back up.
-        assertTrue(rms(out, 1.0, 1.03) < 0.8 * rms(out, 1.2, 1.23))
+        // A light duck, so the effects are heard: still a dip on the beat (the whoosh itself rises meanwhile).
+        assertTrue("${rms(out, 1.0, 1.03)} vs ${rms(out, 1.2, 1.23)}", rms(out, 1.0, 1.03) < 0.97 * rms(out, 1.2, 1.23))
     }
 
     @Test
@@ -286,13 +287,33 @@ class FxChainTest {
         assertTrue(rms(fill, 1.5, 2.0) > rms(fill, 0.0, 0.5))
     }
 
+
+    @Test
+    fun latinAndArabicSoundsPlayOnTheBeat() {
+        // Every new sound is heard on its hit and stays finite and in range.
+        for (type in listOf(FxType.WHISTLE, FxType.TIMBALES, FxType.COWBELL, FxType.GUIRA, FxType.SHAKER, FxType.CLAPS, FxType.DARBUKA)) {
+            val hit = run(plan(listOf(FxEvent(type, 0.0, 2.0, p1 = Drum.HIT))), FloatArray(sr * 2))
+            assertTrue("$type", hit.all { it.isFinite() && abs(it) <= 1.5f })
+            assertTrue("$type hit", rms(hit, 0.0, 0.1) > 0.03)
+            assertTrue("$type rings out", rms(hit, 1.5, 2.0) < 0.5 * rms(hit, 0.0, 0.1))
+        }
+        // Darbuka "dum, tek-tek": the dum on the one, the teks half and three quarters of a beat later.
+        val dum = run(plan(listOf(FxEvent(FxType.DARBUKA, 0.0, 2.0, p1 = Drum.HIT))), FloatArray(sr * 2))
+        for (at in listOf(0.0, 0.25, 0.375)) assertTrue("stroke at $at", rms(dum, at + 0.002, at + 0.03) > 0.03)
+        // Claps groove on two and four.
+        val claps = run(plan(listOf(FxEvent(FxType.CLAPS, 0.0, 4.0, p1 = Drum.FILL))), FloatArray(sr * 4))
+        assertTrue(rms(claps, 0.5, 0.6) > 3 * rms(claps, 0.1, 0.45))
+        // The mizmar climbs hijaz: a tone that sounds and stays bounded.
+        val reed = run(plan(listOf(FxEvent(FxType.MIZMAR, 0.0, 2.0, p1 = 330f))), FloatArray(sr * 2))
+        assertTrue(reed.all { it.isFinite() } && rms(reed, 0.3, 1.0) > 0.03)
+    }
     @Test
     fun soundEffectsSampledJustOutsideTheirTimeAreSilentNotACrash() {
         // Effects are picked per block, so the first samples of a block can come before an effect starts.
         val synth = SfxSynth(44100)
         val types = FxType.entries.filter { it.isSfx }
         for (type in types) {
-            val e = FxEvent(type, 10.0, 12.0, p1 = if (type == FxType.NADASWARAM) 330f else 1f)
+            val e = FxEvent(type, 10.0, 12.0, p1 = if (type == FxType.NADASWARAM || type == FxType.MIZMAR) 330f else 1f)
             assertEquals("$type", 0f, synth.sample(listOf(e), 9.999, 0.5), 0f)
             assertEquals("$type", 0f, synth.sample(listOf(e), 12.0, 0.5), 0f)
         }
@@ -307,5 +328,42 @@ class FxChainTest {
         val buf = FloatArray(2 * sr) { 0.1f * sin(it * 0.05).toFloat() }
         chain.process(buf, sr)
         assertTrue(buf.all { it.isFinite() })
+    }
+
+    @Test
+    fun theEqTricksShapeTheirBandAndLeaveTheRest() {
+        fun level(freq: Double, event: FxEvent) = rms(run(plan(listOf(event)), sine(freq, 1.0, amp = 0.3)), 0.5, 0.9) /
+            rms(run(plan(emptyList()), sine(freq, 1.0, amp = 0.3)), 0.5, 0.9)
+        // Bass boost: more low end, the mids eased a little so it adds weight, not loudness.
+        val boost = FxEvent(FxType.BASS_BOOST, 0.0, 1.0, p1 = 5f)
+        assertTrue(level(60.0, boost) > 1.1)
+        assertTrue(level(60.0, boost) / level(2000.0, boost) > 1.5)
+        assertTrue(level(2000.0, boost) in 0.6..1.0)
+        // Bass kill: the low end gone, the mids kept.
+        val kill = FxEvent(FxType.BASS_KILL, 0.0, 1.0)
+        assertTrue(level(50.0, kill) < 0.3)
+        assertTrue(level(2000.0, kill) > 0.9)
+        // Mid cut and treble cut hit their own bands only.
+        val midCut = FxEvent(FxType.MID_CUT, 0.0, 1.0)
+        assertTrue(level(1000.0, midCut) < 0.3)
+        assertTrue(level(60.0, midCut) > 0.9)
+        val trebleCut = FxEvent(FxType.TREBLE_CUT, 0.0, 1.0)
+        assertTrue(level(8000.0, trebleCut) < 0.3)
+        assertTrue(level(200.0, trebleCut) > 0.9)
+    }
+
+    @Test
+    fun aRisingRollPlaysItsLoopHigher() {
+        // A one-beat loop of a 220 Hz tone, raised an octave across the roll: it ends near 440 Hz.
+        fun crossings(x: FloatArray, from: Double, to: Double): Int {
+            var n = 0
+            for (i in (from * sr).toInt() + 1 until (to * sr).toInt()) if ((x[i - 1] < 0f) != (x[i] < 0f)) n++
+            return n
+        }
+        val input = sine(220.0, 2.0, amp = 0.5)
+        val flat = run(plan(listOf(FxEvent(FxType.LOOP_ROLL, 0.0, 2.0, p1 = 1f))), input)
+        val rising = run(plan(listOf(FxEvent(FxType.LOOP_ROLL, 0.0, 2.0, 1f, 1f, p1 = 1f, p2 = 12f))), input)
+        val ratio = crossings(rising, 1.5, 1.9).toDouble() / crossings(flat, 1.5, 1.9)
+        assertTrue("ratio $ratio", ratio in 1.8..2.2)
     }
 }

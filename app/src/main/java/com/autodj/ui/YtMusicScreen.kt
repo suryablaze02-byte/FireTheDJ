@@ -70,7 +70,8 @@ import java.net.URL
 fun YtMusicScreen(
     folders: List<MusicFolder>,
     importState: ImportState,
-    onImport: (String) -> Unit,
+    /** A playlist link, and where in YT Music it was picked ("Telugu › Party today"; null when pasted). */
+    onImport: (String, String?) -> Unit,
     onImportClosed: () -> Unit,
     onBack: () -> Unit,
     vm: YtMusicViewModel = viewModel(),
@@ -153,7 +154,7 @@ fun YtMusicScreen(
                                         PlaylistCard(card, isAdded = card.link in added, busy = busy) {
                                             if (importState != ImportState.Working && card.link !in added) {
                                                 tapped = card
-                                                onImport(card.link)
+                                                onImport(card.link, listOfNotNull(selected?.title, shelf.title).joinToString(" › "))
                                             }
                                         }
                                     }
@@ -166,7 +167,7 @@ fun YtMusicScreen(
         }
     }
     if (pasting) {
-        ImportDialog(youTube = true, importState, onImport) {
+        ImportDialog(youTube = true, importState, { link -> onImport(link, null) }) {
             pasting = false
             onImportClosed()
         }

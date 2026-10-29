@@ -8,6 +8,8 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -65,13 +69,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.autodj.analysis.AnalysisJobs
 import com.autodj.support.Upi
 import com.autodj.update.Changelog
 import com.autodj.update.Release
 import com.autodj.update.UpdateState
 import com.autodj.update.Updates
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/** Settings: updates, supporting FireTheDJ, and where it comes from. */
+/** Settings: updates, analysis, what's new, supporting FireTheDJ, and where it comes from. */
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -105,6 +112,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 )
             }
 
+            AnalysisSettings()
             WhatsNew()
 
             GlassHeading("Support", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
@@ -332,19 +340,110 @@ private fun copyId(context: Context) {
     Toast.makeText(context, "UPI ID copied", Toast.LENGTH_SHORT).show()
 }
 
-/** Every change in the installed version. */
+/**
+ * A card that shows its [title] and a one-line [summary], and opens on a tap to show [content].
+ * Closed until opened; stays as left while Settings is open.
+ */
+@Composable
+private fun Collapsible(title: String, summary: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    var open by rememberSaveable(title) { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
+    Column(modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                .clickable(role = Role.Button, onClickLabel = if (open) "Close" else "Open") { open = !open }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title.uppercase(), color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                Text(summary, color = Glass.Muted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
+            }
+            Icon(Icons.Filled.KeyboardArrowDown, null, tint = Glass.Muted, modifier = Modifier.rotate(turn))
+        }
+        AnimatedVisibility(open) {
+            Column(Modifier.fillMaxWidth()) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = .08f)))
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Analysis: whether it keeps going in the background, how many songs at once, and how many
+ * analysed songs have lyrics.
+ */
+@Composable
+private fun AnalysisSettings() {
+    val settings by AnalysisJobs.settings.collectAsStateWithLifecycle()
+    val results by AnalysisJobs.results.collectAsStateWithLifecycle()
+    var lyrics by remember { mutableStateOf(0 to 0) }
+    // Counted off the main thread whenever a song finishes (the count reads the lyrics store).
+    LaunchedEffect(results) { lyrics = withContext(Dispatchers.IO) { AnalysisJobs.lyricsCount() } }
+    val auto = AnalysisJobs.autoSongsAtOnce
+    val atOnce = settings.songsAtOnce
+    val atOnceLabel = if (atOnce == 0) "Auto" else "$atOnce"
+    val idle = if (atOnce == 0) auto else atOnce
+    val summary = listOf(
+        if (settings.background) "Background on" else "Background off",
+        atOnceLabel,
+        "lyrics for ${lyrics.first} of ${lyrics.second}",
+    ).joinToString(" · ")
+    Collapsible("Analysis", summary, Modifier.padding(top = 24.dp)) {
+        SettingRow("Analyse in the background", if (settings.background) "Keeps going with the screen off" else "Only while FireTheDJ is open") {
+            Switch(
+                checked = settings.background,
+                onCheckedChange = { AnalysisJobs.setBackground(it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+            )
+        }
+        Divider()
+        // Tapping steps through Auto, 1, 2, 3, 4.
+        SettingRow(
+            "Songs at once",
+            "$idle when idle · ${minOf(2, idle)} while a set plays",
+            Modifier.clickable(role = Role.Button, onClickLabel = "Change") { AnalysisJobs.setSongsAtOnce((atOnce + 1) % (AnalysisJobs.MAX_AT_ONCE + 1)) },
+        ) {
+            Text(atOnceLabel, color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Divider()
+        SettingRow("Lyrics", "Fetched and lined up while each song is analysed") {
+            Text("${lyrics.first} of ${lyrics.second}", color = Glass.Muted, fontSize = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun SettingRow(title: String, detail: String, modifier: Modifier = Modifier, end: @Composable () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        end()
+    }
+}
+
+@Composable
+private fun Divider() = Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = .08f)))
+
+/** Every change in the installed version: its summary, opening to the full list. */
 @Composable
 private fun WhatsNew() {
     val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
-    GlassHeading("What's new in ${current.version}", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
-    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp)).padding(18.dp)) {
-        VersionChanges(current)
+    Collapsible("What's new in ${current.version}", current.summary, Modifier.padding(top = 12.dp)) {
+        Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 18.dp)) { VersionChanges(current) }
     }
 }
 
 @Composable
 private fun VersionChanges(v: Changelog.Version) {
-    Text(v.summary, color = Glass.Text.copy(alpha = .88f), fontSize = 14.sp, lineHeight = 20.sp)
     v.sections.forEach { section ->
         Text(section.title.uppercase(), color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp,
             modifier = Modifier.padding(top = 16.dp))

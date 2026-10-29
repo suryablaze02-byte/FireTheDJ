@@ -314,7 +314,7 @@ fun MusicScreen(
             item { GlassHeading("Your sources", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp)) }
             itemsIndexed(folders, key = { _, f -> "folder:" + f.uri }) { i, f ->
                 val done = f.tracks.count { status[it]?.status.let { s -> s == AnalysisStatus.READY || s == AnalysisStatus.FAILED } }
-                SourceRow(f, done, groupShape(i, folders.size)) { onRemoveFolder(f.uri) }
+                SourceRow(f, done, groupShape(i, folders.size), languages = languageSummary(f.tracks.mapNotNull { status[it]?.language })) { onRemoveFolder(f.uri) }
             }
         }
         item {
@@ -365,7 +365,7 @@ private fun AddTile(kind: SourceKind, label: String, modifier: Modifier, onClick
 
 /** A folder or playlist: its kind, name, song count (or analysis progress) and a menu to remove it. */
 @Composable
-private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, onRemove: () -> Unit) {
+private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, languages: String? = null, onRemove: () -> Unit) {
     val kind = when {
         !folder.remote -> SourceKind.PHONE
         "youtube" in folder.uri -> SourceKind.YOUTUBE
@@ -393,7 +393,7 @@ private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, onRemove
                 }
             } else {
                 Text(
-                    (if (kind == SourceKind.PHONE) "This phone" else "Streams") + " · ${songs(total)}",
+                    (if (kind == SourceKind.PHONE) "This phone" else "Streams") + " · ${songs(total)}" + languages?.let { " · $it" }.orEmpty(),
                     color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -462,7 +462,8 @@ private fun TrackRow(item: LibraryItem, art: String?, shape: Shape, onRemove: (S
                             Text("Genre unclear ($pct%) · left out of mixes", color = Dj.Warn, fontSize = 12.sp)
                         } else {
                             val who = info.artist.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
-                            Text("$who${info.genre} · ${"%.0f".format(info.bpm)} BPM", color = Glass.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val lang = item.language?.let { " · $it" }.orEmpty()
+                            Text("$who${info.genre} · ${"%.0f".format(info.bpm)} BPM$lang", color = Glass.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     AnalysisStatus.FAILED -> Text("Couldn't analyse: ${item.error}", color = Dj.Warn, fontSize = 12.sp, maxLines = 2)
@@ -542,3 +543,14 @@ internal fun ImportDialog(youTube: Boolean, state: ImportState, onImport: (Strin
 
 /** "1 song", "38 songs". */
 internal fun songs(n: Int) = if (n == 1) "1 song" else "$n songs"
+
+/**
+ * The languages a source's songs are sung in, for its card: the main one, and a second with its
+ * count when it's a real part of the mix ("English · Spanish 6"). Null while none is known.
+ */
+private fun languageSummary(languages: List<String>): String? {
+    val counts = languages.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
+    val first = counts.firstOrNull() ?: return null
+    val second = counts.getOrNull(1)?.takeIf { it.value >= 3 }
+    return if (second != null) "${first.key} · ${second.key} ${second.value}" else first.key
+}

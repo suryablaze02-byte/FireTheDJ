@@ -2,6 +2,7 @@ package com.autodj.ui
 
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,9 +48,14 @@ fun NowPlayingScreen(
     onToggle: () -> Unit,
     onStop: () -> Unit,
     onOpenMix: () -> Unit,
+    onSkip: () -> Unit = {},
     visual: () -> VisualFrame? = { null },
     onFullscreen: () -> Unit = {},
     onCast: () -> Unit = {},
+    /** The language the set is sung in, shown with its genre and mode; null for a mixed set. */
+    setLanguage: String? = null,
+    /** A song's language by its uri. */
+    languageOf: (String) -> String? = { null },
 ) {
     val deck = state.current
     val track = state.set.getOrNull(state.index)
@@ -77,7 +83,7 @@ fun NowPlayingScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Box(Modifier.size(7.dp).background(Glass.Ember, CircleShape))
-                    Text(listOf(genre, state.mode.label).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Text, fontSize = 13.sp,
+                    Text(listOfNotNull(genre, state.mode.label, setLanguage).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Text, fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 Spacer(Modifier.weight(1f))
@@ -98,7 +104,8 @@ fun NowPlayingScreen(
                     if (deck.artist.isNotBlank()) Text(deck.artist, color = Glass.Muted, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 val key = if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key
-                Text("${"%.0f".format(deck.bpm)} BPM · $key", color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
+                val lang = languageOf(deck.uri)?.let { " · $it" }.orEmpty()
+                Text("${"%.0f".format(deck.bpm)} BPM · $key$lang", color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
             }
 
             // Where the set is in this track.
@@ -109,6 +116,7 @@ fun NowPlayingScreen(
             Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                 Text(formatTime(deck.positionSec), color = Glass.Muted, fontSize = 12.sp)
                 val trick = when {
+                    state.skipping > 0 && state.secondsToMix != null -> "Skipping at the next ${if (state.skipping >= 2) "bar" else "phrase"}"
                     state.trickNow != null -> "Now: ${state.trickNow}"
                     state.trickNext != null -> "${state.trickNext} in ${formatTime(state.secondsToTrick ?: 0.0)}"
                     else -> ""
@@ -130,6 +138,21 @@ fun NowPlayingScreen(
                         .semantics { contentDescription = if (state.paused) "Resume the set" else "Pause the set" },
                     contentAlignment = Alignment.Center,
                 ) { if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(32.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(32.dp)) }
+                // Skip: out at the next phrase, tapped again at the next bar; ringed while skipping.
+                val skipping = state.skipping > 0
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape)
+                        .then(if (skipping) Modifier.border(2.dp, Glass.EmberText, CircleShape) else Modifier)
+                        .clickable(enabled = state.canSkip, role = Role.Button, onClick = onSkip)
+                        .semantics {
+                            contentDescription = when {
+                                state.skipping == 1 -> "Skip sooner, at the next bar"
+                                skipping -> "Skipping at the next bar"
+                                else -> "Skip to the next song"
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) { SkipIcon(if (state.canSkip || skipping) Glass.Text else Glass.Muted, Modifier.size(26.dp)) }
                 Text("AI in control", color = Glass.Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
             }
 

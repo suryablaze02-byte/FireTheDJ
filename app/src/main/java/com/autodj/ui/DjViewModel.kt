@@ -8,18 +8,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.autodj.BuildConfig
-import com.autodj.analysis.AnalysisCache
+import com.autodj.analysis.AnalysisJobs
 import com.autodj.analysis.ArtworkRepository
 import com.autodj.analysis.FolderScanner
-import com.autodj.analysis.GenreClassifier
-import com.autodj.analysis.GenreLookup
 import com.autodj.analysis.Genres
+import com.autodj.analysis.Languages
+import com.autodj.lyrics.LyricsStore
 import com.autodj.analysis.TrackAnalyzer
 import com.autodj.dj.EngineHolder
-import com.autodj.lyrics.LyricsStore
 import com.autodj.dj.MixEngine
 import com.autodj.dj.MixMode
 import com.autodj.dj.MixService
+import com.autodj.dj.SfxDressing
 import com.autodj.model.TrackInfo
 import com.autodj.remote.ImportResult
 import com.autodj.remote.PlaylistImporter
@@ -35,12 +35,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
-import android.os.Process
-import java.util.concurrent.Executors
 
 enum class AnalysisStatus { QUEUED, ANALYZING, READY, FAILED }
 
@@ -50,6 +46,8 @@ data class LibraryItem(
     val status: AnalysisStatus,
     val info: TrackInfo? = null,
     val error: String? = null,
+    /** The language it's sung in, once known (see [com.autodj.analysis.Languages]). */
+    val language: String? = null,
 )
 
 /**
@@ -72,30 +70,11 @@ const val ALL_SOURCES = "all"
 @UnstableApi
 class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     private val prefs = app.getSharedPreferences("library", 0)
-    private val cache = AnalysisCache(app)
     private val artworkRepo = ArtworkRepository(app)
-    private val genreLookup = GenreLookup(app)
     private val remoteLibrary = RemoteLibrary(app.filesDir)
     private val streamStore = StreamStore.get(app)
     private val importer = PlaylistImporter(PlaylistUrlValidator(StreamProviders.default(jamendoClientId = BuildConfig.JAMENDO_CLIENT_ID)), this)
-    private val analysisQueue = Channel<String>(Channel.UNLIMITED)
-
-    /** Leaves cores free for playback and the UI. */
-    private val analysisWorkers = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
-
-    /**
-     * Analysis runs on its own background-priority threads, so decoding a whole track never
-     * takes CPU from the screen (visualizers drop frames), the decks or the remote. That matters
-     * most on TV boxes, whose four slow cores are also playing the mix.
-     */
-    private val analysisDispatcher = Executors.newFixedThreadPool(analysisWorkers) { job ->
-        Thread({
-            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
-            job.run()
-        }, "analysis")
-    }.asCoroutineDispatcher()
     private val artworkQueue = Channel<TrackInfo>(Channel.UNLIMITED)
-    private val lyricsQueue = Channel<TrackInfo>(Channel.UNLIMITED)
 
     private val _library = MutableStateFlow<List<LibraryItem>>(emptyList())
     val library: StateFlow<List<LibraryItem>> = _library
@@ -135,31 +114,23 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     val engine: MixEngine = EngineHolder.get(app)
 
     init {
+        // The engine picks each song's party sounds (Latin, Arabic, Indian) by the language it's sung in.
+        SfxDressing.languageOf = { t -> _library.value.firstOrNull { it.uri == t.uri }?.language }
         val saved = prefs.getString(KEY_URIS, "").orEmpty().lines().filter { it.isNotBlank() }
         _library.value = saved.map { LibraryItem(it, nameFor(Uri.parse(it)), AnalysisStatus.QUEUED) }
         _folders.value = remoteLibrary.playlists().map { it.toSource() }
         Log.i("AutoDJ", "remote playlists: ${remoteLibrary.playlists().size}" + (remoteLibrary.loadError?.let { " (couldn't read: $it)" } ?: ""))
         _artwork.value = saved.mapNotNull { uri -> artworkRepo.cached(uri)?.let { uri to it.path } }.toMap()
-        saved.forEach { analysisQueue.trySend(it) }
-        // Several tracks at once: each analysis is single-threaded, phones have 6–8 cores.
-        repeat(analysisWorkers) {
-            viewModelScope.launch {
-                for (uri in analysisQueue) analyze(uri)
-            }
-        }
+        // Analysis (and each song's lyrics) runs for the whole app, so it carries on with this screen
+        // closed; the library mirrors where each song stands.
+        AnalysisJobs.init(app)
+        viewModelScope.launch { AnalysisJobs.results.collect(::mirror) }
+        saved.forEach { AnalysisJobs.enqueue(it, remoteLibrary.track(it)) }
         viewModelScope.launch {
             for (track in artworkQueue) {
                 if (track.uri in _artwork.value) continue
                 val file = withContext(Dispatchers.IO) { artworkRepo.fetch(track, remoteLibrary.track(track.uri)?.artworkUrl) } ?: continue
                 _artwork.update { it + (track.uri to file.path) }
-            }
-        }
-        // Timed lyrics for the lyric looks (and word-play mixes on the phone), one gentle request at a time.
-        LyricsStore.init(app)
-        viewModelScope.launch(Dispatchers.IO) {
-            for (track in lyricsQueue) {
-                runCatching { LyricsStore.fetch(track) }.onFailure { Log.w("AutoDJ", "lyrics for \"${track.title}\": ${it.message}") }
-                delay(LYRICS_GAP_MS)
             }
         }
         // Rescan saved folders so songs added to them since last time show up.
@@ -190,9 +161,13 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     }
 
     /** Pastes a playlist link: validates it, fetches the playlist and adds it as a source. */
-    fun importPlaylist(link: String) {
+    /** Where in YT Music the playlist being imported was picked, to keep with it. */
+    private var importOrigin: String? = null
+
+    fun importPlaylist(link: String, origin: String? = null) {
         if (_importState.value == ImportState.Working) return
         _importState.value = ImportState.Working
+        importOrigin = origin
         viewModelScope.launch {
             _importState.value = when (val r = withContext(Dispatchers.IO) { importer.import(link) }) {
                 is ImportResult.Imported -> ImportState.Done(r.playlist.name, r.playlist.tracks.size)
@@ -207,29 +182,12 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
 
     /** [TrackSink]: the playlist becomes a source; its tracks are analysed and mixed like local files. */
     override fun ingest(playlist: RemotePlaylist) {
-        remoteLibrary.put(playlist)
+        // Re-adding a playlist without a chip keeps the one it was first picked from.
+        val origin = importOrigin ?: remoteLibrary.playlists().firstOrNull { it.link == playlist.link }?.origin
+        remoteLibrary.put(playlist.copy(origin = origin))
         val source = playlist.toSource()
         _folders.update { list -> list.filterNot { it.uri == source.uri } + source }
         addToLibrary(playlist.tracks.map { Uri.parse(it.streamUrl) })
-    }
-
-    private fun isStream(uri: String) = uri.startsWith("https://")
-
-    /**
-     * The stream's stored copy, downloading it if needed; null if the download fails or the
-     * service doesn't let apps keep copies of the track (then it streams).
-     */
-    private fun storeStream(uri: String): java.io.File? {
-        if (remoteLibrary.track(uri)?.storable == false) {
-            streamStore.delete(listOf(uri))
-            return null
-        }
-        if (streamStore.fileFor(uri) != null) return streamStore.fileFor(uri)
-        val t0 = System.currentTimeMillis()
-        return runCatching { streamStore.fetch(uri) }
-            .onSuccess { Log.i("AutoDJ", "stored \"${remoteLibrary.track(uri)?.title}\" (${it.length() / 1024} KB) in ${System.currentTimeMillis() - t0} ms") }
-            .onFailure { Log.w("AutoDJ", "couldn't store \"${remoteLibrary.track(uri)?.title}\", it will stream: ${it.message}") }
-            .getOrNull()
     }
 
     private fun RemotePlaylist.toSource() = MusicFolder(link, name, tracks.map { it.streamUrl }.toSet(), remote = true)
@@ -250,6 +208,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
             viewModelScope.launch(Dispatchers.IO) { streamStore.delete(folder.tracks - stillUsed) }
         }
         prefs.edit().putString(KEY_FOLDERS, (savedFolders() - uri).joinToString("\n")).apply()
+        folder.tracks.forEach(AnalysisJobs::forget)
         _library.update { list -> list.filterNot { it.uri in folder.tracks } }
         save()
         releasePermission(Uri.parse(uri))
@@ -264,10 +223,10 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         _folders.value = emptyList()
         _artwork.value = emptyMap()
         prefs.edit().remove(KEY_URIS).remove(KEY_FOLDERS).apply()
+        AnalysisJobs.forgetAll()
         viewModelScope.launch(Dispatchers.IO) {
-            cache.clear()
+            AnalysisJobs.clearCaches()
             artworkRepo.clear()
-            genreLookup.clear()
             remoteLibrary.clear()
             streamStore.clear()
         }
@@ -300,10 +259,11 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
             list + fresh.map { LibraryItem(it.toString(), nameFor(it), AnalysisStatus.QUEUED) }
         }
         save()
-        fresh.forEach { analysisQueue.trySend(it.toString()) }
+        fresh.forEach { AnalysisJobs.enqueue(it.toString(), remoteLibrary.track(it.toString())) }
     }
 
     fun remove(uri: String) {
+        AnalysisJobs.forget(uri)
         _library.update { list -> list.filterNot { it.uri == uri } }
         save()
     }
@@ -323,6 +283,11 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         app.startService(Intent(app, MixService::class.java))
         val crateLabel = if (crate == ALL) "All genres" else crate
         val label = if (folder != null) "${folder.name} · $crateLabel" else crateLabel
+        // The language first: the engine's first plans pick their party sounds by it.
+        val languages = _library.value.associate { it.uri to it.language }
+        _setLanguage.value = Languages.ofSet(tracks.map { languages[it.uri] })
+        SfxDressing.setLanguage = _setLanguage.value
+        Log.i("AutoDJ", "set language: ${_setLanguage.value ?: "mixed"} (" + tracks.mapNotNull { languages[it.uri] }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.joinToString { "${it.key} ${it.value}" } + ")")
         engine.start(tracks, label, _mode.value)
         playingSet = PlayingSet(crate, folder?.uri, label)
     }
@@ -351,54 +316,52 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     }
 
     fun togglePause() = engine.togglePause()
+    fun skip() = engine.skip()
     fun stop() = engine.stop()
 
-    private suspend fun analyze(uri: String) {
-        if (_library.value.none { it.uri == uri }) return
-        setItem(uri) { it.copy(status = AnalysisStatus.ANALYZING) }
-        try {
-            // Streams are downloaded once, here: analysis reads the stored copy and the decks play it.
-            // If the download fails the track still works, streaming instead.
-            val stored = if (isStream(uri)) withContext(Dispatchers.IO) { storeStream(uri) } else null
-            val analysed = withContext(analysisDispatcher) {
-                cache.get(uri) ?: TrackAnalyzer.analyze(
-                    getApplication(), Uri.parse(uri), remoteLibrary.track(uri), stored?.let { Uri.fromFile(it) } ?: Uri.parse(uri),
-                ).also { cache.put(it) }
-            }
-            val info = withOnlineGenre(analysed)
-            setItem(uri) { it.copy(status = AnalysisStatus.READY, info = info, name = info.title) }
-            offerToPlayingSet(info)
-            artworkQueue.trySend(info)
-            lyricsQueue.trySend(info)
-        } catch (e: Exception) {
-            setItem(uri) { it.copy(status = AnalysisStatus.FAILED, error = e.message ?: e.javaClass.simpleName) }
+    /**
+     * Copies where each song stands from [AnalysisJobs] into the library. A song that has just
+     * become ready joins the playing set (if it belongs) and gets its cover art looked up.
+     */
+    private fun mirror(results: Map<String, AnalysisJobs.Result>) {
+        val readyNow = mutableListOf<TrackInfo>()
+        val playlists = playlistsByTrack()
+        _library.value = _library.value.map { item ->
+            val r = results[item.uri] ?: return@map item
+            val status = AnalysisStatus.valueOf(r.status.name)
+            if (status == AnalysisStatus.READY && item.status != AnalysisStatus.READY && r.info != null) readyNow += r.info
+            item.copy(
+                status = status, info = r.info, error = r.error, name = r.info?.title ?: item.name,
+                language = r.info?.let { languageOf(it, playlists[it.uri]) },
+            )
+        }
+        readyNow.forEach {
+            offerToPlayingSet(it)
+            artworkQueue.trySend(it)
         }
     }
 
-    /**
-     * Tags and audio couldn't place the track in a crate: ask the iTunes store for its genre by
-     * artist and title, then file it as if the file had carried that tag.
-     */
-    private suspend fun withOnlineGenre(info: TrackInfo): TrackInfo {
-        if (info.genreFamily != Genres.UNCLASSIFIED) return info
-        val tag = withContext(Dispatchers.IO) { genreLookup.lookup(info.uri, info.artist, info.title) } ?: return info
-        val g = GenreClassifier.classify(info.features, info.bpm, Genres.clean(tag), tagSource = "online")
-        Log.i("AutoDJ", "genre for \"${info.title}\" from the web: $tag → ${g.family}")
-        if (g.family == Genres.UNCLASSIFIED) return info
-        return info.withGenre(g).also { cache.put(it) }
-    }
+    /** The playlist each streamed track came in. */
+    private fun playlistsByTrack(): Map<String, RemotePlaylist> =
+        remoteLibrary.playlists().flatMap { p -> p.tracks.map { it.streamUrl to p } }.toMap()
 
-    private fun setItem(uri: String, change: (LibraryItem) -> LibraryItem) {
-        _library.update { list -> list.map { if (it.uri == uri) change(it) else it } }
-    }
+    /**
+     * The language a song is sung in, from the most to the least trusted say: the YT Music chip
+     * or shelf its playlist was picked from, the playlist's name ("Tollywood…"), its lyrics (their
+     * script, or their everyday words), then its genre tag and title. Null when nothing says.
+     */
+    private fun languageOf(t: TrackInfo, playlist: RemotePlaylist?): String? =
+        Languages.named(playlist?.origin) ?: Languages.named(playlist?.name)
+            ?: LyricsStore.get(t)?.language
+            ?: Languages.named(t.genre) ?: Languages.named(t.title)
+
+    private val _setLanguage = MutableStateFlow<String?>(null)
+
+    /** The language most songs of the playing set are sung in, or null for a mixed set. */
+    val setLanguage: StateFlow<String?> = _setLanguage
 
     private fun save() {
         prefs.edit().putString(KEY_URIS, _library.value.joinToString("\n") { it.uri }).apply()
-    }
-
-    override fun onCleared() {
-        analysisDispatcher.close()
-        super.onCleared()
     }
 
     private companion object {
@@ -406,8 +369,5 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         const val KEY_MODE = "mode"
         const val KEY_VISUALIZER = "visualizer"
         const val KEY_FOLDERS = "folders"
-
-        /** Pause between lyrics requests, to go easy on the free catalogue. */
-        const val LYRICS_GAP_MS = 400L
     }
 }

@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import com.autodj.analysis.BeatAnalyzer
+import com.autodj.analysis.Languages
 import com.autodj.analysis.PcmDecoder
 import com.autodj.model.TrackInfo
 import com.autodj.remote.StreamStore
@@ -43,6 +44,13 @@ object LyricsStore {
 
     private fun file(uri: String) = dir?.let { File(it, "${uri.hashCode().toUInt()}_${uri.length}.json") }
 
+    /** Forgets a track's lyrics (or its miss), so they are looked up again: its audio changed. */
+    fun forget(uri: String) {
+        memory -= uri
+        missing -= uri
+        file(uri)?.delete()
+    }
+
     /** The track's lyrics on its own audio, or null when there are none (or not fetched yet). */
     fun get(t: TrackInfo): TimedLyrics? = get(t.uri)
 
@@ -56,26 +64,44 @@ object LyricsStore {
         return loaded
     }
 
-    /** Fetches and stores the track's lyrics unless already known. Blocking (network, decoding): call off the main thread. */
-    fun fetch(t: TrackInfo) {
-        val f = file(t.uri) ?: return
+    /**
+     * Fetches and stores the track's lyrics unless already known. [singing] is the track's
+     * singing curve when its analysis just made one; without it the track is decoded again to
+     * line the lyrics up. False when the catalogue couldn't be reached: ask again later. Blocking
+     * (network, decoding): call off the main thread.
+     */
+    fun fetch(t: TrackInfo, singing: FloatArray? = null): Boolean {
+        val f = file(t.uri) ?: return true
         val old = if (f.exists()) runCatching { JSONObject(f.readText()) }.getOrNull() else null
         val v = old?.optInt("v") ?: 0
         // Known lyrics stay; a miss is retried after a week, when the catalogue may have the song.
-        if (old != null && v == MATCHER_VERSION && (!old.optBoolean("none") || System.currentTimeMillis() - f.lastModified() < RETRY_MS)) return
+        // Misses saved without a reason date from when a failed request counted as one: try those again.
+        val freshMiss = old != null && old.has("why") && System.currentTimeMillis() - f.lastModified() < RETRY_MS
+        // Lyrics a remix was given before remixes needed their own are looked up again.
+        val version = LyricsSources.versionOf(t.title)
+        val rightVersion = version == null || old?.optString("ver") == version
+        if (old != null && v == MATCHER_VERSION && ((!old.optBoolean("none") && rightVersion) || freshMiss)) return true
         // Lyrics found by a lookup that is still good are lined up again from their original times.
-        val kept = old?.takeIf { v >= LOOKUP_VERSION && !it.optBoolean("none") }?.let(::original)
-        val found = kept ?: LyricsSources.find(t.title, t.artist, t.durationSec)?.let {
-            Original(Lrc.parse(it.lrc, ::toLatin), it.source, it.durationSec)
+        val kept = old?.takeIf { v >= LOOKUP_VERSION && !it.optBoolean("none") && rightVersion }?.let(::original)
+        val found = try {
+            kept ?: LyricsSources.find(t.title, t.artist, t.durationSec)?.let {
+                // The script, before it's turned into English letters, says the language best.
+                val words = Lrc.parse(it.lrc, ::toLatin)
+                Original(words, it.source, it.durationSec, Languages.fromScript(it.lrc) ?: Languages.fromWords(words.map { w -> w.text }))
+            }
+        } catch (e: LyricsSources.LookupFailed) {
+            // Nothing saved: the song is asked about again next time.
+            Log.i("AutoDJ", "lyrics for \"${t.title}\": couldn't reach the catalogue (${e.message}), will try again")
+            return false
         }
-        val vocal = found?.let { runCatching { vocalCurve(t) }.onFailure { e -> Log.w("AutoDJ", "singing curve for \"${t.title}\": ${e.message}") }.getOrNull() }
+        val vocal = found?.let { singing ?: runCatching { vocalCurve(t) }.onFailure { e -> Log.w("AutoDJ", "singing curve for \"${t.title}\": ${e.message}") }.getOrNull() }
         val aligned = found?.let {
-            LyricsAligner.align(it.words, t, it.source, it.durationSec?.let { len -> t.durationSec - len }, vocal, BeatAnalyzer.VOCAL_FPS)
+            LyricsAligner.align(it.words, t, it.source, it.durationSec?.let { len -> t.durationSec - len }, vocal, BeatAnalyzer.VOCAL_FPS, it.language)
         }
         if (aligned != null) {
             memory[t.uri] = aligned
             missing -= t.uri
-            f.writeText(write(aligned, found.durationSec).toString())
+            f.writeText(write(aligned, found.durationSec).putOpt("ver", version).toString())
             Log.i(
                 "AutoDJ",
                 "lyrics for \"${t.title}\": ${aligned.words.size} words from ${aligned.source}${if (kept != null) " (kept)" else ""}, " +
@@ -84,9 +110,15 @@ object LyricsStore {
         } else {
             memory -= t.uri
             missing += t.uri
-            f.writeText(JSONObject().put("none", true).put("v", MATCHER_VERSION).toString())
-            Log.i("AutoDJ", "lyrics for \"${t.title}\": " + if (found == null) "none found" else "found, but they don't line up with the audio")
+            val why = if (found == null) "none" else "misaligned"
+            f.writeText(JSONObject().put("none", true).put("why", why).put("v", MATCHER_VERSION).toString())
+            Log.i(
+                "AutoDJ",
+                "lyrics for \"${t.title}\" (${t.artist}, ${t.durationSec.toInt()} s): " +
+                    if (found == null) "none found" else "found (${found.durationSec?.toInt()} s version), but they don't line up with the audio",
+            )
         }
+        return true
     }
 
     /** How much singing there is through the track, decoded from its own audio (a stored copy of a stream when there is one). */
@@ -97,7 +129,7 @@ object LyricsStore {
         return BeatAnalyzer.vocalCurve(pcm.samples, pcm.sampleRate)
     }
 
-    private class Original(val words: List<LyricWord>, val source: String, val durationSec: Double?)
+    private class Original(val words: List<LyricWord>, val source: String, val durationSec: Double?, val language: String?)
 
     /** The words as the catalogue timed them, from a stored result (its shift taken back off). */
     private fun original(o: JSONObject): Original? {
@@ -107,7 +139,7 @@ object LyricsStore {
             val w = a.getJSONArray(it)
             LyricWord(w.getString(0), w.getString(1), w.getDouble(2) - off, w.getDouble(3) - off, w.getBoolean(4), w.getBoolean(5), w.getInt(6))
         }
-        return Original(words, o.optString("source", "LRCLIB"), o.optDouble("dur").takeIf { !it.isNaN() })
+        return Original(words, o.optString("source", "LRCLIB"), o.optDouble("dur").takeIf { !it.isNaN() }, language(o, words))
     }
 
     private val latin: Transliterator? by lazy {
@@ -122,12 +154,17 @@ object LyricsStore {
         .put("v", MATCHER_VERSION)
         .put("source", l.source)
         .put("offset", l.offsetSec)
+        .putOpt("lang", l.language)
         .apply { if (durationSec != null) put("dur", durationSec) }
         .put("words", JSONArray().apply {
             l.words.forEach {
                 put(JSONArray().put(it.key).put(it.text).put(it.startSec).put(it.endSec).put(it.lineStart).put(it.lineEnd).put(it.line))
             }
         })
+
+    /** The language saved with the lyrics, or (for lyrics saved before it was) a guess from their words. */
+    private fun language(o: JSONObject, words: List<LyricWord>): String? =
+        o.optString("lang").ifBlank { null } ?: Languages.fromWords(words.map { it.text })
 
     private fun read(o: JSONObject): TimedLyrics? {
         if (o.optBoolean("none") || o.optInt("v") != MATCHER_VERSION) return null
@@ -136,6 +173,6 @@ object LyricsStore {
             val w = a.getJSONArray(it)
             LyricWord(w.getString(0), w.getString(1), w.getDouble(2), w.getDouble(3), w.getBoolean(4), w.getBoolean(5), w.getInt(6))
         }
-        return TimedLyrics(words, o.getString("source"), o.getDouble("offset"))
+        return TimedLyrics(words, o.getString("source"), o.getDouble("offset"), language(o, words))
     }
 }

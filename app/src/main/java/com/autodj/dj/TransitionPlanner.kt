@@ -61,6 +61,14 @@ class Transition(
  * - **the recipe's own fit** from [DecisionEngine] (genre, tempo match, history).
  */
 object TransitionPlanner {
+    /**
+     * Why the last planned mix did or didn't use word play ("no lyrics for …", "using “party”"),
+     * for the log: word play depends on lyrics and timing that are invisible otherwise.
+     */
+    @Volatile
+    var wordPlayNote = ""
+        private set
+
     /** Max time-stretch for a beat-matched overlap before it starts to sound wrong. */
     const val MAX_STRETCH = 0.08
 
@@ -96,6 +104,11 @@ object TransitionPlanner {
         lyrics: (TrackInfo) -> TimedLyrics? = { null },
         /** The genre whose style the mix takes: the crate for a one-genre set, else (null) the incoming song's. */
         styleFamily: String? = null,
+        /**
+         * A skip: B comes in on exactly this bar of A (the next phrase, or the next bar), with
+         * whichever of the style's moves has room before it; a hard cut if none has.
+         */
+        exitAt: Int? = null,
     ): Transition {
         val family = styleFamily ?: b.genreFamily
         val multiple = tempoMultiple(a.bpm, b.bpm)
@@ -103,8 +116,14 @@ object TransitionPlanner {
         val beatmatched = abs(speed - 1) <= MAX_STRETCH
         // Word play first: when both songs share a word in the right places, that's the showpiece.
         // Never twice running, so it stays a surprise.
-        if ((forced == null && history.lastOrNull() != Recipe.WORD_PLAY) || forced == Recipe.WORD_PLAY) {
+        if (exitAt == null && ((forced == null && history.lastOrNull() != Recipe.WORD_PLAY) || forced == Recipe.WORD_PLAY)) {
             wordPlay(a, aEntryBar, nowSec, b, lyrics, mode, multiple, speed, aPitchSemis)?.let { return it }
+        } else {
+            wordPlayNote = when {
+                exitAt != null -> "a skip was asked for"
+                forced != null -> "a ${forced.label} was asked for"
+                else -> "the last mix was word play"
+            }
         }
         // Ramp-ups stay short: the new song should arrive, not wait behind a long build.
         val rampBars = 4
@@ -151,9 +170,10 @@ object TransitionPlanner {
             ).distinct()
 
         // The best few styles first; if none of them fits anywhere, every style.
-        var options = search(ranked.take(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched)
+        val skip = exitAt?.let { Skip(it, nowSec) }
+        var options = search(ranked.take(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched, skip)
         if (options.isEmpty() && ranked.size > 5) {
-            options = search(ranked.drop(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched)
+            options = search(ranked.drop(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched, skip)
         }
         // Variety: any style nearly as good as the best is fair game, so sets don't repeat one move.
         val top = options.maxOfOrNull { it.score }
@@ -163,7 +183,8 @@ object TransitionPlanner {
             else -> options.filter { it.score >= top - VARIETY_MARGIN }.random(random)
         }
         // Nothing fits (track nearly over): short filter fade from the next bar that leaves room.
-        val c = best ?: Candidate(
+        // A skip that nothing has room for cuts on its bar.
+        val c = best ?: if (exitAt != null) Candidate(Recipe.HARD_CUT, firstPhrase, exitAt, 0, 0.0) else Candidate(
             Recipe.FILTER_FADE, firstPhrase,
             exitBar = min(max(firstBar, a.outroStartBar), max(0, lastBar - 4)).coerceAtLeast(max(0, a.barAt(nowSec) + 1)),
             mixBars = max(1, min(4, lastBar - max(0, a.barAt(nowSec) + 1))),
@@ -171,7 +192,7 @@ object TransitionPlanner {
         )
 
         val turn = Math.floorMod((a.uri + b.uri).hashCode(), 3)
-        val drum = SfxDressing.drum(if (SfxDressing.indian(a)) a else b, turn)
+        val drum = SfxDressing.drum(if (SfxDressing.regional(a)) a else b, turn)
         val raw = RecipeBuilder(a, b, a.barTime(c.exitBar), b.barTime(c.entryBar), multiple, beatmatched)
             .build(c.recipe, c.mixBars, rampBars, rampTo = 1 / speed, drum = drum)
         // A hard cut is the clean move, and a drum-fill cut brings its own drums.
@@ -254,17 +275,38 @@ object TransitionPlanner {
         speed: Double,
         aPitchSemis: Int,
     ): Transition? {
-        val aL = lyrics(a) ?: return null
-        val bL = lyrics(b) ?: return null
+        val aL = lyrics(a)
+        val bL = lyrics(b)
+        if (aL == null || bL == null) {
+            wordPlayNote = "no lyrics for " + listOfNotNull(a.title.takeIf { aL == null }, b.title.takeIf { bL == null }).joinToString(" or ") { "\"$it\"" }
+            return null
+        }
         val aStart = a.barTime(aEntryBar)
         val available = a.durationSec - aStart
         val aFrom = max(nowSec + 8.0, aStart + min(MIN_PLAY_SEC, 0.6 * available))
         val bTo = min(b.durationSec * MAX_ENTRY_SHARE, b.durationSec - MIN_B_REMAINING_SEC)
         // B comes in more gently where its drums are light.
         val bEnergy = { sec: Double -> b.energyIn(b.barAt(sec), b.barAt(sec) + 1) }
-        val link = WordPlay.find(aL, bL, aFrom, a.durationSec - 15.0, 0.5, bTo, aStart + TARGET_PLAY_SEC, bEnergy) ?: return null
+        val titles = WordPlay.titleKeys(a.title) + WordPlay.titleKeys(b.title)
+        val search = WordPlay.search(aL, bL, aFrom, a.durationSec - 15.0, 0.5, bTo, aStart + TARGET_PLAY_SEC, bEnergy, titles)
+        // Trickster counts word play among its tricks, so it takes a looser link.
+        val needed = if (mode == MixMode.TRICKSTER) WordPlay.TRICKSTER_MIN_SCORE else WordPlay.MIN_SCORE
+        val link = search.link
+        if (link == null || link.score < needed) {
+            wordPlayNote = when {
+                search.aWords == 0 -> "\"${a.title}\" sings no usable word where it could leave"
+                search.bOpeners == 0 -> "\"${b.title}\" opens no line early enough to answer"
+                link == null -> "no word in common (${search.aWords} words of A, ${search.bOpeners} line openers of B)"
+                else -> "best link ${link.label} scored ${"%.1f".format(link.score)}, needs $needed"
+            }
+            return null
+        }
         // Smooth sets only cut for the clearest links.
-        if (mode == MixMode.SMOOTH && link.score < WordPlay.MIN_SCORE + SMOOTH_WORD_MARGIN) return null
+        if (mode == MixMode.SMOOTH && link.score < WordPlay.MIN_SCORE + SMOOTH_WORD_MARGIN) {
+            wordPlayNote = "link ${link.label} scored ${"%.1f".format(link.score)}, Smooth needs ${WordPlay.MIN_SCORE + SMOOTH_WORD_MARGIN}"
+            return null
+        }
+        wordPlayNote = "using ${link.label} (score ${"%.1f".format(link.score)})"
         val gap = abs(speed - 1)
         val bridge = when {
             gap <= LOCK_GAP -> WordBridge.LOCKED
@@ -377,6 +419,9 @@ object TransitionPlanner {
     /** How close to the best score a style must be to be picked for variety (scores carry the genre weight). */
     private const val VARIETY_MARGIN = 1.3
 
+    /** A skip's move needs its lead-in to start at least this far ahead of the tap. */
+    private const val SKIP_MARGIN_SEC = 0.25
+
     /** For each of [recipes] that fits somewhere, its best (entry, exit). */
     private fun search(
         recipes: List<Pair<Recipe, Double>>,
@@ -390,22 +435,32 @@ object TransitionPlanner {
         lastBar: Int,
         rampBars: Int,
         beatmatched: Boolean,
+        skip: Skip? = null,
     ): List<Candidate> = recipes.mapNotNull { (recipe, recipeScore) ->
         var best: Candidate? = null
         run {
             for (entry in entries) {
                 val mix = mixBarsFor(recipe, beatmatched, b, entry)
                 val pre = if (recipe == Recipe.LOOP_RAMP) rampBars else recipe.preBars
-                val exits = if (recipe.cut) firstBar + pre..lastBar - recipe.tailBars else firstBar..lastBar - mix
+                val exits = when {
+                    // A skip's bar, if the move's lead-in hasn't already passed and A lasts through it.
+                    skip != null -> {
+                        val room = a.barTime(skip.exitBar - pre) >= skip.nowSec + SKIP_MARGIN_SEC &&
+                            skip.exitBar + (if (recipe.cut) recipe.tailBars else mix) <= lastBar
+                        if (room) skip.exitBar..skip.exitBar else IntRange.EMPTY
+                    }
+                    recipe.cut -> firstBar + pre..lastBar - recipe.tailBars
+                    else -> firstBar..lastBar - mix
+                }
                 for (exit in exits) {
-                    if (!a.isPhraseStart(exit)) continue
+                    if (skip == null && !a.isPhraseStart(exit)) continue
                     // An overlap needs both tracks at their main tempo for its whole length,
                     // or the beat grids drift apart (a half-time intro, a tempo switch).
                     if (!recipe.cut && mix > 0) {
                         if (!a.steadyIn(a.barTime(exit), a.barTime(exit + mix))) continue
                         if (!b.steadyIn(b.barTime(entry), b.barTime(entry + mix))) continue
                     }
-                    val score = recipeScore + exitScore(a, aEntryBar, exit, recipe, mix) +
+                    val score = recipeScore + exitScore(a, aEntryBar, exit, recipe, mix, skipped = skip != null) +
                         entryScore(b, entry, firstPhrase, steadyEntry, recipe, mix)
                     if (score > (best?.score ?: Double.NEGATIVE_INFINITY)) best = Candidate(recipe, entry, exit, mix, score)
                 }
@@ -420,9 +475,11 @@ object TransitionPlanner {
      */
     private fun withSoundEffects(raw: RecipeBuilder.Built, a: TrackInfo, b: TrackInfo, c: Candidate, entrySec: Double, family: String): RecipeBuilder.Built {
         val exit = a.barTime(c.exitBar)
-        // B's big moment: its drop for a bass drop, else its first beat.
-        val bHit = if (c.recipe == Recipe.BASS_DROP) b.barTime(b.introEndBar) else entrySec
-        val aHit = if (c.recipe == Recipe.BASS_DROP) exit + (c.mixBars - 1) * a.barSec else exit
+        // B's big moment: its drop for a bass drop; a blend builds into its bass swap, halfway
+        // through, and the hit lands on the swap; a cut hits on B's first beat.
+        val swapBars = if (!c.recipe.cut && c.recipe != Recipe.BASS_DROP) c.mixBars / 2 else 0
+        val bHit = if (c.recipe == Recipe.BASS_DROP) b.barTime(b.introEndBar) else entrySec + swapBars * b.barSec
+        val aHit = if (c.recipe == Recipe.BASS_DROP) exit + (c.mixBars - 1) * a.barSec else exit + swapBars * a.barSec
         // Sized to the moment: as long a build as A has room for, as loud as the music there.
         val turn = Math.floorMod((a.uri + b.uri).hashCode(), 3)
         val aHitBar = a.barAt(aHit + 0.01)
@@ -435,6 +492,9 @@ object TransitionPlanner {
             raw.startSec, raw.endSec, raw.phases, raw.speedRamp, handoverSec = raw.handoverSec,
         )
     }
+
+    /** A skip: B must come in on A's bar [exitBar], planned at [nowSec]. */
+    private class Skip(val exitBar: Int, val nowSec: Double)
 
     private fun mixBarsFor(recipe: Recipe, beatmatched: Boolean, b: TrackInfo, entry: Int): Int = when {
         recipe.cut -> 0
@@ -463,7 +523,8 @@ object TransitionPlanner {
         return if (hi == lo) 0.0 else (lo until hi).sumOf { t.barEnergy[it].toDouble() } / (hi - lo)
     }
 
-    private fun exitScore(a: TrackInfo, aEntryBar: Int, exit: Int, recipe: Recipe, mix: Int): Double {
+    /** [skipped]: the listener asked to leave, so how long A has played no longer counts. */
+    private fun exitScore(a: TrackInfo, aEntryBar: Int, exit: Int, recipe: Recipe, mix: Int, skipped: Boolean = false): Double {
         // When B takes over: the cut itself, or halfway through a blend.
         val handover = when {
             recipe.cut -> exit
@@ -474,8 +535,8 @@ object TransitionPlanner {
         }
         val played = a.barTime(handover) - a.barTime(aEntryBar)
         val available = a.durationSec - a.barTime(aEntryBar)
-        if (played < min(MIN_PLAY_SEC, 0.6 * available)) return Double.NEGATIVE_INFINITY
-        var s = -abs(played - TARGET_PLAY_SEC) / 45
+        if (!skipped && played < min(MIN_PLAY_SEC, 0.6 * available)) return Double.NEGATIVE_INFINITY
+        var s = if (skipped) 0.0 else -abs(played - TARGET_PLAY_SEC) / 45
         if (exit == a.outroStartBar || exit in a.dropBars) s += 1.2
         val before = meanEnergy(a, exit - 8, exit)
         val after = meanEnergy(a, exit, exit + 8)
@@ -500,7 +561,7 @@ object TransitionPlanner {
             s -= max(0.0, after - 0.75) * 2
         }
         // Leaving before the main section has had its 16 bars feels premature.
-        if (exit < a.introEndBar + 16 && a.barCount > a.introEndBar + 32) s -= 1.0
+        if (!skipped && exit < a.introEndBar + 16 && a.barCount > a.introEndBar + 32) s -= 1.0
         return s
     }
 

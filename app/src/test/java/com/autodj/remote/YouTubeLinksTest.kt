@@ -45,4 +45,10 @@ class YouTubeLinksTest {
         // A title that is only an upload note keeps its text.
         assertEquals("X" to "(Official Video)", YouTubeLinks.artistAndTitle("X", "(Official Video)"))
     }
+
+    @Test
+    fun aDashInsideBracketsIsPartOfTheNote() {
+        assertEquals("Uploader" to "Miss You (Club Mix - Extended Version)", YouTubeLinks.artistAndTitle("Uploader", "Miss You (Club Mix - Extended Version)"))
+        assertEquals("Lynx" to "Miss You (Club Mix - Extended Version)", YouTubeLinks.artistAndTitle("Uploader", "Lynx - Miss You (Club Mix - Extended Version)"))
+    }
 }
