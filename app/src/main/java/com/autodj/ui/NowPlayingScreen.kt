@@ -153,8 +153,9 @@ fun NowPlayingScreen(
                         },
                     contentAlignment = Alignment.Center,
                 ) { SkipIcon(if (state.canSkip || skipping) Glass.Text else Glass.Muted, Modifier.size(26.dp)) }
-                Text("AI in control", color = Glass.Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.width(56.dp))
             }
+            // Under play/pause, as on the sideways screen.
+            Text("AI in control", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
 
             UpNext(state, artwork, onOpenMix, Modifier.padding(top = 10.dp))
         }

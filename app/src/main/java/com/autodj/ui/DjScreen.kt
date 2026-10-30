@@ -1,6 +1,7 @@
 package com.autodj.ui
 
 import android.Manifest
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -124,7 +126,20 @@ fun DjScreen(vm: DjViewModel) {
         // Light behind the glass; Now Playing lays the track's own art over it.
         AmbientLight(Modifier.fillMaxSize())
         if (tab == Tab.NOW_PLAYING) NowPlayingBackdrop(state, artwork)
-        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+        // Sideways, the tabs move to a rail down the left and Now Playing shows both decks.
+        val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val tabs = Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) }
+        Row(Modifier.fillMaxSize().safeDrawingPadding()) {
+            if (landscape) {
+                GlassTabRail(
+                    tabs, tab.ordinal, onSelect = { tab = Tab.entries[it] }, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp),
+                ) {
+                    // Cast, then the visualizer (while a set plays): from any tab.
+                    CastButton(rememberCasting(), diameter = 44.dp, onClick = { castDialog = true })
+                    if (state.running) GlassIconButton("Open the full-screen visualizer", onClick = { fullscreen = true }) { ExpandGlyph(Glass.Text) }
+                }
+            }
+        Column(Modifier.weight(1f).fillMaxHeight()) {
             Box(Modifier.weight(1f)) {
                 when (tab) {
                     Tab.MIX -> MixScreen(
@@ -168,7 +183,16 @@ fun DjScreen(vm: DjViewModel) {
                     )
                     Tab.NOW_PLAYING -> {
                         val showMix = state.running && (preview || (state.mixing && hiddenFor != state.index))
-                        if (showMix) {
+                        if (landscape && state.running && preview) {
+                            // Sideways the decks are always on screen; the effects view opens only from its panel.
+                            MixingScreenLandscape(state, onBack = { preview = false })
+                        } else if (landscape) {
+                            TwoDeckScreen(
+                                state, artwork, visual = vm.engine::visual, onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip,
+                                onOpenEffects = { preview = true },
+                                languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
+                            )
+                        } else if (showMix) {
                             MixingScreen(state, artwork, visual = vm.engine::visual, onBack = {
                                 preview = false
                                 hiddenFor = state.index
@@ -184,12 +208,15 @@ fun DjScreen(vm: DjViewModel) {
                     }
                 }
             }
-            GlassTabBar(
-                Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) },
-                tab.ordinal,
-                onSelect = { tab = Tab.entries[it] },
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp),
-            )
+            if (!landscape) {
+                GlassTabBar(
+                    tabs,
+                    tab.ordinal,
+                    onSelect = { tab = Tab.entries[it] },
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp),
+                )
+            }
+        }
         }
     }
 }

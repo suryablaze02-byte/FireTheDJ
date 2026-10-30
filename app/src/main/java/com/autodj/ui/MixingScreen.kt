@@ -52,7 +52,7 @@ fun MixingScreen(state: EngineState, artwork: Map<String, String>, onBack: () ->
             Column(Modifier.weight(1f)) {
                 Text("Mixing", color = Dj.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "AI recipe: ${state.recipe ?: "–"} · ${state.mixBars} bars · ${state.mode.label}",
+                    "AI recipe: ${state.recipe ?: "–"} · ${state.mixBars} bar${if (state.mixBars == 1) "" else "s"} · ${state.mode.label}",
                     color = Dj.BlueText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -194,6 +194,86 @@ private fun FxCard(fx: FxStatus, modifier: Modifier) {
         Column {
             Text(fx.name, color = Dj.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             Text(fx.detail, color = Dj.Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * The same mix view for a phone held sideways, opened from the effects panel: the decks are
+ * already on screen, so it gives the room to the mix itself. The crossfade, sync readouts and
+ * timeline sit in a column on the left; every effect fills a four-column rack on the right.
+ */
+@Composable
+fun MixingScreenLandscape(state: EngineState, onBack: () -> Unit) {
+    val a = state.current ?: return
+    val next = state.next
+    val b = state.incoming
+    Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Effects · ${if (state.mixing) "mixing" else "next mix"}", color = Dj.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "AI recipe: ${state.recipe ?: "–"} · ${state.mixBars} bar${if (state.mixBars == 1) "" else "s"} · ${state.mode.label}",
+                    color = Dj.BlueText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                if (state.mixing) "bar ${state.mixBar}/${state.mixBars}" else "in ${formatTime(state.secondsToMix ?: 0.0)}",
+                color = Dj.Text, fontSize = 13.sp, fontFamily = FontFamily.Monospace,
+                modifier = Modifier.background(Dj.Surface, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            TextButton(onClick = onBack) { Text("Back", color = Dj.Muted) }
+        }
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.weight(0.42f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val gA = a.gain
+                val gB = b?.gain ?: 0f
+                Row(Modifier.fillMaxWidth()) {
+                    Text("A ${(gA * 100).roundToInt()}%", color = Dj.Muted, fontSize = 12.sp)
+                    Text("Crossfade", color = Dj.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    Text("B ${(gB * 100).roundToInt()}%", color = Dj.Muted, fontSize = 12.sp)
+                }
+                BoxWithConstraints(
+                    Modifier.fillMaxWidth().height(24.dp).background(Dj.Surface, RoundedCornerShape(12.dp)).border(1.dp, Dj.Border, RoundedCornerShape(12.dp)),
+                ) {
+                    val pos = if (gA + gB > 0.001f) gB / (gA + gB) else 0f
+                    Box(Modifier.offset(x = 3.dp + (maxWidth - 40.dp) * pos, y = 3.dp).size(34.dp, 18.dp).background(Dj.Text, RoundedCornerShape(9.dp)))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Readout(Modifier.weight(1f), "Rate r", "%.3f".format(state.rate))
+                    Readout(Modifier.weight(1f), "Phase err", "${state.phaseErrMs.roundToInt()} ms")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val shift = state.nextPitchSemis
+                    val nextKey = next?.let { Camelot.code(it.keyPc + shift, it.keyMinor) } ?: "–"
+                    Readout(Modifier.weight(1f), "Key (Camelot)", "${a.key} → $nextKey" + if (shift != 0) " (${if (shift > 0) "+" else ""}$shift)" else "")
+                    Readout(Modifier.weight(1f), "Set tempo", "%.1f".format(state.masterBpm))
+                }
+                BoxWithConstraints(Modifier.fillMaxWidth().height(28.dp)) {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        state.phases.forEach { ph ->
+                            val active = state.mixing && state.mixProgress >= ph.start && state.mixProgress < ph.end
+                            Box(
+                                Modifier.weight((ph.end - ph.start).coerceAtLeast(0.01f)).fillMaxHeight()
+                                    .background(if (active) Dj.Accent else Dj.PhaseIdle, RoundedCornerShape(6.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(ph.label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (active) Dj.Bg else Dj.BlueText,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                    Box(Modifier.offset(x = maxWidth * state.mixProgress).width(2.dp).fillMaxHeight().background(Dj.Text))
+                }
+            }
+            Column(Modifier.weight(0.58f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.fx.chunked(4).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { FxCard(it, Modifier.weight(1f)) }
+                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
         }
     }
 }

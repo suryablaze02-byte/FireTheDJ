@@ -25,50 +25,7 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** A: beams from rigs above the screen cutting through drifting smoke, dust glittering in the light. */
-class HazeScene : Scene {
-    private val rnd = Random(5)
-    private val dust = Array(120) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat(), 0.2f + rnd.nextFloat()) }
-
-    override fun step(s: VisualState) {
-        if (s.paused) return
-        for (d in dust) {
-            d[1] -= 0.04f * d[3] * s.dt
-            if (d[1] < 0f) d[1] = 1f
-        }
-    }
-
-    override fun draw(ds: DrawScope, s: VisualState) = with(ds) {
-        val w = size.width
-        val h = size.height
-        val (c1, c2) = s.palette
-        val t = s.time
-        drawRect(Color(0xFF030205))
-        drawRect(Brush.radialGradient(listOf(c1.copy(alpha = 0.22f + 0.25f * s.bass), c2.copy(alpha = 0.08f), Color.Transparent), Offset(w / 2, h * 0.15f), max(w, h)))
-        // Smoke banks drifting through.
-        for (i in 0 until 6) {
-            val x = w * (((0.1f * t * (1 + i * 0.2f) + i * 0.23f) % 1.4f) - 0.2f)
-            val y = h * (0.25f + 0.12f * i)
-            val r = max(w, h) * 0.5f
-            drawCircle(Brush.radialGradient(listOf((if (i % 2 == 1) c1 else c2).copy(alpha = 0.05f + 0.07f * s.energy), Color.Transparent), Offset(x, y), r), r, Offset(x, y), blendMode = BlendMode.Plus)
-        }
-        // Beams from above the frame, sweeping with the beat, brighter on the kick.
-        val n = if (w > h) 7 else 5
-        for (i in 0 until n) {
-            val origin = Offset(w * (i + 0.5f) / n, -h * 0.05f)
-            val ang = 0.5f * sin(PI.toFloat() * s.beat / 4f + i * 1.3f) * (if (i % 2 == 1) 1f else -1f)
-            val a = (0.12f + 0.3f * s.energy + 0.35f * s.kick * (0.4f + s.energy)).coerceAtMost(0.9f)
-            beam(origin, ang, 0.07f + 0.03f * s.bass, max(w, h) * 1.3f, if (i % 2 == 1) c1 else c2, a)
-        }
-        for (d in dust) {
-            val tw = 0.3f + 0.7f * abs(sin(t * d[3] + d[2] * 10f))
-            drawRect(Color(0xFFFFF0E1).copy(alpha = 0.25f * tw * (0.4f + s.energy)), Offset(d[0] * w, d[1] * h), Size(2.5f, 2.5f), blendMode = BlendMode.Plus)
-        }
-        drawRect(Brush.verticalGradient(listOf(Color.Transparent, c1.copy(alpha = 0.12f + 0.2f * s.bass)), h * 0.75f, h), Offset(0f, h * 0.75f), Size(w, h * 0.25f))
-    }
-}
-
-/** B: neon rings racing toward the viewer, each lit by a slice of the spectrum. */
+/** A: neon rings racing toward the viewer, each lit by a slice of the spectrum. */
 class TunnelScene : Scene {
     override fun draw(ds: DrawScope, s: VisualState) = with(ds) {
         val w = size.width
@@ -107,7 +64,7 @@ class TunnelScene : Scene {
     }
 }
 
-/** C: soft clouds of colour that swell with the bass, a thin ribbon of the music, film grain. */
+/** B: soft clouds of colour that swell with the bass, a thin ribbon of the music, film grain. */
 class LiquidScene : Scene {
     private val grain: ShaderBrush = run {
         val rnd = Random(3)
@@ -145,7 +102,7 @@ class LiquidScene : Scene {
     }
 }
 
-/** D: the screen as a wall of LED pixels; every kick pushes a ring of light outward. */
+/** C: the screen as a wall of LED pixels; every kick pushes a ring of light outward. */
 class FieldScene : Scene {
     override fun draw(ds: DrawScope, s: VisualState) = with(ds) {
         val w = size.width

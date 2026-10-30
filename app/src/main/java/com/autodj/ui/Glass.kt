@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -184,6 +185,48 @@ class GlassTab(val label: String, val tourKey: String? = null, val icon: @Compos
 fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().height(64.dp).glass(RoundedCornerShape(26.dp)).selectableGroup()) {
         tabs.forEachIndexed { i, t -> TabItem(t, i == selected) { onSelect(i) } }
+    }
+}
+
+/**
+ * The same tabs as a column down the side, for landscape where height is short, with [footer]
+ * (buttons that apply to every tab) under a divider at the bottom.
+ */
+@Composable
+fun GlassTabRail(
+    tabs: List<GlassTab>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    footer: (@Composable () -> Unit)? = null,
+) {
+    Column(modifier.fillMaxHeight().width(76.dp).glass(RoundedCornerShape(26.dp))) {
+        Column(Modifier.weight(1f).fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.Center) { RailTabs(tabs, selected, onSelect) }
+        if (footer != null) {
+            Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+            Column(
+                Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) { footer() }
+        }
+    }
+}
+
+@Composable
+private fun RailTabs(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit) {
+    tabs.forEachIndexed { i, t ->
+        val on = i == selected
+        val color = if (on) Glass.Ember else Glass.Muted
+        Column(
+            Modifier.fillMaxWidth().height(72.dp).then(t.tourKey?.let { Modifier.tourTarget(it) } ?: Modifier)
+                .selectable(on, role = Role.Tab) { onSelect(i) },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { t.icon(color) }
+            Text(t.label, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+        }
     }
 }
 

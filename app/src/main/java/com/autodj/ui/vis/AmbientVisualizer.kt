@@ -22,9 +22,9 @@ import com.autodj.dj.VisualFrame
 
 /** The full-screen looks the user can pick between. */
 enum class VisualizerStyle(val label: String, val blurb: String, /** For tight spaces: the look switcher. */ val short: String) {
-    HAZE("Haze & Beams", "Light through smoke", "Haze"),
     TUNNEL("Neon Tunnel", "Rings racing at the beat", "Tunnel"),
     LIQUID("Liquid Light", "Soft colour that breathes", "Liquid"),
+    ACID("Acid Trip", "Melting shapes, a neon tunnel", "Acid"),
     FIELD("LED Field", "A wall of pixels", "LED"),
     CLUB("Club", "Stage, LED wall and crowd", "Club"),
     BEAT_POP("Beat Pop", "Lyrics land on the beat", "Beat Pop"),
@@ -34,10 +34,13 @@ enum class VisualizerStyle(val label: String, val blurb: String, /** For tight s
     /** Shows the song's words over the scene ([LyricOverlay]). */
     val lyrics get() = this == BEAT_POP || this == KARAOKE
 
+    /** Shouts each effect's name on screen; the other looks let the picture do the talking. */
+    val callouts get() = this == CLUB || this == FIELD
+
     fun scene(): Scene = when (this) {
-        HAZE -> HazeScene()
         TUNNEL -> TunnelScene()
         LIQUID -> LiquidScene()
+        ACID -> AcidScene()
         FIELD -> FieldScene()
         CLUB -> ClubScene()
         BEAT_POP -> GlowScene(low = false)
@@ -88,8 +91,8 @@ fun AmbientVisualizer(
                 }
             }
             layer.drawOverlays(this, state)
-            // The lyric looks keep the screen for the words: effects flash and burn, but no shouted callouts.
-            if (!style.lyrics) layer.drawCallout(this, state, measurer)
+            // Only Club and LED Field shout the effect names; the others show effects as light and motion.
+            if (style.callouts) layer.drawCallout(this, state, measurer)
         }
         if (style.lyrics) LyricOverlay(style, state, tick, Modifier.fillMaxSize(), lyricsClearBottom)
     }
