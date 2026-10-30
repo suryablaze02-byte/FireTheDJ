@@ -14,6 +14,28 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.5.0",
+            "Turn your phone sideways for two decks, and a new Acid Trip visualizer.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Sideways on the phone", "Turn the phone and the app turns with it. Now Playing shows both decks with their records and waveforms, the mix in the middle with the crossfader and the playback controls, and the Mix tab splits into two panes."),
+                        Change("Effects panel", "Sideways, one panel shows the effects playing right now, with how far along each one is. Tap it for the full effects view: crossfade, tempo, key and every effect in the mix."),
+                        Change("Acid Trip visualizer", "A melting kaleidoscope on phone and TV: petals and eyes, spirals, sacred geometry and fractal tendrils take turns every 8 bars and burst in on a drop, while shapes fly out of a black hole. It drifts in a breakdown and goes all out on the drop, with no strobes."),
+                        Change("AI in control", "Upright, the AI in control label now sits under play/pause."),
+                    ),
+                ),
+                Section(
+                    "Changes",
+                    listOf(
+                        Change("Fewer words on screen", "Effect names like BASS BOOST now show only on the Club and LED Field looks; the others show effects as light and motion."),
+                        Change("Haze & Beams removed", "If it was your look, the visualizer opens on Club."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.4.0",
             "Trickster tricks you can hear, lyrics ready as songs are analysed, sounds that follow the music's language, and a skip button.",
             listOf(
