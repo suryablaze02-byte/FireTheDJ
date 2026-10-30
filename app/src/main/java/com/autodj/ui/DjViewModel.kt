@@ -60,7 +60,7 @@ data class MusicFolder(val uri: String, val name: String, val tracks: Set<String
 sealed interface ImportState {
     data object Idle : ImportState
     data object Working : ImportState
-    data class Done(val name: String, val tracks: Int) : ImportState
+    data class Done(val name: String, val tracks: Int, val missing: Int = 0) : ImportState
     data class Failed(val reason: String) : ImportState
 }
 
@@ -170,7 +170,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         importOrigin = origin
         viewModelScope.launch {
             _importState.value = when (val r = withContext(Dispatchers.IO) { importer.import(link) }) {
-                is ImportResult.Imported -> ImportState.Done(r.playlist.name, r.playlist.tracks.size)
+                is ImportResult.Imported -> ImportState.Done(r.playlist.name, r.playlist.tracks.size, r.playlist.missing)
                 is ImportResult.Failed -> ImportState.Failed(r.reason)
             }
         }

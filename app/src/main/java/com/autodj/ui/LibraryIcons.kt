@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.sp
 enum class SourceKind(val title: String, val hint: String, val color: Color) {
     PHONE("This phone", "a music folder", Color(0xFFF2C14E)),
     YOUTUBE("YT Music", "curated playlists", Color(0xFFFF4E45)),
+    SPOTIFY("Spotify", "played from YouTube", Color(0xFF1ED760)),
+    /** The door to YT Music and Spotify. */
+    STREAM("Stream", "YT Music or Spotify", Color(0xFFFF6A5C)),
     LINK("Link", "other services", Color(0xFF5AA8FF)),
 }
 
@@ -52,7 +55,8 @@ fun SourceTile(kind: SourceKind, modifier: Modifier, onClick: () -> Unit) {
             Canvas(Modifier.size(16.dp)) {
                 when (kind) {
                     SourceKind.PHONE -> folderGlyph(kind.color)
-                    SourceKind.YOUTUBE -> playGlyph(kind.color)
+                    SourceKind.YOUTUBE, SourceKind.STREAM -> playGlyph(kind.color)
+                    SourceKind.SPOTIFY -> listGlyph(kind.color)
                     SourceKind.LINK -> linkGlyph(kind.color)
                 }
             }
@@ -87,6 +91,17 @@ private fun DrawScope.playGlyph(c: Color) {
         moveTo(w * 0.24f, w * 0.10f); lineTo(w * 0.92f, w * 0.50f); lineTo(w * 0.24f, w * 0.90f); close()
     }
     drawPath(play, c)
+}
+
+/** Three lines of a list with a note at the end: a playlist. */
+private fun DrawScope.listGlyph(c: Color) {
+    val w = size.width
+    val s = w * 0.12f
+    drawLine(c, Offset(w * 0.06f, w * 0.18f), Offset(w * 0.7f, w * 0.18f), s, StrokeCap.Round)
+    drawLine(c, Offset(w * 0.06f, w * 0.42f), Offset(w * 0.7f, w * 0.42f), s, StrokeCap.Round)
+    drawLine(c, Offset(w * 0.06f, w * 0.66f), Offset(w * 0.42f, w * 0.66f), s, StrokeCap.Round)
+    drawLine(c, Offset(w * 0.84f, w * 0.4f), Offset(w * 0.84f, w * 0.82f), s, StrokeCap.Round)
+    drawCircle(c, w * 0.13f, Offset(w * 0.72f, w * 0.84f))
 }
 
 private fun DrawScope.folderGlyph(c: Color) {

@@ -12,6 +12,8 @@ import org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import org.schabi.newpipe.extractor.localization.Localization
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -379,5 +381,24 @@ private class NewPipeDownloader : Downloader() {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
         private const val NEXT_ENDPOINT = "/youtubei/v1/next"
         private const val EMPTY_NEXT = """{"responseContext":{},"contents":{},"currentVideoEndpoint":{},"trackingParams":""}"""
+    }
+}
+
+/** YouTube Music's own search, for playlists: anything public there, people's own playlists too. */
+object YtMusicSearch {
+    /** Blocking; run off the main thread. Needs Android 13 (see [YouTubeStreams.requireSupported]). */
+    fun playlists(query: String, max: Int = 20): List<YtPlaylistCard> {
+        YouTubeStreams.requireSupported()
+        val search = ServiceList.YouTube.getSearchExtractor(query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_PLAYLISTS), "")
+            .apply { fetchPage() }
+        return search.initialPage.items.filterIsInstance<PlaylistInfoItem>().mapNotNull { item ->
+            val id = PlaylistUrlValidator.queryParams(runCatching { URI(item.url).rawQuery }.getOrNull())["list"] ?: return@mapNotNull null
+            YtPlaylistCard(
+                title = item.name.orEmpty().trim(),
+                subtitle = listOfNotNull(item.uploaderName?.ifBlank { null }, item.streamCount.takeIf { it > 0 }?.let { "$it songs" }).joinToString(" · "),
+                playlistId = id,
+                thumbnailUrl = item.thumbnails.maxByOrNull { it.width.toLong() * it.height }?.url?.takeIf { it.startsWith("https://") },
+            )
+        }.distinctBy { it.playlistId }.take(max)
     }
 }

@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.autodj.remote.SpotifyProvider
 import com.autodj.remote.YtPlaylistCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -132,7 +133,7 @@ fun YtMusicScreen(
                         }
                     }
                 }
-                StatusLine(importState, tapped)
+                StatusLine(importState, tapped?.title)
                 when (val s = shelves) {
                     Loadable.Loading -> Centered { CircularProgressIndicator(color = YT_RED) }
                     is Loadable.Failed -> Centered { Retry(s.reason) { selected?.let(vm::select) } }
@@ -174,18 +175,29 @@ fun YtMusicScreen(
     }
 }
 
-/** What happened to the last playlist tapped: being added, added, or why it couldn't be. */
+/**
+ * What happened to the last playlist tapped ([tapped], its name): being added (with how many
+ * Spotify songs have been looked up on YouTube so far), added, or why it couldn't be.
+ */
 @Composable
-private fun StatusLine(state: ImportState, tapped: YtPlaylistCard?) {
+internal fun StatusLine(state: ImportState, tapped: String?, color: Color = YT_RED) {
     if (tapped == null) return
+    val matching by SpotifyProvider.matching.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when (state) {
             ImportState.Working -> {
-                Text("Adding \"${tapped.title}\"…", color = Dj.Text, fontSize = 13.sp)
-                LinearProgressIndicator(Modifier.fillMaxWidth(), color = YT_RED, trackColor = Dj.Border)
+                val found = matching
+                Text(
+                    if (found == null) "Adding \"$tapped\"…" else "Adding \"$tapped\": finding songs on YouTube, ${found.first} of ${found.second}",
+                    color = Dj.Text, fontSize = 13.sp,
+                )
+                if (found == null || found.second == 0) LinearProgressIndicator(Modifier.fillMaxWidth(), color = color, trackColor = Dj.Border)
+                else LinearProgressIndicator({ found.first / found.second.toFloat() }, Modifier.fillMaxWidth(), color = color, trackColor = Dj.Border)
             }
             is ImportState.Done -> Text(
-                "Added \"${state.name}\" · ${state.tracks} tracks. They show up in the Library as they're analysed.",
+                "Added \"${state.name}\" · ${state.tracks} tracks" +
+                    (if (state.missing > 0) " (${state.missing} not found on YouTube)" else "") +
+                    ". They show up in the Library as they're analysed.",
                 color = Dj.BlueText, fontSize = 13.sp,
             )
             is ImportState.Failed -> Text(state.reason, color = Dj.Warn, fontSize = 13.sp)
@@ -195,7 +207,7 @@ private fun StatusLine(state: ImportState, tapped: YtPlaylistCard?) {
 }
 
 @Composable
-private fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean, onClick: () -> Unit) {
+internal fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     // On a TV the remote moves focus: the focused card grows and gets a fire-coloured edge.
     val interaction = remember { MutableInteractionSource() }
@@ -235,12 +247,12 @@ private fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean, 
 }
 
 @Composable
-private fun Centered(content: @Composable () -> Unit) {
+internal fun Centered(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 20.dp), contentAlignment = Alignment.Center) { content() }
 }
 
 @Composable
-private fun Retry(message: String, onRetry: () -> Unit) {
+internal fun Retry(message: String, onRetry: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(message, color = Dj.Warn, fontSize = 13.sp)
         TextButton(onClick = onRetry) { Text("Try again", color = Dj.Accent) }
@@ -248,7 +260,7 @@ private fun Retry(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun BackGlyph(color: Color) {
+internal fun BackGlyph(color: Color) {
     Canvas(Modifier.size(18.dp)) {
         val w = size.width
         val s = w * 0.13f
@@ -258,7 +270,7 @@ private fun BackGlyph(color: Color) {
 }
 
 /** YouTube Music's red, for this page's accents. */
-private val YT_RED = Color(0xFFFF4E45)
+internal val YT_RED = Color(0xFFFF4E45)
 
 /** Cover art by URL, kept in memory for the session so scrolling back doesn't refetch it. */
 private val imageCache = LruCache<String, ImageBitmap>(80)

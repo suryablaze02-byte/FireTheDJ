@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,15 +23,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,6 +71,9 @@ private val BText = Color(0xFFCFE4FF)
  * next one on the right, and between them the mix, the crossfader, the effects playing and the
  * playback controls. Before a mix the right deck shows the next song cued at its entry point;
  * during one both decks play and the middle follows the mix bar by bar.
+ *
+ * On a TV it is Now Playing: [tv] adds Home and the visualizer to the controls, widens the
+ * middle for them, and gives the visualizer button a focus requester for the remote.
  */
 @Composable
 fun TwoDeckScreen(
@@ -71,6 +85,7 @@ fun TwoDeckScreen(
     onSkip: () -> Unit,
     onOpenEffects: () -> Unit,
     languageOf: (String) -> String?,
+    tv: TvDeckButtons? = null,
 ) {
     val deck = state.current
     val track = state.set.getOrNull(state.index)
@@ -96,7 +111,7 @@ fun TwoDeckScreen(
             artworkPath = artwork[deck.uri], visual = visual,
             modifier = Modifier.weight(1f),
         )
-        MixerPanel(state, onToggle, onStop, onSkip, onOpenEffects, Modifier.width(220.dp).fillMaxHeight())
+        MixerPanel(state, onToggle, onStop, onSkip, onOpenEffects, tv, Modifier.width(if (tv != null) 300.dp else 220.dp).fillMaxHeight())
         // Deck B: the next song, cued, then mixing in.
         if (next != null) {
             val bLive = incoming != null
@@ -227,6 +242,7 @@ private fun MixerPanel(
     onStop: () -> Unit,
     onSkip: () -> Unit,
     onOpenEffects: () -> Unit,
+    tv: TvDeckButtons?,
     modifier: Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -271,8 +287,13 @@ private fun MixerPanel(
         }
         // The panel keeps its size; on a short screen it's clipped so the controls below always show.
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) { EffectsPanel(state.fx, onOpenEffects) }
-        Controls(state, onToggle, onStop, onSkip)
+        Controls(state, onToggle, onStop, onSkip, tv)
     }
+}
+
+/** What a TV adds to the decks' controls: Home on the left, the visualizer on the right (where the remote starts). */
+class TvDeckButtons(val onHome: () -> Unit, val onVisualizer: () -> Unit) {
+    val visualizerFocus = FocusRequester()
 }
 
 /**
@@ -284,10 +305,14 @@ private fun MixerPanel(
 @Composable
 private fun EffectsPanel(rack: List<FxStatus>, onOpen: () -> Unit) {
     val active = rack.filter { it.active }
+    // On a TV the remote lands on it: then it's ringed in white.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Column(
         Modifier.fillMaxWidth().height(EFFECTS_HEIGHT).clip(RoundedCornerShape(16.dp))
-            .clickable(role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen).background(Color.White.copy(alpha = 0.06f))
-            .border(1.dp, DeckA.copy(alpha = if (active.isEmpty()) 0.2f else 0.45f), RoundedCornerShape(16.dp))
+            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen)
+            .background(Color.White.copy(alpha = if (focused) 0.14f else 0.06f))
+            .border(if (focused) 3.dp else 1.dp, if (focused) Color.White else DeckA.copy(alpha = if (active.isEmpty()) 0.2f else 0.45f), RoundedCornerShape(16.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -410,12 +435,13 @@ private fun Crossfader(gainA: Float, gainB: Float, locked: Boolean, lock: String
     }
 }
 
-/** Stop, play/pause and skip, with "AI in control" (or the skip in progress) under play. */
+/** Stop, play/pause and skip (on a TV, Home and the visualizer too), with "AI in control" (or the skip in progress) under play. */
 @Composable
-private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Unit, onSkip: () -> Unit) {
+private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Unit, onSkip: () -> Unit, tv: TvDeckButtons?) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            RoundButton(44.dp, null, "Stop the set", onStop) { StopIcon(Glass.Text, Modifier.size(22.dp)) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (tv != null) 10.dp else 14.dp)) {
+            if (tv != null) RoundButton(44.dp, Glass.FillStrong, "Home, the music keeps playing", tv.onHome) { HomeGlyph(Glass.Text) }
+            RoundButton(44.dp, if (tv != null) Glass.FillStrong else null, "Stop the set", onStop) { StopIcon(Glass.Text, Modifier.size(22.dp)) }
             RoundButton(56.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", onToggle) {
                 if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(28.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(28.dp))
             }
@@ -428,7 +454,13 @@ private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Uni
                     else -> "Skip to the next song"
                 },
                 onSkip, enabled = state.canSkip, ring = skipping,
+                fillTv = tv != null,
             ) { SkipIcon(if (state.canSkip || skipping) Glass.Text else Glass.Muted, Modifier.size(24.dp)) }
+            if (tv != null) {
+                RoundButton(44.dp, Glass.FillStrong, "Show the visualizer", tv.onVisualizer, modifier = Modifier.focusRequester(tv.visualizerFocus)) {
+                    BarsGlyph(Glass.Text)
+                }
+            }
         }
         val skipping = state.skipping > 0
         Text(
@@ -438,6 +470,7 @@ private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Uni
     }
 }
 
+/** A round control; on a TV ([fillTv]) unfilled ones get glass, and the one the remote is on grows, ringed in white. */
 @Composable
 private fun RoundButton(
     size: Dp,
@@ -446,14 +479,38 @@ private fun RoundButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
     ring: Boolean = false,
+    fillTv: Boolean = false,
+    modifier: Modifier = Modifier,
     icon: @Composable () -> Unit,
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
-        Modifier.size(size).clip(CircleShape)
-            .then(if (fill != null) Modifier.background(fill) else Modifier)
-            .then(if (ring) Modifier.border(2.dp, Glass.EmberText, CircleShape) else Modifier)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        modifier.size(size).scale(if (focused) 1.12f else 1f).clip(CircleShape)
+            .then(if (fill != null) Modifier.background(fill) else if (fillTv) Modifier.background(Glass.FillStrong) else Modifier)
+            .then(
+                when {
+                    focused -> Modifier.border(3.dp, Color.White, CircleShape)
+                    ring -> Modifier.border(2.dp, Glass.EmberText, CircleShape)
+                    else -> Modifier
+                },
+            )
+            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { icon() }
+}
+
+/** A house outline, for the TV's Home button. */
+@Composable
+private fun HomeGlyph(color: Color) {
+    Canvas(Modifier.size(20.dp)) {
+        val w = size.width
+        val house = Path().apply {
+            moveTo(w * 0.12f, w * 0.48f); lineTo(w * 0.5f, w * 0.14f); lineTo(w * 0.88f, w * 0.48f)
+            moveTo(w * 0.22f, w * 0.4f); lineTo(w * 0.22f, w * 0.86f); lineTo(w * 0.42f, w * 0.86f); lineTo(w * 0.42f, w * 0.62f)
+            lineTo(w * 0.58f, w * 0.62f); lineTo(w * 0.58f, w * 0.86f); lineTo(w * 0.78f, w * 0.86f); lineTo(w * 0.78f, w * 0.4f)
+        }
+        drawPath(house, color, style = Stroke(w * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
 }

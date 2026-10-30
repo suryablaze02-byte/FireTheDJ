@@ -16,6 +16,7 @@ object StreamProviders {
         JamendoProvider(http, jamendoClientId),
         InternetArchiveProvider(http),
         YouTubeMusicProvider(),
+        SpotifyProvider(),
         WebPlaylistProvider(http),
     )
 }

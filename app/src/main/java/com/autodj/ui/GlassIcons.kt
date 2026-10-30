@@ -104,6 +104,20 @@ fun SourceGlyph(kind: SourceKind, size: Dp = 26.dp) {
                 drawCircle(c, 10 * u, Offset(12 * u, 12 * u), style = s)
                 drawPath(Path().apply { moveTo(10 * u, 8 * u); lineTo(16 * u, 12 * u); lineTo(10 * u, 16 * u); close() }, c, style = s)
             }
+            SourceKind.STREAM -> {
+                // Play, with sound going out of it.
+                drawPath(Path().apply { moveTo(3 * u, 6 * u); lineTo(12 * u, 12 * u); lineTo(3 * u, 18 * u); close() }, c, style = s)
+                drawArc(c, -50f, 100f, false, Offset(9 * u, 6 * u), androidx.compose.ui.geometry.Size(8 * u, 12 * u), style = s)
+                drawArc(c, -50f, 100f, false, Offset(11 * u, 2 * u), androidx.compose.ui.geometry.Size(12 * u, 20 * u), style = s)
+            }
+            SourceKind.SPOTIFY -> {
+                // A playlist: three lines and a note.
+                drawLine(c, Offset(3 * u, 6 * u), Offset(16 * u, 6 * u), 1.8f * u, StrokeCap.Round)
+                drawLine(c, Offset(3 * u, 11 * u), Offset(16 * u, 11 * u), 1.8f * u, StrokeCap.Round)
+                drawLine(c, Offset(3 * u, 16 * u), Offset(10 * u, 16 * u), 1.8f * u, StrokeCap.Round)
+                drawLine(c, Offset(20 * u, 10 * u), Offset(20 * u, 19 * u), 1.8f * u, StrokeCap.Round)
+                drawCircle(c, 2.4f * u, Offset(17.6f * u, 19.4f * u), style = s)
+            }
             SourceKind.LINK -> {
                 drawLine(c, Offset(9 * u, 15 * u), Offset(15 * u, 9 * u), 1.8f * u, StrokeCap.Round)
                 drawRoundRect(c, Offset(11 * u, 3 * u), androidx.compose.ui.geometry.Size(10 * u, 7 * u),

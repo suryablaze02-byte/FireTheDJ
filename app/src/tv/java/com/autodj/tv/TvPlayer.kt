@@ -85,11 +85,11 @@ private const val CONTROLS_MS = 6_000L
  * The mix on the big screen: the look the viewer picked, full screen, and the playing track in
  * the corner whenever it changes. The look stays until the viewer changes it: left/right on the
  * remote, or the Look button in the controls (it is remembered, like on the phone). OK opens
- * the controls, Back goes home and the mix plays on.
+ * the controls, Back returns to the decks and the mix plays on.
  */
 @UnstableApi
 @Composable
-fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
+fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
     val state by vm.engine.state.collectAsStateWithLifecycle()
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val styles = VisualizerStyle.entries
@@ -107,7 +107,7 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
     var opener by remember { mutableStateOf<Key?>(null) }
 
     KeepScreenOn()
-    BackHandler { if (controls) controls = false else onHome() }
+    BackHandler { if (controls) controls = false else onBack() }
 
     /** Steps to the next (or previous) look and keeps it, showing its name for a moment. */
     fun changeLook(step: Int) {
@@ -201,27 +201,33 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit) {
                 Box(Modifier.padding(top = 18.dp).fillMaxWidth().height(6.dp).clip(CircleShape).background(Glass.FillSelected)) {
                     Box(Modifier.fillMaxWidth(progress).height(6.dp).background(Color.White, CircleShape))
                 }
-                Row(Modifier.padding(top = 10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                    TvRoundButton(60.dp, Glass.FillStrong, "Home, the music keeps playing", onClick = { controls = false; onHome() }) {
-                        HomeGlyph(Glass.Text, Modifier.size(28.dp))
-                    }
-                    TvRoundButton(60.dp, Glass.FillStrong, "Stop the mix", onClick = { controls = false; vm.engine.stop() }) {
-                        StopIcon(Glass.Text, Modifier.size(26.dp))
-                    }
-                    TvRoundButton(80.dp, Color.White, if (state.paused) "Play" else "Pause", Modifier.focusRequester(pauseFocus), onClick = { vm.engine.togglePause() }) {
-                        if (state.paused) PlayIcon(INK, Modifier.size(38.dp)) else PauseIcon(INK, Modifier.size(38.dp))
-                    }
-                    // Skip: out at the next phrase, pressed again at the next bar.
-                    val skipLabel = when (state.skipping) {
-                        0 -> "Skip to the next song"
-                        1 -> "Skipping at the next phrase · press again for the next bar"
-                        else -> "Skipping at the next bar"
-                    }
-                    TvRoundButton(60.dp, if (state.skipping > 0) Glass.FillSelected else Glass.FillStrong, skipLabel, onClick = { vm.skip() }) {
-                        SkipIcon(if (state.canSkip || state.skipping > 0) Glass.Text else Glass.Muted, Modifier.size(28.dp))
+                // The playback buttons centred with "AI in control" under them, the look on its own at the right.
+                Box(Modifier.padding(top = 10.dp).fillMaxWidth()) {
+                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TvRoundButton(60.dp, Glass.FillStrong, "Home, the music keeps playing", onClick = { controls = false; onHome() }) {
+                                HomeGlyph(Glass.Text, Modifier.size(28.dp))
+                            }
+                            TvRoundButton(60.dp, Glass.FillStrong, "Stop the mix", onClick = { controls = false; vm.engine.stop() }) {
+                                StopIcon(Glass.Text, Modifier.size(26.dp))
+                            }
+                            TvRoundButton(80.dp, Color.White, if (state.paused) "Play" else "Pause", Modifier.focusRequester(pauseFocus), onClick = { vm.engine.togglePause() }) {
+                                if (state.paused) PlayIcon(INK, Modifier.size(38.dp)) else PauseIcon(INK, Modifier.size(38.dp))
+                            }
+                            // Skip: out at the next phrase, pressed again at the next bar.
+                            val skipLabel = when (state.skipping) {
+                                0 -> "Skip to the next song"
+                                1 -> "Skipping at the next phrase · press again for the next bar"
+                                else -> "Skipping at the next bar"
+                            }
+                            TvRoundButton(60.dp, if (state.skipping > 0) Glass.FillSelected else Glass.FillStrong, skipLabel, onClick = { vm.skip() }) {
+                                SkipIcon(if (state.canSkip || state.skipping > 0) Glass.Text else Glass.Muted, Modifier.size(28.dp))
+                            }
+                        }
+                        Text("AI in control", color = Glass.Muted, fontSize = 14.sp)
                     }
                     // While the controls are up ◀ ▶ move between buttons, so the look has its own button.
-                    LookButton(style.label) { changeLook(1); touched++ }
+                    Box(Modifier.align(Alignment.CenterEnd)) { LookButton(style.label) { changeLook(1); touched++ } }
                 }
             }
         }
@@ -282,7 +288,7 @@ private fun HomeGlyph(color: Color, modifier: Modifier) {
 
 /** No screensaver while the visualizer is up. */
 @Composable
-private fun KeepScreenOn() {
+internal fun KeepScreenOn() {
     val window = (LocalContext.current as? Activity)?.window ?: return
     DisposableEffect(window) {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

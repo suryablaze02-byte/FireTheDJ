@@ -175,7 +175,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                 val deck = state.current
                 TvCard(
                     title = "Now playing · ${deck?.title.orEmpty()}",
-                    subtitle = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, state.crate, "Press OK to watch the visualizer").joinToString(" · "),
+                    subtitle = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, state.crate, "Press OK for the decks").joinToString(" · "),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = EDGE, vertical = 8.dp).focusRequester(first),
                     selected = true,
                     onClick = onWatch,
@@ -212,8 +212,8 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(horizontal = EDGE, vertical = 12.dp)) {
                     TvCard("This TV & USB", "Scan for songs", Modifier.width(300.dp), accent = SourceKind.PHONE.color,
                         icon = { SourceGlyph(SourceKind.PHONE, 30.dp) }) { scanWithPermission() }
-                    TvCard("YT Music", "Playlists by mood and genre", Modifier.width(300.dp), accent = SourceKind.YOUTUBE.color,
-                        icon = { SourceGlyph(SourceKind.YOUTUBE, 30.dp) }, onClick = onYtMusic)
+                    TvCard("Stream", "YT Music or Spotify playlists", Modifier.width(300.dp), accent = SourceKind.STREAM.color,
+                        icon = { SourceGlyph(SourceKind.STREAM, 30.dp) }, onClick = onYtMusic)
                 }
                 scanNote?.let { Text(it, color = Glass.EmberText, fontSize = 15.sp, modifier = Modifier.padding(start = EDGE)) }
             }

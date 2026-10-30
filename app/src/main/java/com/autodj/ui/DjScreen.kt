@@ -64,7 +64,7 @@ fun DjScreen(vm: DjViewModel) {
     // A preview opened from "Up next" ends with that transition.
     LaunchedEffect(state.index) { preview = false }
 
-    // The YT Music page opens over the Library, from its tile.
+    // The Stream page (YT Music or Spotify) opens over the Library, from its tile.
     var ytMusic by rememberSaveable { mutableStateOf(false) }
 
     // Casting: a wireless-display TV shows the visualizer; a Chromecast gets the mix streamed.
@@ -162,7 +162,7 @@ fun DjScreen(vm: DjViewModel) {
                         },
                     )
                     Tab.MUSIC -> if (ytMusic) {
-                        YtMusicScreen(folders, importState, onImport = vm::importPlaylist, onImportClosed = vm::resetImport, onBack = { ytMusic = false })
+                        StreamScreen(folders, importState, onImport = vm::importPlaylist, onImportClosed = vm::resetImport, onBack = { ytMusic = false })
                     } else MusicScreen(
                         library, artwork,
                         folders = folders,

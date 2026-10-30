@@ -69,8 +69,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autodj.analysis.Genres
 import com.autodj.dj.MixMode
+import com.autodj.remote.SpotifyProvider
 import kotlin.math.roundToInt
 
 /** The cross-genre "crate": every classified track. */
@@ -328,7 +330,7 @@ fun MusicScreen(
                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AddTile(SourceKind.PHONE, "This phone", Modifier.weight(1f), onAddFolder)
-                AddTile(SourceKind.YOUTUBE, "YT Music", Modifier.weight(1f), onOpenYtMusic)
+                AddTile(SourceKind.STREAM, "Stream", Modifier.weight(1f), onOpenYtMusic)
                 AddTile(SourceKind.LINK, "Paste a link", Modifier.weight(1f)) {
                     // Start the dialog clean, not on the result of an import made on the YT Music page.
                     if (importState != ImportState.Working) onImportClosed()
@@ -395,6 +397,7 @@ private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, language
     val kind = when {
         !folder.remote -> SourceKind.PHONE
         "youtube" in folder.uri -> SourceKind.YOUTUBE
+        "spotify" in folder.uri -> SourceKind.SPOTIFY
         else -> SourceKind.LINK
     }
     val total = folder.tracks.size
@@ -539,8 +542,9 @@ internal fun ImportDialog(youTube: Boolean, state: ImportState, onImport: (Strin
                         "In YouTube Music, open a playlist or album, tap Share, then Copy link, and paste it here. " +
                             "Its tracks stream when they're analysed and played, and are never saved on the phone."
                     } else {
-                        "An Audius or Jamendo playlist or album, an Internet Archive release, an M3U playlist, " +
-                            "or a direct link to an audio file. Its tracks are analysed like your own, then mixed."
+                        "A Spotify or YouTube Music playlist or album (Spotify songs stream from YouTube), an Audius or " +
+                            "Jamendo playlist, an Internet Archive release, an M3U playlist, or a direct link to an audio file. " +
+                            "Its tracks are analysed like your own, then mixed."
                     },
                     fontSize = 13.sp,
                 )
@@ -549,15 +553,24 @@ internal fun ImportDialog(youTube: Boolean, state: ImportState, onImport: (Strin
                     onValueChange = { link = it },
                     singleLine = true,
                     enabled = !working && state !is ImportState.Done,
-                    placeholder = { Text(if (youTube) "https://music.youtube.com/playlist?list=…" else "https://audius.co/…/playlist/…") },
+                    placeholder = { Text(if (youTube) "https://music.youtube.com/playlist?list=…" else "https://open.spotify.com/playlist/…") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { submit() }),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 when (state) {
-                    ImportState.Working -> LinearProgressIndicator(Modifier.fillMaxWidth(), color = Dj.Blue, trackColor = Dj.Border)
+                    ImportState.Working -> {
+                        // A Spotify link: its songs are looked up on YouTube one by one.
+                        val found by SpotifyProvider.matching.collectAsStateWithLifecycle()
+                        found?.let { (done, of) -> Text("Finding songs on YouTube: $done of $of", fontSize = 13.sp) }
+                        LinearProgressIndicator(Modifier.fillMaxWidth(), color = Dj.Blue, trackColor = Dj.Border)
+                    }
                     is ImportState.Failed -> Text(state.reason, color = Dj.Warn, fontSize = 13.sp)
-                    is ImportState.Done -> Text("Added \"${state.name}\" · ${state.tracks} tracks. Pick it under From on the Mix tab once they're analysed.", color = Dj.BlueText, fontSize = 13.sp)
+                    is ImportState.Done -> Text(
+                        "Added \"${state.name}\" · ${state.tracks} tracks" + (if (state.missing > 0) " (${state.missing} not found on YouTube)" else "") +
+                            ". Pick it under From on the Mix tab once they're analysed.",
+                        color = Dj.BlueText, fontSize = 13.sp,
+                    )
                     ImportState.Idle -> Unit
                 }
             }
