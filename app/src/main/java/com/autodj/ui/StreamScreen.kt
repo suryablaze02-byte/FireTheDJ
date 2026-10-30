@@ -64,6 +64,7 @@ import com.autodj.remote.YtPlaylistCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -400,6 +401,9 @@ class StreamSearchViewModel : ViewModel() {
             delay(450)
             val result = runCatching { withContext(Dispatchers.IO) { YtMusicSearch.playlists(q) } }
             result.getOrNull()?.let { cache[q] = it }
+            // A newer search replaced this one: its blocking call still ran to the end, but it
+            // mustn't overwrite the newer answer (or show its cancellation as an error).
+            ensureActive()
             _youTube.value = result.fold({ Loadable.Ready(it) }, { Loadable.Failed(it.message ?: it.javaClass.simpleName) })
         }
     }
