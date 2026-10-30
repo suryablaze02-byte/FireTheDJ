@@ -1,5 +1,6 @@
 package com.autodj.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,9 +27,13 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -53,14 +59,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -106,8 +111,10 @@ fun MixScreen(
     val mixable = crate != Genres.UNCLASSIFIED && mixCount > 0
     val analysing = inSource.count { it.status == AnalysisStatus.QUEUED || it.status == AnalysisStatus.ANALYZING }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    // Sideways, the choices and Start sit in a column on the left and the crates fill the right.
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val header: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth().padding(top = if (landscape) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FireTheDjWordmark(20.sp, Modifier.weight(1f))
             Box {
                 GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", onClick = onSettings) {
@@ -115,21 +122,22 @@ fun MixScreen(
                 }
                 if (update != null) Box(Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 7.dp).size(9.dp).background(Glass.Ember, CircleShape))
             }
-            Box(Modifier.tourTarget("cast")) { CastButton(rememberCasting(), diameter = 44.dp, onClick = onCast) }
+            // Sideways, cast lives at the bottom of the tab rail.
+            if (!landscape) Box(Modifier.tourTarget("cast")) { CastButton(rememberCasting(), diameter = 44.dp, onClick = onCast) }
         }
         if (update != null && showBanner) UpdateBanner(update, onOpen = onSettings, onDismiss = onDismissUpdate, Modifier.padding(top = 12.dp))
-        Text("Pick a crate", color = Glass.Text, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp,
+        Text("Pick a crate", color = Glass.Text, fontSize = if (landscape) 28.sp else 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp,
             modifier = Modifier.padding(top = 10.dp))
-
         SourcePicker(library.size, folders, folder, onPickSource, Modifier.padding(top = 8.dp).tourTarget("from"))
-
         GlassSegmented(
             MixMode.entries, mode, { it.label }, onMode,
             Modifier.fillMaxWidth().padding(top = 14.dp).tourTarget("mode"),
         )
-
+    }
+    val columns = if (landscape) 3 else 2
+    val body: @Composable (Modifier) -> Unit = { modifier ->
         if (library.isEmpty()) {
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("No music yet", color = Glass.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "Add a folder from this phone, YT Music playlists or a link. Each song is analysed once, then sorted into crates.",
@@ -143,13 +151,13 @@ fun MixScreen(
             }
         } else {
             LazyVerticalGrid(
-                GridCells.Fixed(2),
-                Modifier.weight(1f).padding(top = 16.dp).tourTarget("crates"),
+                GridCells.Fixed(columns),
+                modifier.tourTarget("crates"),
                 contentPadding = PaddingValues(bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                item(span = { GridItemSpan(2) }) {
+                item(span = { GridItemSpan(columns) }) {
                     CrateCard("All genres", "${songs(allCount)} · moves across genres", crate == ALL, allCount > 0) { onPickCrate(ALL) }
                 }
                 items(crates) { c ->
@@ -158,7 +166,7 @@ fun MixScreen(
                     CrateCard(c, sub, crate == c, c != Genres.UNCLASSIFIED) { onPickCrate(c) }
                 }
                 if (analysing > 0) {
-                    item(span = { GridItemSpan(2) }) {
+                    item(span = { GridItemSpan(columns) }) {
                         Row(
                             Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -171,7 +179,8 @@ fun MixScreen(
                 }
             }
         }
-
+    }
+    val start: @Composable (Modifier) -> Unit = { modifier ->
         StartButton(
             when {
                 !mixable -> "Pick a crate to mix"
@@ -179,8 +188,25 @@ fun MixScreen(
                 else -> "Start mix · $crate · $mixCount"
             },
             mixable,
-            Modifier.padding(top = 8.dp, bottom = 12.dp).tourTarget("start"),
+            modifier.tourTarget("start"),
         ) { onStart(crate, source) }
+    }
+
+    if (landscape) {
+        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.width(290.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                header()
+                Spacer(Modifier.weight(1f))
+                start(Modifier.padding(top = 12.dp, bottom = 12.dp))
+            }
+            body(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp))
+        }
+    } else {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            header()
+            body(Modifier.weight(1f).padding(top = 16.dp))
+            start(Modifier.padding(top = 8.dp, bottom = 12.dp))
+        }
     }
 }
 

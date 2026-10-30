@@ -1,5 +1,6 @@
 package com.autodj.ui
 
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -11,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +28,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A fresh launch opens upright for the splash, even with the phone held sideways.
+        if (savedInstanceState == null) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         // Always edge to edge (under the bars and the camera cutout); the screens pad themselves with
         // Compose's insets, which follow every rotation. Switching this on and off for full screen
         // left stale landscape padding behind after rotating back.
@@ -46,6 +50,12 @@ class MainActivity : ComponentActivity() {
                 // The guided tour, once ever, right after the first splash.
                 var tour by remember { mutableStateOf(!TourMemory.done(this)) }
                 val tourState = remember { TourState() }
+                // The splash and the guided tour (which points at the bottom tabs) stay upright;
+                // after them the app turns with the phone.
+                val upright = splash || tour
+                LaunchedEffect(upright) {
+                    requestedOrientation = if (upright) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+                }
                 CompositionLocalProvider(LocalTour provides tourState) {
                     DjScreen(vm)
                     if (splash) {

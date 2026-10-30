@@ -77,8 +77,18 @@ class DeckVisual(
 /** [cue]: a word-play mix about to happen ("Word play “party”"), for the lyric looks to announce. */
 class VisualFrame(val decks: List<DeckVisual>, val paused: Boolean, val cue: String? = null)
 
-/** One card in the effects rack. */
-data class FxStatus(val name: String, val active: Boolean, val detail: String)
+/**
+ * One card in the effects rack. While [active]: [deck] it plays on ("A"/"B", null for the bass
+ * swap), [progress] 0..1 through it and [beatsLeft] until it ends.
+ */
+data class FxStatus(
+    val name: String,
+    val active: Boolean,
+    val detail: String,
+    val deck: String? = null,
+    val progress: Float = 0f,
+    val beatsLeft: Double = 0.0,
+)
 
 /** One segment of the transition timeline, as fractions of the whole transition. */
 data class PhaseUi(val label: String, val start: Float, val end: Float)
@@ -103,6 +113,8 @@ data class EngineState(
     val mixBars: Int = 0,
     /** A track time where B comes in, for the energy map marker. */
     val exitSec: Double? = null,
+    /** Where in B the mix brings it in (B's own time). */
+    val entrySec: Double? = null,
     val rate: Double = 1.0,
     val pitchSemitones: Double = 0.0,
     val phaseErrMs: Double = 0.0,
@@ -812,6 +824,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             mixBar = if (mixing) min(mixBars, floor((posA - p!!.startSec) / ta.barSec).toInt() + 1) else 0,
             mixBars = mixBars,
             exitSec = p?.exitSec,
+            entrySec = p?.entrySec,
             rate = rate,
             pitchSemitones = 12 * log2(rate),
             phaseErrMs = phaseErrSec * 1000,
@@ -900,6 +913,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             "Phaser" to listOf(FxType.PHASER),
             "Lo-fi" to listOf(FxType.LOFI),
             "Vocals" to listOf(FxType.VOCAL_CUT, FxType.VOCAL_ISOLATE),
+            "EQ" to listOf(FxType.BASS_BOOST, FxType.BASS_KILL, FxType.MID_CUT, FxType.TREBLE_CUT),
             "Sound FX" to FxType.entries.filter { it.isSfx },
         )
 
@@ -909,14 +923,14 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                 val onB = if (bPlan != null && posB != null) types.firstNotNullOfOrNull { bPlan.active(it, posB) } else null
                 val uses = types.any { aPlan.uses(it) || bPlan?.uses(it) == true }
                 when {
-                    onA != null -> FxStatus(name, true, describe(onA, "A", posA))
-                    onB != null -> FxStatus(name, true, describe(onB, "B", posB!!))
+                    onA != null -> FxStatus(name, true, describe(onA, "A", posA), "A", onA.progress(posA), (onA.end - posA) / aPlan.beatSec)
+                    onB != null -> FxStatus(name, true, describe(onB, "B", posB!!), "B", onB.progress(posB), (onB.end - posB) / bPlan!!.beatSec)
                     else -> FxStatus(name, false, if (uses) "Planned" else "Standby")
                 }
             }
             val swapping = aPlan.bass.movingAt(posA) || (bPlan != null && posB != null && bPlan.bass.movingAt(posB))
             val swapUsed = aPlan.bass.hasRamps || bPlan?.bass?.hasRamps == true
-            return cards + FxStatus("Bass EQ", swapping, if (swapping) "Low-shelf swap" else if (swapUsed) "Planned" else "Standby")
+            return cards + FxStatus("Bass EQ", swapping, if (swapping) "Low-shelf swap" else if (swapUsed) "Planned" else "Standby", progress = 1f - aPlan.bass.at(posA))
         }
 
         private fun describe(e: FxEvent, deck: String, t: Double): String {

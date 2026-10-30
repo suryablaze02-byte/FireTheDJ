@@ -154,7 +154,10 @@ class FxEvent(
     val p2: Float = 0f,
 ) {
     fun isActive(t: Double) = t >= start && t < end
-    fun amount(t: Double) = from + (to - from) * ((t - start) / (end - start)).toFloat().coerceIn(0f, 1f)
+    fun amount(t: Double) = from + (to - from) * progress(t)
+
+    /** How far through the event [t] is, 0..1. */
+    fun progress(t: Double) = ((t - start) / (end - start)).toFloat().coerceIn(0f, 1f)
 }
 
 /** What a percussion event ([FxType.DAPPU], [FxType.TIMBALES], [FxType.DARBUKA], …) plays, as its p1. */
