@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.5.2",
+            "A fix for searching on the Stream page.",
+            listOf(
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Stream search", "Typing a search no longer flashes \"Couldn't search YouTube Music\": an earlier search finishing late could replace the results with that error."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.5.1",
             "Spotify playlists played from YouTube, a Stream page with search, and no more talking intros in the mix.",
             listOf(
