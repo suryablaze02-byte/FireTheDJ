@@ -26,7 +26,7 @@
 
 <div align="center">
 <br/>
-<img src="screenshots/06-visualizer.png" alt="FireTheDJ's Club visualizer in landscape" width="100%" />
+<img src="screenshots/06-visualizer.png" alt="FireTheDJ's Acid Trip visualizer in landscape: a neon kaleidoscope of petals and eyes around a black hole" width="100%" />
 </div>
 
 ---
@@ -66,7 +66,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 - **Key detection** shown in Camelot notation.
 
 #### Show & sound
-- **5 visualizers**: Club, Haze & Beams, Neon Tunnel, Liquid Light, LED Field. Full screen, portrait or landscape.
+- **7 visualizers**: Club, Acid Trip, Neon Tunnel, Liquid Light and LED Field, plus Beat Pop and Karaoke with the song's lyrics. Full screen, portrait or landscape.
 - **Live mixing view**: both decks, crossfader, rate, phase error, key and every effect as it happens.
 - **Cast to a TV**: Miracast / Smart View screens show the visualizer in landscape; Chromecast & Google TV get the live mix ([how](docs/CASTING.md)).
 - **Android Auto**: pick a crate in the car and the set starts.
