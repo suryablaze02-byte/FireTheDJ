@@ -33,6 +33,8 @@ data class RemotePlaylist(
     val tracks: List<RemoteTrack>,
     /** Where in YT Music it was picked ("Telugu › Party today"), when it was: names its language. */
     val origin: String? = null,
+    /** Songs the service listed that couldn't be found to stream (Spotify songs with no YouTube match). Not saved. */
+    val missing: Int = 0,
 )
 
 /** A validated link: which provider handles it and the playlist id it names. */

@@ -21,7 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.autodj.ui.Dj
 import com.autodj.ui.DjViewModel
-import com.autodj.ui.YtMusicScreen
+import com.autodj.ui.StreamScreen
 import com.autodj.ui.LocalTour
 import com.autodj.ui.SplashScreen
 import com.autodj.ui.TourMemory
@@ -31,7 +31,7 @@ import com.autodj.ui.TourStep
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 
-/** FireTheDJ TV: the home screen, YT Music, and the full-screen visualizer while a mix plays. */
+/** FireTheDJ TV: the home screen, Stream, and while a mix plays the decks and the full-screen visualizer. */
 @UnstableApi
 class TvActivity : ComponentActivity() {
     private val vm: DjViewModel by viewModels()
@@ -73,32 +73,34 @@ class TvActivity : ComponentActivity() {
 /** The TV app's first-launch tour, over the home screen, driven by the remote. */
 private val TV_TOUR = listOf(
     TourStep(null, "Welcome to FireTheDJ TV", "Your AI DJ on the big screen. Use the remote: arrows to move, OK to choose. Here's a quick tour."),
-    TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or pick YT Music playlists by mood and genre. Each song is analysed once, then sorted into crates."),
+    TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or stream YT Music and Spotify playlists. Each song is analysed once, then sorted into crates."),
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
     TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
     TourStep("tv_settings", "Settings", "Clear the library from here."),
-    TourStep(null, "During the mix", "The visualizer takes over the screen and keeps the look you pick, including Beat Pop and Karaoke lyrics. ◀ ▶ change the look; OK brings up Home, Stop, Play/Pause and the Look button."),
+    TourStep(null, "During the mix", "Now Playing shows both decks, the mix between them and the effects as they play. The visualizer button takes the screen over with the look you pick; ◀ ▶ change it, and Back returns to the decks."),
 )
 
-private enum class Page { HOME, PLAYER, YT_MUSIC }
+private enum class Page { HOME, DECKS, PLAYER, YT_MUSIC }
 
 @UnstableApi
 @Composable
 private fun TvApp(vm: DjViewModel) {
     val state by vm.engine.state.collectAsStateWithLifecycle()
-    var page by rememberSaveable { mutableStateOf(if (state.running) Page.PLAYER else Page.HOME) }
-    // A mix starting goes straight to the visualizer; a mix ending comes back home.
+    var page by rememberSaveable { mutableStateOf(if (state.running) Page.DECKS else Page.HOME) }
+    // A mix starting goes straight to the decks; a mix ending comes back home.
     LaunchedEffect(state.running) {
-        if (state.running) page = Page.PLAYER else if (page == Page.PLAYER) page = Page.HOME
+        if (state.running) page = Page.DECKS else if (page == Page.DECKS || page == Page.PLAYER) page = Page.HOME
     }
     when (page) {
-        Page.HOME -> TvHome(vm, onWatch = { page = Page.PLAYER }, onYtMusic = { page = Page.YT_MUSIC })
-        Page.PLAYER -> TvPlayer(vm, onHome = { page = Page.HOME })
+        Page.HOME -> TvHome(vm, onWatch = { page = Page.DECKS }, onYtMusic = { page = Page.YT_MUSIC })
+        // Back walks home one step at a time: visualizer → decks → home.
+        Page.DECKS -> TvDecks(vm, onHome = { page = Page.HOME }, onVisualizer = { page = Page.PLAYER })
+        Page.PLAYER -> TvPlayer(vm, onHome = { page = Page.HOME }, onBack = { page = Page.DECKS })
         Page.YT_MUSIC -> {
             val folders by vm.folders.collectAsStateWithLifecycle()
             val importState by vm.importState.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize().background(Color.Black)) {
-                YtMusicScreen(folders, importState, vm::importPlaylist, vm::resetImport, onBack = { page = Page.HOME })
+                StreamScreen(folders, importState, vm::importPlaylist, vm::resetImport, onBack = { page = Page.HOME })
             }
         }
     }
