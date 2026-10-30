@@ -82,21 +82,38 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 
 <h2 id="screenshots">Screenshots</h2>
 
+#### Sideways
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/15-sideways-decks.png" width="400" alt="Two decks mid-mix: a vocal swap at bar 6 of 12, beats locked, the Vocals effect playing"/><br/><sub>Turn the phone: both decks, mid-mix</sub></td>
+    <td align="center"><img src="screenshots/16-sideways-effects.png" width="400" alt="Effects view: crossfade, rate, phase error, key, tempo, the mix's phases and every effect"/><br/><sub>Tap the effects panel for the full effects view</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/17-sideways-mix.png" width="400" alt="Mix tab sideways: source and mode on the left, genre crates on the right"/><br/><sub>Mix: pick a crate</sub></td>
+    <td align="center"><img src="screenshots/18-acid-trip.png" width="400" alt="Acid Trip visualizer with the look picker open"/><br/><sub>Full-screen visualizers: Acid Trip</sub></td>
+  </tr>
+</table>
+</div>
+
+#### Upright
+
 <div align="center">
 <table>
   <tr>
     <td align="center"><img src="screenshots/02-mix.png" width="200" alt="Mix tab: source, mode and genre crates"/><br/><sub>Mix: pick a crate</sub></td>
     <td align="center"><img src="screenshots/03-music.png" width="200" alt="Music tab: sources and songs"/><br/><sub>Music: your sources</sub></td>
-    <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing with the spinning glass record"/><br/><sub>Now Playing</sub></td>
+    <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing with the spinning record, skip button and AI in control"/><br/><sub>Now Playing</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/05-visualizer.png" width="200" alt="Full-screen Club visualizer with glass controls"/><br/><sub>Full-screen visualizers</sub></td>
+    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings with What's new in 1.5.0"/><br/><sub>Settings &amp; what's new</sub></td>
     <td align="center"><img src="screenshots/07-cast.png" width="200" alt="Play on a TV sheet"/><br/><sub>Play on a TV</sub></td>
-    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings with an update ready"/><br/><sub>Settings &amp; updates</sub></td>
+    <td align="center"><img src="screenshots/14-update.png" width="200" alt="Banner for a new version"/><br/><sub>A new version is out</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/14-update.png" width="200" alt="Banner for a new version"/><br/><sub>A new version is out</sub></td>
     <td align="center"><img src="screenshots/13-support.png" width="200" alt="Support FireTheDJ over UPI"/><br/><sub>Support over UPI</sub></td>
+    <td></td>
     <td></td>
   </tr>
 </table>
