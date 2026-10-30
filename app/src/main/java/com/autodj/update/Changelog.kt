@@ -14,6 +14,21 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.5.1",
+            "Spotify playlists played from YouTube, a Stream page with search, and no more talking intros in the mix.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Spotify playlists", "Paste a Spotify playlist or album link, or pick one of Spotify's own playlists, and its songs are found on YouTube Music and played from there. No Spotify account needed; songs with no matching upload are left out."),
+                        Change("Stream page", "YT Music and Spotify on one page, with one search across both for playlists to add."),
+                        Change("Skips the talk in YouTube songs", "Talking intros, skits and outros that SponsorBlock's community has marked are left out: songs come in where the music starts and mix out before the talk. Songs with skipped talk say so in Music. Only a 4-character piece of a code made from the video's id is sent, so SponsorBlock never learns which song is playing."),
+                        Change("Two decks on the TV", "Now Playing on the TV shows both decks, the mix and the controls, like a phone held sideways, with Home and the visualizer one press away."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.5.0",
             "Turn your phone sideways for two decks, and a new Acid Trip visualizer.",
             listOf(

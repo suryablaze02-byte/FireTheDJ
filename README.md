@@ -22,7 +22,7 @@
 </div>
 
 > [!IMPORTANT]
-> FireTheDJ is an independent project. It is **not** affiliated with, endorsed by, or connected to YouTube, Google, TCL, Audius, Jamendo or the Internet Archive in any way. Use it at your own discretion.
+> FireTheDJ is an independent project. It is **not** affiliated with, endorsed by, or connected to YouTube, Google, Spotify, SponsorBlock, TCL, Audius, Jamendo or the Internet Archive in any way. Use it at your own discretion.
 
 <div align="center">
 <br/>
@@ -55,6 +55,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 #### Music sources
 - **Your phone**: whole folders, rescanned on every launch.
 - **YT Music**: browse YouTube Music's curated playlists by mood and genre, or paste any playlist or album link. Tracks stream; nothing is saved.
+- **Spotify playlists**: paste a playlist or album link, or pick one of Spotify's own; its songs are found on YouTube Music and streamed from there. No Spotify account, nothing played from Spotify.
 - **Audius, Jamendo, Internet Archive, M3U** links and direct audio links.
 
     </td>
@@ -209,13 +210,13 @@ FireTheDJ is free and always will be. If it has played at your party, you can ch
 
 <h2 id="disclaimer">Disclaimer &amp; legal notice</h2>
 
-FireTheDJ is an independent, community-driven music player and automatic mixer. It is **not** associated with Google LLC, YouTube, YouTube Music, TCL, Audius, Jamendo, the Internet Archive, or any of their parent companies.
+FireTheDJ is an independent, community-driven music player and automatic mixer. It is **not** associated with Google LLC, YouTube, YouTube Music, Spotify, SponsorBlock, TCL, Audius, Jamendo, the Internet Archive, or any of their parent companies.
 
 * **No media hosting.** FireTheDJ does not host, upload or store copyrighted music. It plays files already on your device, or streams from public, public-facing or user-provided sources at the time you play them. Streamed YouTube tracks are never saved; tracks from other services are only kept where that service allows downloads.
 * **Your responsibility.** FireTheDJ is made for personal, non-commercial and educational use. You are responsible for making sure your use, including streaming, mixing, and playing music in public or at events, complies with the copyright laws where you are and with the terms of service of every service you use (including YouTube's). Playing music at a public event may need a public performance licence.
 * **Unofficial interfaces.** YouTube and YouTube Music support relies on unofficial interfaces ([NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) and YouTube Music's web API). They can stop working at any time, and their use may not be permitted by those services' terms.
 * **No guarantees.** FireTheDJ is provided "as is", without warranty of any kind (see the licence). Genre, key and beat analysis are automatic estimates and can be wrong.
-* **Trademarks.** YouTube, YouTube Music, Google Cast, Chromecast, Google TV, Android and Android Auto are trademarks of Google LLC; Miracast is a trademark of the Wi-Fi Alliance; other names belong to their owners. They are used here only to describe compatibility.
+* **Trademarks.** YouTube, YouTube Music, Google Cast, Chromecast, Google TV, Android and Android Auto are trademarks of Google LLC; Spotify is a trademark of Spotify AB; Miracast is a trademark of the Wi-Fi Alliance; other names belong to their owners. They are used here only to describe compatibility.
 * **Copyleft.** FireTheDJ is free software under the GPLv3. You may sell or redistribute copies, but any distribution must include the corresponding source under the same licence.
 
 <h2 id="license">License</h2>
