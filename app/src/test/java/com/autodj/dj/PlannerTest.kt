@@ -783,4 +783,50 @@ class PlannerTest {
         assertEquals(before, perf.speed.at(trick.endSec + 0.05), 1e-4f)
         assertTrue(t.isPhraseStart(t.barAt(trick.endSec + 0.01)))
     }
+
+    @Test
+    fun musicIsTheLongestStretchWithoutTalk() {
+        // Nothing marked: the whole track.
+        assertEquals(0.0..230.0, TrackInfo.musicWindow(230.0, emptyList()))
+        // A talking intro and outro.
+        assertEquals(30.0..200.0, TrackInfo.musicWindow(230.0, listOf(0.0..30.0, 200.0..230.0)))
+        // A skit in the middle: the longer side.
+        assertEquals(90.0..230.0, TrackInfo.musicWindow(230.0, listOf(70.0..90.0)))
+        // A breath of talk is ignored.
+        assertEquals(0.0..230.0, TrackInfo.musicWindow(230.0, listOf(100.0..101.0)))
+        // Marks that leave under 45 s of music are doubted.
+        assertEquals(0.0..230.0, TrackInfo.musicWindow(230.0, listOf(0.0..120.0, 150.0..230.0)))
+    }
+
+    @Test
+    fun aTalkingIntroIsNeitherPlayedNorMixedInto() {
+        val b = track("b", 124.0).withNonMusic(listOf(0.0..40.0))
+        // 40 s at 124 BPM is past bar 20: the music starts at bar 21, its first phrase at 24.
+        assertEquals(21, b.musicStartBar)
+        assertEquals(24, b.firstPhraseBar)
+        assertEquals(21, b.introEndBar)
+        repeat(20) { seed ->
+            val t = TransitionPlanner.plan(track("a", 124.0), 0, 10.0, b, random = Random(seed))
+            assertTrue("entered B at bar ${t.entryBar}", t.entryBar >= b.musicStartBar)
+        }
+    }
+
+    @Test
+    fun aTalkingOutroIsNeverMixedThrough() {
+        val a = track("a", 124.0, bars = 200, outro = 184, drop = 104).withNonMusic(listOf(150.0..400.0))
+        assertTrue(a.outroStartBar <= a.musicEndBar)
+        repeat(20) { seed ->
+            val t = TransitionPlanner.plan(a, 0, 10.0, track("b", 124.0), random = Random(seed))
+            assertTrue("mix ends at ${t.endSec} s, music at ${a.musicEndSec} s", t.endSec <= a.musicEndSec + 0.01)
+        }
+    }
+
+    @Test
+    fun tracksWithoutMarksPlanAsBefore() {
+        val a = track("a", 124.0)
+        val b = track("b", 126.0)
+        assertEquals(0, b.musicStartBar)
+        assertEquals(b.barCount, b.musicEndBar)
+        assertEquals(TransitionPlanner.plan(a, 0, 10.0, b).exitBar, TransitionPlanner.plan(a, 0, 10.0, b.withNonMusic(emptyList())).exitBar)
+    }
 }

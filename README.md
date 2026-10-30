@@ -222,7 +222,7 @@ FireTheDJ is an independent, community-driven music player and automatic mixer. 
 
 FireTheDJ is licensed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE).
 
-It builds on open-source work, including [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPLv3) for YouTube streams, [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media) and [Jetpack Compose](https://developer.android.com/jetpack/compose) (Apache 2.0). Cover art lookups use the iTunes Search API.
+It builds on open-source work, including [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPLv3) for YouTube streams, [AndroidX Media3 / ExoPlayer](https://github.com/androidx/media) and [Jetpack Compose](https://developer.android.com/jetpack/compose) (Apache 2.0). Cover art lookups use the iTunes Search API. The talking intros, skits and outros of YouTube uploads are skipped using [SponsorBlock](https://sponsor.ajay.app)'s community data (CC BY-NC-SA 4.0); only a 4-character prefix of a hash of the video id is sent.
 
 <div align="center">
 <br/>

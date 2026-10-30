@@ -131,6 +131,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp))) {
                 AboutRow("Source code on GitHub", "›") { open(context, "https://github.com/suryablaze02-byte/FireTheDJ") }
                 AboutRow("License", "GPL-3.0", onClick = null)
+                // SponsorBlock's data is CC BY-NC-SA 4.0, which asks for this credit.
+                AboutRow("Non-music skips", "SponsorBlock ›") { open(context, "https://sponsor.ajay.app") }
                 AboutRow("Version", Updates.current, onClick = null)
             }
         }

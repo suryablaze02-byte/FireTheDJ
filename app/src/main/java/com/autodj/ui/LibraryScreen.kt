@@ -490,6 +490,12 @@ private fun TrackRow(item: LibraryItem, art: String?, shape: Shape, onRemove: (S
                             val who = info.artist.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
                             val lang = item.language?.let { " · $it" }.orEmpty()
                             Text("$who${info.genre} · ${"%.0f".format(info.bpm)} BPM$lang", color = Glass.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            // Talk, skits and outros SponsorBlock marked in a YouTube upload, left out of mixes:
+                            // its own line, so a long artist name can't push it off the row.
+                            val talk = (info.durationSec - (info.musicEndSec - info.musicStartSec)).roundToInt()
+                            if (talk > 0) {
+                                Text("Skips ${talk / 60}:${"%02d".format(talk % 60)} of talk · SponsorBlock", color = Glass.Muted, fontSize = 12.sp, maxLines = 1)
+                            }
                         }
                     }
                     AnalysisStatus.FAILED -> Text("Couldn't analyse: ${item.error}", color = Dj.Warn, fontSize = 12.sp, maxLines = 2)

@@ -143,26 +143,29 @@ object TransitionPlanner {
         }
 
         val firstBar = max(0, a.barAt(nowSec) + 2)
-        val lastBar = floor((a.durationSec - 0.25 - a.downbeatSec) / a.barSec).toInt()
-        val firstPhrase = (0 until 8).first { b.isPhraseStart(it) }
+        // A mix out is over by the end of A's music: a talking outro (SponsorBlock) isn't mixed through.
+        val lastBar = min(floor((a.durationSec - 0.25 - a.downbeatSec) / a.barSec).toInt(), a.musicEndBar)
+        // B comes in where its music is: after a talking intro, if it has one.
+        val firstPhrase = b.firstPhraseBar
+        val musicFrom = b.musicStartBar
         // B's first sung phrase, if it comes early enough not to skip much of B.
-        val firstVocal = (0 until b.barCount / 2)
+        val firstVocal = (firstPhrase until b.barCount / 2)
             .takeWhile { b.barTime(it) - b.barTime(firstPhrase) <= MAX_VOCAL_SKIP_SEC }
             .firstOrNull { b.isPhraseStart(it) && b.vocalIn(it, it + 8) >= VOCAL }
         // For a bass drop: start B 16 (or 8) bars before its drop, so the drop lands in the mix.
-        val bassDropEntry = listOf(8, 16).map { b.introEndBar - it }.firstOrNull { it >= 0 && b.isPhraseStart(it) }
+        val bassDropEntry = listOf(8, 16).map { b.introEndBar - it }.firstOrNull { it >= musicFrom && b.isPhraseStart(it) }
             ?.takeIf { b.introEndBar < b.barCount - 32 }
         // B's first phrase at its main tempo: where an overlap can go if B opens at another tempo.
-        val steadyEntry = (0 until b.barCount - 32)
+        val steadyEntry = (musicFrom until b.barCount - 32)
             .firstOrNull { b.isPhraseStart(it) && b.steadyIn(b.barTime(it), b.barTime(it + 16)) }
         // B need not start at its beginning: any phrase in its first 40% that runs at its main
         // tempo (so it locks to A) is a place to bring it in.
-        val tempoEntries = (0 until (b.barCount * MAX_ENTRY_SHARE).toInt())
+        val tempoEntries = (musicFrom until (b.barCount * MAX_ENTRY_SHARE).toInt())
             .filter { b.isPhraseStart(it) && b.steadyIn(b.barTime(it), b.barTime(it + 16)) }
         val entries = (
             listOfNotNull(
                 firstPhrase,
-                b.introEndBar.takeIf { it != firstPhrase && b.isPhraseStart(it) && it in 8 until b.barCount - 32 },
+                b.introEndBar.takeIf { it != firstPhrase && b.isPhraseStart(it) && it in max(8, musicFrom) until b.barCount - 32 },
                 firstVocal,
                 bassDropEntry,
                 steadyEntry,
@@ -282,13 +285,14 @@ object TransitionPlanner {
             return null
         }
         val aStart = a.barTime(aEntryBar)
-        val available = a.durationSec - aStart
+        val available = a.musicEndSec - aStart
         val aFrom = max(nowSec + 8.0, aStart + min(MIN_PLAY_SEC, 0.6 * available))
-        val bTo = min(b.durationSec * MAX_ENTRY_SHARE, b.durationSec - MIN_B_REMAINING_SEC)
+        val bTo = min(b.durationSec * MAX_ENTRY_SHARE, b.musicEndSec - MIN_B_REMAINING_SEC)
         // B comes in more gently where its drums are light.
         val bEnergy = { sec: Double -> b.energyIn(b.barAt(sec), b.barAt(sec) + 1) }
         val titles = WordPlay.titleKeys(a.title) + WordPlay.titleKeys(b.title)
-        val search = WordPlay.search(aL, bL, aFrom, a.durationSec - 15.0, 0.5, bTo, aStart + TARGET_PLAY_SEC, bEnergy, titles)
+        // Both ends inside the music: A's cut before any talking outro, B's line after any talking intro.
+        val search = WordPlay.search(aL, bL, aFrom, a.musicEndSec - 15.0, max(0.5, b.musicStartSec), bTo, aStart + TARGET_PLAY_SEC, bEnergy, titles)
         // Trickster counts word play among its tricks, so it takes a looser link.
         val needed = if (mode == MixMode.TRICKSTER) WordPlay.TRICKSTER_MIN_SCORE else WordPlay.MIN_SCORE
         val link = search.link
@@ -534,7 +538,7 @@ object TransitionPlanner {
             else -> exit + mix / 2
         }
         val played = a.barTime(handover) - a.barTime(aEntryBar)
-        val available = a.durationSec - a.barTime(aEntryBar)
+        val available = a.musicEndSec - a.barTime(aEntryBar)
         if (!skipped && played < min(MIN_PLAY_SEC, 0.6 * available)) return Double.NEGATIVE_INFINITY
         var s = if (skipped) 0.0 else -abs(played - TARGET_PLAY_SEC) / 45
         if (exit == a.outroStartBar || exit in a.dropBars) s += 1.2
@@ -566,7 +570,7 @@ object TransitionPlanner {
     }
 
     private fun entryScore(b: TrackInfo, entry: Int, firstPhrase: Int, steadyEntry: Int?, recipe: Recipe, mix: Int): Double {
-        if (b.durationSec - b.barTime(entry) < MIN_B_REMAINING_SEC) return Double.NEGATIVE_INFINITY
+        if (b.musicEndSec - b.barTime(entry) < MIN_B_REMAINING_SEC) return Double.NEGATIVE_INFINITY
         val atDrop = entry != firstPhrase
         val skipped = (b.barTime(entry) - b.barTime(firstPhrase)) / 60
         if (recipe == Recipe.BASS_DROP) {
