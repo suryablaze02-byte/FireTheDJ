@@ -269,10 +269,10 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val opener = SetPlanner.opener(tracks)
         remaining.addAll(tracks - opener)
         main = 0
-        mainEntryBar = 0
+        mainEntryBar = opener.musicStartBar
         masterBpm = opener.bpm
-        decks[0].load(opener, 0.0, 1.0, FxPlan.EMPTY)
-        beginTrack(decks[0], opener, 0)
+        decks[0].load(opener, musicStart(opener), 1.0, FxPlan.EMPTY)
+        beginTrack(decks[0], opener, opener.musicStartBar)
         refreshQueue(opener)
         // During a call the set is ready but waits, paused, instead of playing over it.
         if (focus.request()) decks[0].player.play() else paused = true
@@ -375,7 +375,14 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun performancePlan(t: TrackInfo, p: Performance, gain: List<Ramp> = emptyList()) =
-        FxPlan(t.beatSec, t.downbeatSec, Lane(gain, 1f), Lane(emptyList(), 1f), p.events)
+        FxPlan(t.beatSec, t.downbeatSec, Lane(gain + musicEndFade(t), 1f), Lane(emptyList(), 1f), p.events)
+
+    /** Where a song starts when nothing mixes it in: the top of the file, or past a talking intro (SponsorBlock). */
+    private fun musicStart(t: TrackInfo) = if (t.musicStartBar == 0) 0.0 else t.barTime(t.musicStartBar)
+
+    /** A song whose music stops before its file does (a talking outro) fades out over its last bar of music, if no mix has taken over by then. */
+    private fun musicEndFade(t: TrackInfo) =
+        if (t.musicEndSec < t.durationSec) listOf(Ramp(t.musicEndSec - t.barSec, t.musicEndSec, 1f, 0f)) else emptyList()
 
     /** The track's own tricks, ending [CLEAR_BARS] before the transition starts so the run-up to a mix stays clean, plus the transition. */
     private fun mergedPlan(t: TrackInfo, p: Performance?, tr: Transition) = FxPlan(
@@ -475,7 +482,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             }
             liftKey(a, posA, p.startSec)
             if (posA < p.startSec) followPerformanceSpeed(a, posA) else logCrossfade(a, b, p, posA)
-        } else if (aEnded) {
+        } else if (aEnded || (ta.musicEndSec < ta.durationSec && posA >= ta.musicEndSec)) {
+            // The set's last song is over, or only its talking outro is left.
             stop()
             return
         } else {
@@ -603,9 +611,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         phaseErrSec = 0.0
         main = 1 - main
         masterBpm = t.bpm
-        mainEntryBar = 0
-        b.load(t, 0.0, 1.0, FxPlan.EMPTY)
-        beginTrack(b, t, 0)
+        mainEntryBar = t.musicStartBar
+        b.load(t, musicStart(t), 1.0, FxPlan.EMPTY)
+        beginTrack(b, t, t.musicStartBar)
         b.player.play()
         refreshQueue(t)
     }

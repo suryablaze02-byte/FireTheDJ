@@ -198,9 +198,9 @@ object DecisionEngine {
         if (indian) indianCuts.forEach { (r, s) -> base[r] = maxOf(base[r] ?: 0.0, s) }
         else base[Recipe.DRUM_FILL_CUT] = Double.NEGATIVE_INFINITY
         val crossGenre = a.genreFamily != b.genreFamily
-        val entryBar = (0 until 8).first { b.isPhraseStart(it) }
+        val entryBar = b.firstPhraseBar
         val bIntroBars = b.introEndBar - entryBar
-        val aOutroBars = a.barCount - a.outroStartBar
+        val aOutroBars = a.musicEndBar - a.outroStartBar
         val aOutroEnergy = a.barEnergy.getOrElse(a.outroStartBar - 1) { 1f }
         // The genre's own moves (and the special ones set above) count most, so a techno set
         // sounds like techno even in Trickster: their scores outweigh the mode's general leaning.

@@ -12,7 +12,9 @@ import com.autodj.dj.EngineHolder
 import com.autodj.lyrics.LyricsStore
 import com.autodj.model.TrackInfo
 import com.autodj.remote.RemoteTrack
+import com.autodj.remote.SponsorBlock
 import com.autodj.remote.StreamStore
+import com.autodj.remote.YouTubeLinks
 import com.autodj.remote.YouTubeStreams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +86,7 @@ object AnalysisJobs {
         genreLookup = GenreLookup(app)
         streams = StreamStore.get(app)
         LyricsStore.init(app)
+        SponsorBlock.init(app)
         val am = app.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         maxIdle = if (am.isLowRamDevice) 2 else (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, MAX_AT_ONCE)
         val saved = app.getSharedPreferences(SETTINGS, 0)
@@ -223,7 +226,7 @@ object AnalysisJobs {
                 TrackAnalyzer.analyzeWithSinging(app, Uri.parse(uri), remote, stored?.let { Uri.fromFile(it) } ?: Uri.parse(uri))
                     .also { cache.put(it.info) }
             }
-            val info = withOnlineGenre(analysed.info)
+            val info = withNonMusic(withOnlineGenre(analysed.info))
             // Ready to mix now; its lyrics follow in the same slot, before the next song starts.
             set(uri, Result(Status.READY, info))
             val asked = withContext(cpu) {
@@ -281,9 +284,28 @@ object AnalysisJobs {
         return info.withGenre(g).also { cache.put(it) }
     }
 
+    /**
+     * A YouTube upload's talking intro, skits and outro, as SponsorBlock marks them, so mixes stay
+     * in the music. Applied each time rather than stored with the analysis: marks change as people
+     * vote, and the analysis keeps the song's own intro and outro.
+     */
+    private suspend fun withNonMusic(info: TrackInfo): TrackInfo {
+        val id = YouTubeLinks.videoId(info.uri) ?: return info
+        val parts = withContext(Dispatchers.IO) { SponsorBlock.nonMusic(id, info.durationSec) }
+        if (parts.isNullOrEmpty()) return info
+        val known = info.withNonMusic(parts.map { it.startSec..it.endSec })
+        Log.i(
+            "AutoDJ",
+            "\"${info.title}\": not music (SponsorBlock) ${parts.joinToString { "${it.startSec.toInt()}-${it.endSec.toInt()} s" }} · " +
+                "mixing ${known.musicStartSec.toInt()}-${known.musicEndSec.toInt()} s of ${info.durationSec.toInt()} s",
+        )
+        return known
+    }
+
     fun clearCaches() {
         cache.clear()
         genreLookup.clear()
+        SponsorBlock.clear()
     }
 
     private const val PLAYING = 2

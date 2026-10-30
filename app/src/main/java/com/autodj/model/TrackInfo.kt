@@ -2,7 +2,10 @@ package com.autodj.model
 
 import com.autodj.analysis.AudioFeatures
 import com.autodj.analysis.BeatAnalyzer
+import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Everything the DJ needs to know about one track. Bars are counted from [downbeatSec]
@@ -44,13 +47,52 @@ class TrackInfo(
     val hookBar: Int,
     /** Local tempo every 12 s (0 = unknown); see [com.autodj.analysis.BeatAnalysis.tempoMap]. */
     val tempoMap: FloatArray,
+    /**
+     * Parts that aren't music (a talking intro, a skit, an outro), in seconds: from SponsorBlock
+     * for YouTube uploads, empty otherwise. Mixes stay out of them; see [musicStartSec].
+     */
+    val nonMusic: List<ClosedFloatingPointRange<Double>> = emptyList(),
 ) {
     /** The same track, filed under another genre. */
     fun withGenre(g: com.autodj.analysis.GenreResult) = TrackInfo(
         uri, title, artist, g.label, g.family, g.confidence, g.source, durationSec, bpm, downbeatSec, phraseOffsetBars,
         barEnergy, introEndBar, outroStartBar, dropBars, loudnessDb, features, vocalness, keyPc, keyMinor, keyConfidence,
-        hookBar, tempoMap,
+        hookBar, tempoMap, nonMusic,
     )
+
+    /**
+     * The same track with its non-music [parts] known: its intro ends no earlier than the music
+     * starts, and its outro starts no later than the music ends, so nothing is planned in them.
+     */
+    fun withNonMusic(parts: List<ClosedFloatingPointRange<Double>>): TrackInfo {
+        val known = TrackInfo(
+            uri, title, artist, genre, genreFamily, genreConfidence, genreSource, durationSec, bpm, downbeatSec, phraseOffsetBars,
+            barEnergy, introEndBar, outroStartBar, dropBars, loudnessDb, features, vocalness, keyPc, keyMinor, keyConfidence,
+            hookBar, tempoMap, parts,
+        )
+        val intro = max(introEndBar, known.musicStartBar)
+        val outro = min(outroStartBar, known.musicEndBar).coerceAtLeast(intro)
+        return TrackInfo(
+            uri, title, artist, genre, genreFamily, genreConfidence, genreSource, durationSec, bpm, downbeatSec, phraseOffsetBars,
+            barEnergy, intro, outro, dropBars, loudnessDb, features, vocalness, keyPc, keyMinor, keyConfidence,
+            hookBar, tempoMap, parts,
+        )
+    }
+
+    private val window by lazy { musicWindow(durationSec, nonMusic) }
+
+    /** Where the song's music starts and ends: the longest stretch with no [nonMusic] part in it. */
+    val musicStartSec get() = window.start
+    val musicEndSec get() = window.endInclusive
+
+    /** The first bar that starts in the music. */
+    val musicStartBar get() = if (window.start <= 0.0) 0 else max(0, ceil((window.start - downbeatSec) / barSec - 1e-6).toInt())
+
+    /** The bar the music ends in: a mix out must be over by its start. [barCount] when the music runs to the end. */
+    val musicEndBar get() = if (window.endInclusive >= durationSec) barCount else min(barCount, barAt(window.endInclusive))
+
+    /** The first phrase start in the music: where the song comes in unless a mix picks another bar. */
+    val firstPhraseBar get() = (musicStartBar until musicStartBar + 8).first { isPhraseStart(it) }
 
     private fun knownTempos(fromSec: Double, toSec: Double): List<Float> {
         val hop = BeatAnalyzer.TEMPO_HOP_SEC
@@ -96,4 +138,31 @@ class TrackInfo(
     fun barTime(bar: Int) = downbeatSec + bar * barSec
     fun barAt(sec: Double) = floor((sec - downbeatSec) / barSec).toInt()
     fun isPhraseStart(bar: Int) = Math.floorMod(bar - phraseOffsetBars, 8) == 0
+
+    companion object {
+        /** Marked parts shorter than this are ignored: a breath of talk isn't worth losing music over. */
+        private const val MIN_PART_SEC = 1.5
+
+        /** If the longest stretch of music is shorter than this, the marks are doubted and the whole track counts. */
+        private const val MIN_MUSIC_SEC = 45.0
+
+        /** The longest stretch of [durationSec] seconds with none of [parts] in it. */
+        fun musicWindow(durationSec: Double, parts: List<ClosedFloatingPointRange<Double>>): ClosedFloatingPointRange<Double> {
+            val whole = 0.0..durationSec
+            val marked = parts
+                .map { it.start.coerceIn(0.0, durationSec)..it.endInclusive.coerceIn(0.0, durationSec) }
+                .filter { it.endInclusive - it.start >= MIN_PART_SEC }
+                .sortedBy { it.start }
+            if (marked.isEmpty()) return whole
+            val stretches = mutableListOf<ClosedFloatingPointRange<Double>>()
+            var from = 0.0
+            for (m in marked) {
+                if (m.start > from) stretches += from..m.start
+                from = max(from, m.endInclusive)
+            }
+            if (durationSec > from) stretches += from..durationSec
+            val longest = stretches.maxByOrNull { it.endInclusive - it.start } ?: return whole
+            return if (longest.endInclusive - longest.start < MIN_MUSIC_SEC) whole else longest
+        }
+    }
 }
