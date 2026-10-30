@@ -27,3 +27,5 @@ research/adi_wav/
 launch/voice/
 launch/explainer-*/render/
 launch/explainer-*/wav/
+# The explainer reel's scripts stay local.
+launch/reel-*
