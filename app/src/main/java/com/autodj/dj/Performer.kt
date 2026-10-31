@@ -224,7 +224,9 @@ object Performer {
             // The last word sung before the drop, looped and tightening into it; else a roll that
             // tightens and rises in pitch as it goes, the way festival builds climb.
             events += if (word != null) {
-                wordLoop(t, word, dSec).filter { it.start < rollEnd }.map { if (it.end > rollEnd) FxEvent(it.type, it.start, rollEnd, it.from, it.to, it.p1, it.p2) else it }
+                val loops = wordLoop(t, word, dSec).filter { it.start < rollEnd }.map { if (it.end > rollEnd) FxEvent(it.type, it.start, rollEnd, it.from, it.to, it.p1, it.p2) else it }
+                // From stems, the loop takes just the sung word: a clean a cappella stutter into the drop.
+                loops + FxEvent(FxType.STEM_ACAPELLA, loops.first().start, rollEnd)
             } else {
                 listOf(
                     FxEvent(FxType.LOOP_ROLL, dSec - 2 * bar, dSec - bar, 0f, 0.5f, p1 = 1f, p2 = RISE_SEMIS),

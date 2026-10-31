@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- FireTheDJ for phones. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <!-- A larger heap: stem separation holds a minute of audio as floats while it works. -->
+    <application android:largeHeap="true">
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

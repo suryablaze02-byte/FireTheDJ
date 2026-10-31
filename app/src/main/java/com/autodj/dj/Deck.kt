@@ -142,6 +142,7 @@ class Deck(context: Context) {
         lastPos = -1.0
         fx.seekTo(startSec)
         fx.plan = plan
+        fx.trackUri = t.uri
         // A streamed track plays from its downloaded copy when there is one.
         val source = streams.fileFor(t.uri)?.let { Uri.fromFile(it) } ?: Uri.parse(t.uri)
         player.setMediaItem(MediaItem.fromUri(source), (startSec * 1000).toLong())
@@ -174,6 +175,7 @@ class Deck(context: Context) {
         player.clearMediaItems()
         track = null
         error = null
+        fx.trackUri = null
         fx.plan = FxPlan.EMPTY
         pitchSemis = 0
         speed = 1.0

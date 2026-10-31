@@ -13,6 +13,8 @@ import com.autodj.lyrics.LyricsStore
 import com.autodj.lyrics.TimedLyrics
 import com.autodj.dj.fx.FxPlan
 import com.autodj.dj.fx.FxType
+import com.autodj.dj.stems.StemJobs
+import com.autodj.dj.stems.Stems
 import com.autodj.dj.fx.Lane
 import com.autodj.dj.fx.Law
 import com.autodj.dj.fx.Ramp
@@ -151,6 +153,8 @@ data class EngineState(
 class MixEngine(context: Context, private val scope: CoroutineScope) {
     private enum class ReplayState { PENDING, LOADED, PLAYING, DONE }
 
+    private val appContext = context.applicationContext
+
     private val decks = arrayOf(Deck(context), Deck(context))
     private var main = 0
     private val played = mutableListOf<TrackInfo>()
@@ -239,7 +243,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val level = fx.spectrum.frameAt(pos, bands)
         val beats = (pos - t.downbeatSec) / t.beatSec
         val bar = floor(beats / 4).toInt()
-        val active = plan.events.filter { it.isActive(pos) }.map {
+        // The a cappella marker only steers stems; the visualizers have nothing to show for it.
+        val active = plan.events.filter { it.isActive(pos) && it.type != FxType.STEM_ACAPELLA }.map {
             ActiveFx(it.type, it.amount(pos), ((pos - it.start) / (it.end - it.start)).toFloat().coerceIn(0f, 1f), it.p1)
         }
         return DeckVisual(
@@ -260,6 +265,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     /** Plays [tracks] in an order the engine decides as it goes. [crate] is a label for the UI. */
     fun start(tracks: List<TrackInfo>, crate: String, mode: MixMode = MixMode.SMOOTH) {
         stop()
+        StemJobs.newSet()
         if (tracks.isEmpty()) return
         this.crate = crate
         // A one-genre set is styled by its genre; "All genres" styles each mix by the incoming song.
@@ -372,6 +378,32 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         skipAsked = 0
         skipDone = 0
         deck.plan = performancePlan(t, p)
+        // The last song has no mix to wait for; the others ask once their mix is planned (tricks after it never play).
+        if (remaining.isEmpty()) separateTricks(deck, t, p, Double.MAX_VALUE)
+    }
+
+    /**
+     * Asks for the bass-kill drops and word loops in this song before [beforeSec] (where its mix
+     * begins) to be separated, so their bass goes and the kick stays, and the word loops sing
+     * alone. Only ones far enough ahead to be ready; StemJobs puts nearly-due mixes first.
+     */
+    private fun separateTricks(deck: Deck, t: TrackInfo, p: Performance, beforeSec: Double) {
+        if (!Stems.active(appContext) || !Stems.tricksOn(appContext)) return
+        val pos = deck.positionSec
+        // Each moment, with a run-up to line the stems up, merged where they touch (a word loop and its bass kill).
+        val spans = p.events.filter { it.type in TRICK_STEM_MOVES && it.end <= beforeSec }
+            .map { (it.start - STEM_TRICK_RUN_UP_SEC) to (it.end + 1.5) }
+            .sortedBy { it.first }
+            .fold(mutableListOf<Pair<Double, Double>>()) { acc, s ->
+                val last = acc.lastOrNull()
+                if (last != null && s.first <= last.second + 1.0) acc[acc.lastIndex] = last.first to maxOf(last.second, s.second) else acc += s
+                acc
+            }
+        for ((from, to) in spans) {
+            val neededIn = (from - pos) / deck.speed
+            if (neededIn < STEM_TRICK_MIN_LEAD_SEC) continue
+            StemJobs.request(appContext, t.uri, t.title, from, to, neededIn, mix = false)
+        }
     }
 
     private fun performancePlan(t: TrackInfo, p: Performance, gain: List<Ramp> = emptyList()) =
@@ -451,6 +483,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                             "B in ${formatSec(it.exitSec)} (B from ${formatSec(it.entrySec)}), done ${formatSec(it.endSec)}",
                     )
                     if (BuildConfig.FLAVOR == "phone") Log.i(TAG, "word play: ${TransitionPlanner.wordPlayNote}")
+                    separateFor(ta, chosen, it)
+                    perf?.let { p -> separateTricks(a, ta, p, min(it.startSec, it.exitSec)) }
                 }
             refreshQueue(ta)
         }
@@ -564,6 +598,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             lyrics = wordPlayLyrics, styleFamily = styleFamily, exitAt = exit,
         )
         plan = tr
+        separateFor(ta, nx, tr)
         // No run-up to clear here: the trick playing now finishes, and the mix's effects that
         // would have started before the tap are left out.
         a.plan = FxPlan(ta.beatSec, ta.downbeatSec, tr.aPlan.gain, tr.aPlan.bass, perf?.events.orEmpty() + tr.aPlan.events.filter { it.start >= posA })
@@ -573,6 +608,28 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                 "B in ${formatSec(tr.exitSec)} (bar ${tr.exitBar}, B from ${formatSec(tr.entrySec)})",
         )
         refreshQueue(ta)
+    }
+
+    /**
+     * Asks for the stretches of both songs this mix plays over to be separated into stems, when
+     * the mix moves their bass or vocals (that's what stems do better than EQ) and stems are on.
+     */
+    private fun separateFor(ta: TrackInfo, tb: TrackInfo, t: Transition) {
+        if (!Stems.active(appContext)) return
+        fun usesStems(p: FxPlan) = p.bass.hasRamps || p.events.any { it.type in STEM_MOVES }
+        val a = decks[main]
+        val posA = a.positionSec
+        // Seconds of real time until A reaches an A-time moment.
+        fun untilA(sec: Double) = ((sec - posA) / a.speed).coerceAtLeast(0.0)
+        if (usesStems(t.aPlan)) {
+            val from = min(t.startSec, t.exitSec) - STEM_RUN_UP_SEC
+            StemJobs.request(appContext, ta.uri, ta.title, from, t.handoverSec + 1.0, untilA(from))
+        }
+        if (usesStems(t.bPlan)) {
+            // B's seconds per A second while they overlap.
+            val rate = if (t.beatmatched) ta.bpm * t.tempoMultiple / tb.bpm else 1.0
+            StemJobs.request(appContext, tb.uri, tb.title, t.entrySec - 1.0, t.entrySec + (t.handoverSec - t.exitSec) * rate + 2.0, untilA(t.exitSec))
+        }
     }
 
     /** Gives up on the incoming track (or the hook replay): the playing one carries on at full volume. */
@@ -885,6 +942,21 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private fun frac(x: Double) = x - floor(x)
 
     private companion object {
+        /** The moves stems play on the real parts: a bass kill and the vocal cut and isolate (and any bass swap). */
+        val STEM_MOVES = setOf(FxType.BASS_KILL, FxType.VOCAL_CUT, FxType.VOCAL_ISOLATE)
+
+        /** Seconds of the outgoing song separated before its first effect, so the stems are lined up in time. */
+        const val STEM_RUN_UP_SEC = 4.0
+
+        /** The tricks stems improve: the bass kill before a drop (the kick stays) and the word loop (sung alone). */
+        val TRICK_STEM_MOVES = setOf(FxType.BASS_KILL, FxType.STEM_ACAPELLA)
+
+        /** A trick's window starts this long before it, to line the stems up. */
+        const val STEM_TRICK_RUN_UP_SEC = 2.5
+
+        /** Tricks sooner than this (a song's first minute or so) wouldn't be ready: not asked for. */
+        const val STEM_TRICK_MIN_LEAD_SEC = 45.0
+
         const val TAG = "AutoDJ"
 
         /** How long before a word-play cut the visualizer announces it. */

@@ -70,6 +70,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autodj.analysis.AnalysisJobs
+import com.autodj.dj.stems.Stems
+import com.autodj.dj.stems.StemModel
 import com.autodj.support.Upi
 import com.autodj.update.Changelog
 import com.autodj.update.Release
@@ -413,6 +415,85 @@ private fun AnalysisSettings() {
         Divider()
         SettingRow("Lyrics", "Fetched and lined up while each song is analysed") {
             Text("${lyrics.first} of ${lyrics.second}", color = Glass.Muted, fontSize = 15.sp)
+        }
+        StemSettings()
+    }
+}
+
+/**
+ * Stem separation, on phones that can run it: download the model, then a switch. With it on,
+ * mixes play their bass swaps and vocal swaps from the songs' real stems.
+ */
+@Composable
+private fun StemSettings() {
+    val context = LocalContext.current
+    if (!remember { Stems.supported(context) }) return
+    val state by StemModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { StemModel.refresh(context) }
+    var on by remember { mutableStateOf(Stems.isOn(context)) }
+    // A finished download turns stems on (it was asked for), and the switch follows.
+    LaunchedEffect(state) { if (state == StemModel.State.Ready) on = Stems.isOn(context) }
+    val size = mb(StemModel.SIZE)
+    Divider()
+    when (val s = state) {
+        StemModel.State.Absent, is StemModel.State.Failed -> SettingRow(
+            "Stem separation",
+            (s as? StemModel.State.Failed)?.let { "Download failed: ${it.reason}" }
+                ?: ("Real bass swaps and a cappella vocal swaps, from each song's drums, bass, vocals and the rest. " +
+                    "Downloads a $size model once" + if (StemModel.metered(context)) " (you're on mobile data)." else "."),
+            Modifier.clickable(role = Role.Button, onClickLabel = "Download the stem model") { StemModel.download(context) },
+        ) {
+            Text(if (s is StemModel.State.Failed) "Try again" else "Download", color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+        is StemModel.State.Downloading -> Column(Modifier.fillMaxWidth()) {
+            SettingRow(
+                "Stem separation",
+                "Downloading the model: ${mb(s.bytes)} of $size",
+                Modifier.clickable(role = Role.Button, onClickLabel = "Cancel the download") { StemModel.cancel() },
+            ) {
+                Text("Cancel", color = Glass.Muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+            LinearProgressIndicator(
+                progress = { (s.bytes / StemModel.SIZE.toFloat()).coerceIn(0f, 1f) },
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                color = Color(0xFFFF7A2E), trackColor = Glass.FillSelected,
+            )
+        }
+        StemModel.State.Ready -> {
+            SettingRow(
+                "Stem separation",
+                if (on) "Mixes play bass and vocal swaps from the songs' stems, separated in the background during a set"
+                else "Off: mixes use EQ for bass and vocal swaps",
+            ) {
+                Switch(
+                    checked = on,
+                    onCheckedChange = { on = it; Stems.setOn(context, it) },
+                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+                )
+            }
+            if (on) {
+                var tricks by remember { mutableStateOf(Stems.tricksOn(context)) }
+                Divider()
+                SettingRow(
+                    "Stems for tricks",
+                    if (tricks) "Trickster's bass-kill drops and word loops use stems too, when there's time. Uses more battery"
+                    else "Off: only mixes use stems",
+                ) {
+                    Switch(
+                        checked = tricks,
+                        onCheckedChange = { tricks = it; Stems.setTricksOn(context, it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+                    )
+                }
+            }
+            Divider()
+            SettingRow(
+                "Delete the stem model",
+                "Frees $size; download it again any time",
+                Modifier.clickable(role = Role.Button, onClickLabel = "Delete the stem model") { StemModel.delete(context); on = false },
+            ) {
+                Text("Delete", color = Glass.Muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

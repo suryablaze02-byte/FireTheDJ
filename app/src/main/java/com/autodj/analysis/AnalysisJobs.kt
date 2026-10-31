@@ -124,6 +124,8 @@ object AnalysisJobs {
                 if (lyricsLater.isEmpty() || _progress.value.busy) continue
                 Log.i("AutoDJ", "asking again for lyrics of ${lyricsLater.size} songs")
                 for ((uri, info) in lyricsLater.toList()) {
+                    // Lining lyrics up decodes the song again: stems for a coming mix go first.
+                    while (com.autodj.dj.stems.StemJobs.busy) delay(SLOT_CHECK_MS)
                     val n = (tries[uri] ?: 0) + 1
                     tries[uri] = n
                     if (uri !in wanted || n > LYRICS_ROUNDS) { lyricsLater -= uri; continue }
@@ -169,8 +171,10 @@ object AnalysisJobs {
         return ready.count { LyricsStore.get(it) != null } to ready.size
     }
 
-    /** How many songs may be analysed at once right now: never more than [PLAYING] while a set plays. */
+    /** How many songs may be analysed at once right now: never more than [PLAYING] while a set plays, none while stems separate. */
     private fun limit(): Int {
+        // Stems for a coming mix come first: songs already started finish, no new ones start.
+        if (com.autodj.dj.stems.StemJobs.busy) return 0
         val idle = _settings.value.songsAtOnce.takeIf { it > 0 } ?: maxIdle
         val s = EngineHolder.get(app).state.value
         return if (s.running && !s.paused) minOf(PLAYING, idle) else idle

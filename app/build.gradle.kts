@@ -46,7 +46,12 @@ android {
     // install side by side) with a remote-driven home screen and an auto-rotating visualizer.
     flavorDimensions += "device"
     productFlavors {
-        create("phone") { dimension = "device" }
+        create("phone") {
+            dimension = "device"
+            // Stem separation runs on ONNX Runtime's 64-bit library (stems need a 64-bit phone); the
+            // 32-bit one keeps the app installable on older phones, and the x86 ones are left out.
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        }
         create("tv") {
             dimension = "device"
             applicationIdSuffix = ".tv"
@@ -65,6 +70,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    // Native libraries (ONNX Runtime) compressed in the APK: a smaller download, a slightly slower install.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
     }
     buildFeatures {
         compose = true
@@ -91,6 +100,9 @@ dependencies {
     // YouTube Music: playlist listing, and the signature / `n` solving that makes stream URLs playable.
     // v0.26.3, not v0.26.4: the newer one fails to parse the current player JS's deobfuscation function.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.3")
+
+    // Phone only: runs the stem separation model (Demucs, MIT); the model itself is downloaded on request.
+    "phoneImplementation"("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 
     // TV only: draws the UPI code for Support, to scan with a phone (Apache-2.0).
     "tvImplementation"("com.google.zxing:core:3.5.3")

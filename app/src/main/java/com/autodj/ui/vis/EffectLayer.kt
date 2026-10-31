@@ -416,6 +416,8 @@ class EffectLayer {
             FxType.BASS_KILL -> "BASS OUT"
             FxType.MID_CUT -> "MIDS OUT"
             FxType.TREBLE_CUT -> "MUFFLED"
+            // Never reaches the visualizers (MixEngine leaves it out of their frames).
+            FxType.STEM_ACAPELLA -> "ACAPELLA"
             FxType.SIREN -> "SIREN"
             FxType.HORN -> "AIR HORN"
             FxType.LASER -> "LASERS"
