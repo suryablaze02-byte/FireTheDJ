@@ -141,6 +141,113 @@ object PcmDecoder {
         return Pcm(out.toArray(), sampleRate.toDouble() / factor)
     }
 
+    /** A stretch of a song in stereo at its own sample rate (mono files are doubled up). */
+    class Stereo(val left: FloatArray, val right: FloatArray, val sampleRate: Int, val startSec: Double, val channels: Int) {
+        val frames get() = left.size
+    }
+
+    /**
+     * [fromSec]..[toSec] of a song in full quality, stereo, for stem separation. The decoder seeks
+     * to the frame before [fromSec] and keeps samples by their presentation time, so the start is
+     * close, not exact; the deck lines the stems up with what it plays before using them.
+     */
+    fun decodeStereo(context: Context, uri: Uri, fromSec: Double, toSec: Double): Stereo {
+        decodes.acquire()
+        try {
+            return decodeWindow(context, uri, fromSec, toSec)
+        } finally {
+            decodes.release()
+        }
+    }
+
+    private fun decodeWindow(context: Context, uri: Uri, fromSec: Double, toSec: Double): Stereo {
+        val extractor = MediaExtractor()
+        val youTube = YouTubeLinks.videoId(uri.toString())?.let { YouTubeAudioSource(it) }
+        try {
+            if (youTube != null) extractor.setDataSource(youTube) else extractor.setDataSource(context, uri, null)
+        } catch (e: Exception) {
+            extractor.release()
+            youTube?.close()
+            throw e
+        }
+        val trackIndex = (0 until extractor.trackCount).firstOrNull {
+            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+        } ?: run {
+            extractor.release()
+            youTube?.close()
+            error("No audio track found")
+        }
+        val format = extractor.getTrackFormat(trackIndex)
+        extractor.selectTrack(trackIndex)
+        extractor.seekTo((fromSec * 1e6).toLong(), MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+        val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+        codec.configure(format, null, null, 0)
+        codec.start()
+        var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        var encoding = AudioFormat.ENCODING_PCM_16BIT
+        val capacity = ((toSec - fromSec) * sampleRate).toInt() + 4096
+        val left = FloatBuilder(capacity)
+        val right = FloatBuilder(capacity)
+        var firstSec = Double.NaN
+        var scratch = FloatArray(0)
+        val info = MediaCodec.BufferInfo()
+        var inputDone = false
+        var outputDone = false
+        try {
+            while (!outputDone) {
+                while (!inputDone) {
+                    val inIdx = codec.dequeueInputBuffer(0)
+                    if (inIdx < 0) break
+                    val buf = codec.getInputBuffer(inIdx)!!
+                    val size = extractor.readSampleData(buf, 0)
+                    if (size < 0 || extractor.sampleTime > ((toSec + 1) * 1e6).toLong()) {
+                        codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                        inputDone = true
+                    } else {
+                        codec.queueInputBuffer(inIdx, 0, size, extractor.sampleTime, 0)
+                        extractor.advance()
+                    }
+                }
+                val outIdx = codec.dequeueOutputBuffer(info, 2_000)
+                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    val f = codec.outputFormat
+                    sampleRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                    channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                    encoding = if (f.containsKey(MediaFormat.KEY_PCM_ENCODING)) f.getInteger(MediaFormat.KEY_PCM_ENCODING) else AudioFormat.ENCODING_PCM_16BIT
+                } else if (outIdx >= 0) {
+                    val buf = codec.getOutputBuffer(outIdx)!!
+                    buf.position(info.offset)
+                    buf.limit(info.offset + info.size)
+                    buf.order(ByteOrder.nativeOrder())
+                    val n = readSamples(buf, encoding, scratch).also { scratch = it.second }.first
+                    val bufSec = info.presentationTimeUs / 1e6
+                    var i = 0
+                    var frame = 0
+                    while (i + channels <= n) {
+                        val t = bufSec + frame / sampleRate.toDouble()
+                        if (t >= fromSec && t < toSec) {
+                            if (firstSec.isNaN()) firstSec = t
+                            left.add(scratch[i])
+                            right.add(if (channels > 1) scratch[i + 1] else scratch[i])
+                        }
+                        i += channels
+                        frame++
+                    }
+                    codec.releaseOutputBuffer(outIdx, false)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0 || bufSec > toSec) outputDone = true
+                }
+            }
+        } finally {
+            codec.stop()
+            codec.release()
+            extractor.release()
+            youTube?.close()
+        }
+        if (left.size == 0) error("Nothing decoded between ${fromSec.toInt()} and ${toSec.toInt()} s")
+        return Stereo(left.toArray(), right.toArray(), sampleRate, firstSec, channels)
+    }
+
     /**
      * The buffer's samples as floats in -1..1, whatever the decoder put out: 16-bit (most
      * phones), float, or the 24- and 32-bit integers some decoders give hi-res FLAC. Bulk-read

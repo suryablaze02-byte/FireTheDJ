@@ -83,6 +83,12 @@ enum class FxType(val label: String) {
     /** The treble cut, muffled as if from the next room (amount 1 = −18 dB). */
     TREBLE_CUT("Treble cut"),
 
+    /**
+     * Only the vocals, where the deck plays from stems (a word loop then loops just the word);
+     * without stems it does nothing, so the trick sounds as it always has.
+     */
+    STEM_ACAPELLA("A cappella"),
+
     // Synthesised DJ sound effects, mixed on top of the deck.
     SIREN("Siren"),
     HORN("Air horn"),

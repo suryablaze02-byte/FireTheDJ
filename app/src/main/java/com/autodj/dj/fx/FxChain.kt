@@ -30,6 +30,13 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
     @Volatile
     var plan: FxPlan = FxPlan.EMPTY
 
+    /**
+     * The deck is playing its stems ([com.autodj.dj.stems.StemMix]): the bass swap, bass kill and
+     * vocal cut/isolate are already done on the real parts, so the chain's EQ versions stand down.
+     */
+    @Volatile
+    var stemmed = false
+
     private val sr = sampleRate.toDouble()
     private var baseSec = 0.0
     private var frames = 0L
@@ -167,8 +174,8 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
 
         // The bass: the mix's bass swap, plus any boost or kill.
         val boostDb = p.active(FxType.BASS_BOOST, tMid)?.let { it.amount(tMid) * it.p1 }?.orIf(0f) ?: 0f
-        val kill = p.active(FxType.BASS_KILL, tMid)?.amount(tMid)?.orIf(0f) ?: 0f
-        val bassLevel = max(p.bass.at(tMid).orIf(1f) * (1 - kill), 0.02f)
+        val kill = if (stemmed) 0f else p.active(FxType.BASS_KILL, tMid)?.amount(tMid)?.orIf(0f) ?: 0f
+        val bassLevel = if (stemmed) 1f else max(p.bass.at(tMid).orIf(1f) * (1 - kill), 0.02f)
         val bassDb = (20 * log10(bassLevel.toDouble())).toFloat() + boostDb
         if (bassDb != lastBassDb) { shelf.lowShelf(120.0, bassDb.toDouble(), sr); lastBassDb = bassDb }
         // A boost adds weight, not loudness: the whole track eases down by part of it.
@@ -190,8 +197,8 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
         val lofi = p.active(FxType.LOFI, tMid)
         val flanger = p.active(FxType.FLANGER, tMid)
         val phaser = p.active(FxType.PHASER, tMid)
-        val vocalCut = if (channels == 2) p.active(FxType.VOCAL_CUT, tMid) else null
-        val vocalIso = if (channels == 2) p.active(FxType.VOCAL_ISOLATE, tMid) else null
+        val vocalCut = if (channels == 2 && !stemmed) p.active(FxType.VOCAL_CUT, tMid) else null
+        val vocalIso = if (channels == 2 && !stemmed) p.active(FxType.VOCAL_ISOLATE, tMid) else null
 
         // Loop roll and scratch share the capture buffer; a new one starts when the mode changes.
         val capEvent = p.active(FxType.LOOP_ROLL, tMid) ?: p.active(FxType.SCRATCH, tMid)
