@@ -119,7 +119,7 @@ fun MixScreen(
         Row(Modifier.fillMaxWidth().padding(top = if (landscape) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FireTheDjWordmark(20.sp, Modifier.weight(1f))
             Box {
-                GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", onClick = onSettings) {
+                GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", onClick = onSettings, modifier = Modifier.tourTarget("settings")) {
                     Icon(Icons.Filled.Settings, null, tint = Glass.Text, modifier = Modifier.size(22.dp))
                 }
                 if (update != null) Box(Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 7.dp).size(9.dp).background(Glass.Ember, CircleShape))
@@ -330,7 +330,7 @@ fun MusicScreen(
                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AddTile(SourceKind.PHONE, "This phone", Modifier.weight(1f), onAddFolder)
-                AddTile(SourceKind.STREAM, "Stream", Modifier.weight(1f), onOpenYtMusic)
+                AddTile(SourceKind.STREAM, "Stream", Modifier.weight(1f).tourTarget("stream"), onOpenYtMusic)
                 AddTile(SourceKind.LINK, "Paste a link", Modifier.weight(1f)) {
                     // Start the dialog clean, not on the result of an import made on the YT Music page.
                     if (importState != ImportState.Working) onImportClosed()

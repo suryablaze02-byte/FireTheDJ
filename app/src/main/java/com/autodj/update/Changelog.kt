@@ -14,6 +14,23 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.6.0",
+            "Stem separation on your phone: bass swaps that keep the kick, and clean a cappella vocal swaps.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Stem separation (phone)", "Turn it on in Settings › Analysis: a one-time 163 MB download. During a set, FireTheDJ splits the bit of each song a mix plays over into drums, bass, vocals and the rest, in the background, then mixes the real parts."),
+                        Change("Real bass swaps", "When the bass hands over from one song to the next, only the bassline swaps: the kick keeps driving instead of going thin with it."),
+                        Change("Clean vocal swaps", "Vocal swaps take the singer out cleanly, or keep only the voice for a true a cappella over the other song."),
+                        Change("Stems for tricks", "In Trickster, bass-kill drops drop just the bass, and word loops repeat the sung word alone. On by default with stems; turn it off to save battery."),
+                        Change("Always a fallback", "Anything not separated in time uses the EQ moves as before, so a mix never waits and never changes sound halfway through. Needs a 64-bit phone with 6 GB of memory or more."),
+                        Change("A tour of what's new", "After an update, a short guided tour shows what changed since your last one, on phone and TV. New users get the whole app, Stream and stem separation included."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.5.2",
             "A fix for searching on the Stream page.",
             listOf(

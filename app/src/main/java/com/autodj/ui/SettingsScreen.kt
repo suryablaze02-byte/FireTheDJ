@@ -1,5 +1,9 @@
 package com.autodj.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -349,8 +353,10 @@ private fun copyId(context: Context) {
  * Closed until opened; stays as left while Settings is open.
  */
 @Composable
-private fun Collapsible(title: String, summary: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+private fun Collapsible(title: String, summary: String, modifier: Modifier = Modifier, forceOpen: Boolean = false, content: @Composable () -> Unit) {
     var open by rememberSaveable(title) { mutableStateOf(false) }
+    // The guided tour opens it to show what's inside.
+    LaunchedEffect(forceOpen) { if (forceOpen) open = true }
     val turn by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
     Column(modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
         Row(
@@ -395,7 +401,8 @@ private fun AnalysisSettings() {
         atOnceLabel,
         "lyrics for ${lyrics.first} of ${lyrics.second}",
     ).joinToString(" · ")
-    Collapsible("Analysis", summary, Modifier.padding(top = 24.dp)) {
+    val touring = LocalTour.current?.let { it.active && it.screen == TourScreen.SETTINGS } == true
+    Collapsible("Analysis", summary, Modifier.padding(top = 24.dp), forceOpen = touring) {
         SettingRow("Analyse in the background", if (settings.background) "Keeps going with the screen off" else "Only while FireTheDJ is open") {
             Switch(
                 checked = settings.background,
@@ -424,6 +431,7 @@ private fun AnalysisSettings() {
  * Stem separation, on phones that can run it: download the model, then a switch. With it on,
  * mixes play their bass swaps and vocal swaps from the songs' real stems.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StemSettings() {
     val context = LocalContext.current
@@ -434,7 +442,12 @@ private fun StemSettings() {
     // A finished download turns stems on (it was asked for), and the switch follows.
     LaunchedEffect(state) { if (state == StemModel.State.Ready) on = Stems.isOn(context) }
     val size = mb(StemModel.SIZE)
+    // The guided tour points here: scrolled into view once the section has opened.
+    val shown = remember { BringIntoViewRequester() }
+    val touring = LocalTour.current?.let { it.active && it.screen == TourScreen.SETTINGS } == true
+    LaunchedEffect(touring) { if (touring) { delay(350); shown.bringIntoView() } }
     Divider()
+    Column(Modifier.bringIntoViewRequester(shown).tourTarget("stems")) {
     when (val s = state) {
         StemModel.State.Absent, is StemModel.State.Failed -> SettingRow(
             "Stem separation",
@@ -495,6 +508,7 @@ private fun StemSettings() {
                 Text("Delete", color = Glass.Muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
     }
 }
 

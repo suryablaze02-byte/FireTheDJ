@@ -110,6 +110,16 @@ fun DjScreen(vm: DjViewModel) {
 
     // Settings (updates, support) opens over the tabs. Updates are looked for once a day on launch.
     var settings by rememberSaveable { mutableStateOf(false) }
+    // While a guided tour runs, the app shows the screen its step is about.
+    val tour = LocalTour.current
+    LaunchedEffect(tour?.active, tour?.screen) {
+        if (tour?.active != true) return@LaunchedEffect
+        when (tour.screen) {
+            TourScreen.MIX -> { settings = false; ytMusic = false; tab = Tab.MIX }
+            TourScreen.MUSIC -> { settings = false; ytMusic = false; tab = Tab.MUSIC }
+            TourScreen.SETTINGS -> settings = true
+        }
+    }
     val updateState by Updates.state.collectAsStateWithLifecycle()
     val update = (updateState as? UpdateState.Available)?.release
     var dismissed by remember { mutableStateOf(Updates.dismissed(context)) }

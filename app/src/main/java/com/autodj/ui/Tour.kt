@@ -27,11 +27,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,12 +60,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** One stop on the tour: what to spotlight (a [tourTarget] key, or none for a centred card) and what to say. */
-class TourStep(val target: String?, val title: String, val body: String)
+/** The screens a phone tour step can show the app on: it goes there for that step. */
+enum class TourScreen { MIX, MUSIC, SETTINGS }
 
-/** Where the tour's targets are on screen, as they report themselves. */
+/**
+ * One stop on the tour: what to spotlight (a [tourTarget] key, or none for a centred card), what
+ * to say, the [screen] it's on, and the version that brought it ([since]; the what's-new tour
+ * shows only steps newer than the last tour someone saw).
+ */
+class TourStep(
+    val target: String?,
+    val title: String,
+    val body: String,
+    val screen: TourScreen = TourScreen.MIX,
+    val since: String = "1.0",
+)
+
+/** Where the tour's targets are on screen, as they report themselves, and where the tour wants the app. */
 class TourState {
     val targets = mutableStateMapOf<String, Rect>()
+
+    /** A tour is showing: the app follows [screen] while it does. */
+    var active by mutableStateOf(false)
+    var screen by mutableStateOf(TourScreen.MIX)
 }
 
 /** The running tour, if any; screens tag their parts with [tourTarget] through it. */
@@ -76,25 +95,70 @@ fun Modifier.tourTarget(key: String): Modifier {
     return onGloballyPositioned { tour.targets[key] = it.boundsInRoot() }
 }
 
-/** The phone app's first-launch tour, over the Mix tab. */
-val PHONE_TOUR = listOf(
+/** The phone app's tour for a new user: the whole app as it is now. [stems]: the phone can run stem separation. */
+fun phoneTour(stems: Boolean) = listOfNotNull(
     TourStep(null, "Welcome to FireTheDJ", "Your AI DJ. It picks every song, mixes on the beat and drops the effects, all on its own. Here's a quick tour."),
-    TourStep("tab_music", "Add your music", "The Music tab: add a folder on this phone, YT Music's curated playlists, or a link. Each song is analysed once for tempo, key, drops and genre."),
+    TourStep("tab_music", "Add your music", "The Music tab: a folder on this phone, Stream, or a link. Each song is analysed once for tempo, key, drops, vocals, language and genre."),
+    TourStep("stream", "Stream", "YT Music and Spotify playlists, with one search across both. Spotify songs play from YouTube: no account needed.", TourScreen.MUSIC),
     TourStep("from", "Mix from", "The whole library, or just one folder or playlist."),
     TourStep("crates", "Pick a crate", "Songs sort themselves into genre crates. One crate keeps the party in one style; All genres moves across them."),
-    TourStep("mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster throws in scratches, rolls, echo throws and air horns."),
+    TourStep("mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster drops a trick about every 30 seconds: rolls, bass kills, scratches, word loops, and sounds that suit each song's language."),
     TourStep("start", "Start the mix", "FireTheDJ takes it from here: it chooses each next song and plans every transition. Songs still being analysed join as they're ready."),
-    TourStep("tab_now", "Now Playing", "The spinning record, the next transition, and the full-screen visualizers."),
+    TourStep("tab_now", "Now Playing", "The decks, the next mix and the skip button: tap it to mix out at the next phrase, again for the next bar. Turn the phone sideways for two decks and the effects as they play."),
+    TourStep(null, "Visualizers", "Full-screen looks from Now Playing: Club, Acid Trip, Neon Tunnel, Liquid Light and LED Field, plus Beat Pop and Karaoke with the song's lyrics."),
     TourStep("cast", "Take it to the TV", "Cast to a Chromecast or smart TV, and the visualizers fill the big screen."),
+    TourStep("settings", "Settings", "Analysis in the background, updates and what's new in each version, and stem separation."),
+    if (stems) STEMS_STEP else null,
 )
+
+private val STEMS_STEP = TourStep(
+    "stems", "Stem separation",
+    "A one-time 163 MB download. During a set, each mix is split into drums, bass, vocals and the rest: bass swaps keep the kick, vocal swaps come clean. " +
+        "Stems for tricks does the same for Trickster's drops and word loops.",
+    TourScreen.SETTINGS, since = "1.6.0",
+)
+
+/** What's new on the phone since 1.3, oldest first: each step shows once, to people who had an earlier version. */
+private val PHONE_WHATS_NEW = listOf(
+    TourStep(null, "Lyrics on screen", "Beat Pop and Karaoke put the song's words on the visualizer, in time with the singing. And when two songs share a word, FireTheDJ can mix on it.", since = "1.3.0"),
+    TourStep("mode", "Trickster, rebuilt", "A trick about every 30 seconds: bass kills that slam back on the drop, rising rolls, tape stops, key lifts, and Latin, Arabic and Indian sounds that follow each song's language.", since = "1.4.0"),
+    TourStep("tab_now", "Skip", "On Now Playing, next to play: the song mixes out at its next phrase; tap again for the next bar. Headphone and car next buttons do the same.", since = "1.4.0"),
+    TourStep("tab_now", "Turn it sideways", "Now Playing shows both decks, the mix and the effects as they play. There's a new look, Acid Trip, and effect names now show only on Club and LED Field.", since = "1.5.0"),
+    TourStep("stream", "Stream", "YT Music and Spotify playlists on one page, with one search. Spotify songs play from YouTube, and talking intros and skits are skipped.", TourScreen.MUSIC, since = "1.5.1"),
+    TourStep("settings", "Settings", "What's new for your version, analysis that keeps going in the background, and updates that download as soon as you allow them.", since = "1.3.1"),
+    STEMS_STEP,
+)
+
+/**
+ * The what's-new tour for someone who last saw the tour at [lastSeen]: the steps newer than
+ * that, after a welcome card; empty when there's nothing new. [stems]: the phone can run stems.
+ */
+fun phoneWhatsNew(lastSeen: String, stems: Boolean) = whatsNew(PHONE_WHATS_NEW.filter { stems || it !== STEMS_STEP }, lastSeen)
+
+/** [steps] newer than [lastSeen], after a welcome card; empty when none are. */
+fun whatsNew(steps: List<TourStep>, lastSeen: String): List<TourStep> {
+    val fresh = steps.filter { com.autodj.update.Updates.newer(it.since, lastSeen) }
+    if (fresh.isEmpty()) return emptyList()
+    return listOf(TourStep(null, "What's new in FireTheDJ", "A quick look at what's changed since your last tour. Skip any time.")) + fresh
+}
 
 /** Whether the first-launch tour has been shown (or skipped) on this device, per app. */
 object TourMemory {
     private const val PREFS = "tour"
     // v2: the tour for the glass redesign, shown once even to people who saw the first one.
     private const val DONE = "done_v2"
+    private const val SEEN = "seen_version"
+
+    /** Before versions were remembered, a finished tour was 1.2's at the latest: everything since 1.3 is new. */
+    private const val BEFORE_REMEMBERING = "1.2.99"
+
     fun done(context: Context) = context.getSharedPreferences(PREFS, 0).getBoolean(DONE, false)
     fun markDone(context: Context) = context.getSharedPreferences(PREFS, 0).edit().putBoolean(DONE, true).apply()
+
+    /** The version whose tour (first or what's new) was last shown here. */
+    fun seenVersion(context: Context): String = context.getSharedPreferences(PREFS, 0).getString(SEEN, null) ?: BEFORE_REMEMBERING
+
+    fun markSeen(context: Context, version: String) = context.getSharedPreferences(PREFS, 0).edit().putString(SEEN, version).apply()
 }
 
 /**
@@ -115,6 +179,12 @@ fun TourOverlay(state: TourState, steps: List<TourStep>, tv: Boolean, onDone: ()
     val nextFocus = remember { FocusRequester() }
     BackHandler(onBack = onDone)
     LaunchedEffect(index) { runCatching { nextFocus.requestFocus() } }
+    // The app goes to the screen each step is about.
+    LaunchedEffect(index) { state.screen = step.screen }
+    DisposableEffect(Unit) {
+        state.active = true
+        onDispose { state.active = false; state.screen = TourScreen.MIX }
+    }
 
     BoxWithConstraints(
         Modifier.fillMaxSize()

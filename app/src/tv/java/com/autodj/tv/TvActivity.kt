@@ -25,6 +25,8 @@ import com.autodj.ui.StreamScreen
 import com.autodj.ui.LocalTour
 import com.autodj.ui.SplashScreen
 import com.autodj.ui.TourMemory
+import com.autodj.ui.whatsNew
+import com.autodj.BuildConfig
 import com.autodj.ui.TourOverlay
 import com.autodj.ui.TourState
 import com.autodj.ui.TourStep
@@ -40,9 +42,12 @@ class TvActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Dj.Accent, background = Dj.Bg, surface = Dj.Surface)) {
-                // Splash on every launch (not on recreation), then the tour once ever.
+                // Splash on every launch (not on recreation), then the tour once ever; after an
+                // update, a short tour of what's new since the last one this TV saw.
                 var splash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
                 var tour by remember { mutableStateOf(!TourMemory.done(this)) }
+                val news = remember { if (TourMemory.done(this)) whatsNew(TV_WHATS_NEW, TourMemory.seenVersion(this)) else emptyList() }
+                var showNews by remember { mutableStateOf(news.isNotEmpty()) }
                 val tourState = remember { TourState() }
                 CompositionLocalProvider(LocalTour provides tourState) {
                     Box(Modifier.fillMaxSize().background(Dj.Bg)) {
@@ -55,6 +60,12 @@ class TvActivity : ComponentActivity() {
                             TourOverlay(tourState, TV_TOUR, tv = true) {
                                 tour = false
                                 TourMemory.markDone(this@TvActivity)
+                                TourMemory.markSeen(this@TvActivity, BuildConfig.VERSION_NAME)
+                            }
+                        } else if (showNews) {
+                            TourOverlay(tourState, news, tv = true) {
+                                showNews = false
+                                TourMemory.markSeen(this@TvActivity, BuildConfig.VERSION_NAME)
                             }
                         }
                     }
@@ -76,8 +87,17 @@ private val TV_TOUR = listOf(
     TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or stream YT Music and Spotify playlists. Each song is analysed once, then sorted into crates."),
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
     TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
-    TourStep("tv_settings", "Settings", "Clear the library from here."),
-    TourStep(null, "During the mix", "Now Playing shows both decks, the mix between them and the effects as they play. The visualizer button takes the screen over with the look you pick; ◀ ▶ change it, and Back returns to the decks."),
+    TourStep("tv_settings", "Settings", "Updates and what's new, supporting FireTheDJ, and clearing the library."),
+    TourStep(null, "During the mix", "Now Playing shows both decks, the mix between them and the effects as they play. The visualizer button takes the screen over with the look you pick (Acid Trip, or Beat Pop and Karaoke with the lyrics); ◀ ▶ change it, and Back returns to the decks."),
+)
+
+/** What's new on the TV since 1.3, oldest first: each step shows once, to TVs that had an earlier version. */
+private val TV_WHATS_NEW = listOf(
+    TourStep(null, "Lyrics on the big screen", "Beat Pop and Karaoke put the song's words up in time with the singing: ◀ ▶ while the visualizer plays.", since = "1.3.0"),
+    TourStep("tv_mode", "Trickster, rebuilt", "A trick about every 30 seconds: bass kills that slam back on the drop, rising rolls, tape stops, key lifts, and sounds that follow each song's language.", since = "1.4.0"),
+    TourStep(null, "Acid Trip", "A new look: a melting kaleidoscope. Effect names now show only on Club and LED Field.", since = "1.5.0"),
+    TourStep("tv_add", "Stream", "YT Music and Spotify playlists, with one search across both. Spotify songs play from YouTube, and talking intros and skits are skipped.", since = "1.5.1"),
+    TourStep(null, "Two decks", "Now Playing shows both decks, the mix and the effects as they play. The visualizer button takes over the screen; Back returns to the decks.", since = "1.5.1"),
 )
 
 private enum class Page { HOME, DECKS, PLAYER, YT_MUSIC }
