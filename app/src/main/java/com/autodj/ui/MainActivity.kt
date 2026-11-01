@@ -1,5 +1,7 @@
 package com.autodj.ui
 
+import com.autodj.dj.stems.Stems
+import com.autodj.BuildConfig
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
@@ -47,12 +49,16 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = colors) {
                 // The splash shows once per launch, not again when the activity is recreated.
                 var splash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
-                // The guided tour, once ever, right after the first splash.
+                // The guided tour, once ever, right after the first splash; after an update, a short
+                // tour of what's new since the last one this phone saw.
                 var tour by remember { mutableStateOf(!TourMemory.done(this)) }
+                val stems = remember { Stems.supported(this) }
+                val news = remember { if (TourMemory.done(this)) phoneWhatsNew(TourMemory.seenVersion(this), stems) else emptyList() }
+                var showNews by remember { mutableStateOf(news.isNotEmpty()) }
                 val tourState = remember { TourState() }
-                // The splash and the guided tour (which points at the bottom tabs) stay upright;
+                // The splash and the guided tours (which point at the bottom tabs) stay upright;
                 // after them the app turns with the phone.
-                val upright = splash || tour
+                val upright = splash || tour || showNews
                 LaunchedEffect(upright) {
                     requestedOrientation = if (upright) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                 }
@@ -61,9 +67,15 @@ class MainActivity : ComponentActivity() {
                     if (splash) {
                         SplashScreen { splash = false }
                     } else if (tour) {
-                        TourOverlay(tourState, PHONE_TOUR, tv = false) {
+                        TourOverlay(tourState, phoneTour(stems), tv = false) {
                             tour = false
                             TourMemory.markDone(this@MainActivity)
+                            TourMemory.markSeen(this@MainActivity, BuildConfig.VERSION_NAME)
+                        }
+                    } else if (showNews) {
+                        TourOverlay(tourState, news, tv = false) {
+                            showNews = false
+                            TourMemory.markSeen(this@MainActivity, BuildConfig.VERSION_NAME)
                         }
                     }
                 }
