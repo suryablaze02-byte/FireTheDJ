@@ -14,6 +14,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-ff7a45?style=for-the-badge&labelColor=0d1117)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/suryablaze02-byte/FireTheDJ/total?style=for-the-badge&labelColor=0d1117&color=ff7a45)](https://github.com/suryablaze02-byte/FireTheDJ/releases)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-ff7a45?style=for-the-badge&labelColor=0d1117&logo=android)](#download)
+[![Support on Ko-fi](https://img.shields.io/badge/Support-Ko--fi-ff7a45?style=for-the-badge&labelColor=0d1117&logo=kofi&logoColor=white)](https://ko-fi.com/suryavardhan1)
 
 <br/>
 
@@ -198,13 +199,24 @@ Contributions are welcome: bug reports, ideas, new transition recipes, visualize
 
 <h2 id="support">Support</h2>
 
-FireTheDJ is free and always will be. If it has played at your party, you can chip in over UPI, here or from **Settings › Support FireTheDJ** in the app:
+FireTheDJ is free and always will be. If it has played at your party, you can chip in on Ko-fi from anywhere, or over UPI in India (also in the app under **Settings › Support FireTheDJ**):
 
 <br/>
 
-<img src="upi_support.png" alt="UPI QR code to support FireTheDJ: mochi.vardhan@federal (Surya Vardhan)" width="260" />
-
-<sub>UPI ID: <code>mochi.vardhan@federal</code> · Surya Vardhan</sub>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <b>Ko-fi</b> · worldwide<br/><br/>
+      <a href="https://ko-fi.com/suryavardhan1"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support FireTheDJ on Ko-fi" height="40" /></a><br/><br/>
+      <sub><a href="https://ko-fi.com/suryavardhan1">ko-fi.com/suryavardhan1</a></sub>
+    </td>
+    <td align="center" width="50%">
+      <b>UPI</b> · India<br/><br/>
+      <img src="upi_support.png" alt="UPI QR code to support FireTheDJ: mochi.vardhan@federal (Surya Vardhan)" width="220" /><br/>
+      <sub>UPI ID: <code>mochi.vardhan@federal</code> · Surya Vardhan</sub>
+    </td>
+  </tr>
+</table>
 
 </div>
 
