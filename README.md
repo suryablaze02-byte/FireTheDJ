@@ -27,7 +27,7 @@
 
 <div align="center">
 <br/>
-<img src="screenshots/06-visualizer.png" alt="FireTheDJ's Acid Trip visualizer in landscape: a neon kaleidoscope of petals and eyes around a black hole" width="100%" />
+<img src="screenshots/00-banner.png" alt="FireTheDJ, your AI DJ for every party: it analyses every song, plans the set, mixes on the beat and lights up the screen" width="100%" />
 </div>
 
 ---
