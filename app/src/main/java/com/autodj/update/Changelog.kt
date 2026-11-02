@@ -14,6 +14,21 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.6.1",
+            "Two new visualizers: Chill Drive and Lo-fi Vibe.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Chill Drive", "A red convertible, top down, cruising a synthwave highway at night. Fireworks burst on every beat, more on the downbeat and a volley on the drop, and the tail lights are little spectrum meters."),
+                        Change("Lo-fi Vibe", "A city rooftop at dusk. The skyline is an equaliser, each building lighting up floor by floor with the music, while the string lights glow and the boombox pumps with the bass."),
+                        Change("Picking a look", "The look picker shows four to a row on the phone. On TV, the new looks come after Club with ◀ ▶, and cast screens show them too."),
+                        Change("Karaoke removed", "Beat Pop is now the lyrics look. If Karaoke was your pick, the visualizer opens on Club."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.6.0",
             "Stem separation on your phone: bass swaps that keep the kick, and clean a cappella vocal swaps.",
             listOf(

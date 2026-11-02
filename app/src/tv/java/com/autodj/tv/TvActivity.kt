@@ -98,6 +98,7 @@ private val TV_WHATS_NEW = listOf(
     TourStep(null, "Acid Trip", "A new look: a melting kaleidoscope. Effect names now show only on Club and LED Field.", since = "1.5.0"),
     TourStep("tv_add", "Stream", "YT Music and Spotify playlists, with one search across both. Spotify songs play from YouTube, and talking intros and skits are skipped.", since = "1.5.1"),
     TourStep(null, "Two decks", "Now Playing shows both decks, the mix and the effects as they play. The visualizer button takes over the screen; Back returns to the decks.", since = "1.5.1"),
+    TourStep(null, "Two new looks", "Chill Drive cruises a neon highway with fireworks on the beat, and Lo-fi Vibe's rooftop city bounces along: ◀ ▶ while the visualizer plays. Karaoke has gone; Beat Pop shows the lyrics.", since = "1.6.1"),
 )
 
 private enum class Page { HOME, DECKS, PLAYER, YT_MUSIC }
