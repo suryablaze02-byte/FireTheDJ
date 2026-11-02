@@ -68,7 +68,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 - **Key detection** shown in Camelot notation.
 
 #### Show & sound
-- **7 visualizers**: Club, Acid Trip, Neon Tunnel, Liquid Light and LED Field, plus Beat Pop and Karaoke with the song's lyrics. Full screen, portrait or landscape.
+- **8 visualizers**: Club, Chill Drive, Lo-fi Vibe, Acid Trip, Neon Tunnel, Liquid Light and LED Field, plus Beat Pop with the song's lyrics. Full screen, portrait or landscape.
 - **Live mixing view**: both decks, crossfader, rate, phase error, key and every effect as it happens.
 - **Cast to a TV**: Miracast / Smart View screens show the visualizer in landscape; Chromecast & Google TV get the live mix ([how](docs/CASTING.md)).
 - **Android Auto**: pick a crate in the car and the set starts.

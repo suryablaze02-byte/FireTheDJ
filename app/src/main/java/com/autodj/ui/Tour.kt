@@ -105,7 +105,7 @@ fun phoneTour(stems: Boolean) = listOfNotNull(
     TourStep("mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster drops a trick about every 30 seconds: rolls, bass kills, scratches, word loops, and sounds that suit each song's language."),
     TourStep("start", "Start the mix", "FireTheDJ takes it from here: it chooses each next song and plans every transition. Songs still being analysed join as they're ready."),
     TourStep("tab_now", "Now Playing", "The decks, the next mix and the skip button: tap it to mix out at the next phrase, again for the next bar. Turn the phone sideways for two decks and the effects as they play."),
-    TourStep(null, "Visualizers", "Full-screen looks from Now Playing: Club, Acid Trip, Neon Tunnel, Liquid Light and LED Field, plus Beat Pop and Karaoke with the song's lyrics."),
+    TourStep(null, "Visualizers", "Full-screen looks from Now Playing: Club, Chill Drive, Lo-fi Vibe, Acid Trip, Neon Tunnel, Liquid Light and LED Field, plus Beat Pop with the song's lyrics."),
     TourStep("cast", "Take it to the TV", "Cast to a Chromecast or smart TV, and the visualizers fill the big screen."),
     TourStep("settings", "Settings", "Analysis in the background, updates and what's new in each version, and stem separation."),
     if (stems) STEMS_STEP else null,
@@ -120,7 +120,7 @@ private val STEMS_STEP = TourStep(
 
 /** What's new on the phone since 1.3, oldest first: each step shows once, to people who had an earlier version. */
 private val PHONE_WHATS_NEW = listOf(
-    TourStep(null, "Lyrics on screen", "Beat Pop and Karaoke put the song's words on the visualizer, in time with the singing. And when two songs share a word, FireTheDJ can mix on it.", since = "1.3.0"),
+    TourStep(null, "Lyrics on screen", "Beat Pop puts the song's words on the visualizer, in time with the singing. And when two songs share a word, FireTheDJ can mix on it.", since = "1.3.0"),
     TourStep("mode", "Trickster, rebuilt", "A trick about every 30 seconds: bass kills that slam back on the drop, rising rolls, tape stops, key lifts, and Latin, Arabic and Indian sounds that follow each song's language.", since = "1.4.0"),
     TourStep("tab_now", "Skip", "On Now Playing, next to play: the song mixes out at its next phrase; tap again for the next bar. Headphone and car next buttons do the same.", since = "1.4.0"),
     TourStep("tab_now", "Turn it sideways", "Now Playing shows both decks, the mix and the effects as they play. There's a new look, Acid Trip, and effect names now show only on Club and LED Field.", since = "1.5.0"),

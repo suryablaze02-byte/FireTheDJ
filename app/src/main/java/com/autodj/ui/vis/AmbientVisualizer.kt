@@ -27,12 +27,13 @@ enum class VisualizerStyle(val label: String, val blurb: String, /** For tight s
     ACID("Acid Trip", "Melting shapes, a neon tunnel", "Acid"),
     FIELD("LED Field", "A wall of pixels", "LED"),
     CLUB("Club", "Stage, LED wall and crowd", "Club"),
+    DRIVE("Chill Drive", "A night drive, fireworks on the beat", "Drive"),
+    LOFI("Lo-fi Vibe", "A rooftop city that bounces along", "Lo-fi"),
     BEAT_POP("Beat Pop", "Lyrics land on the beat", "Beat Pop"),
-    KARAOKE("Karaoke", "Sing along, word by word", "Karaoke"),
     ;
 
     /** Shows the song's words over the scene ([LyricOverlay]). */
-    val lyrics get() = this == BEAT_POP || this == KARAOKE
+    val lyrics get() = this == BEAT_POP
 
     /** Shouts each effect's name on screen; the other looks let the picture do the talking. */
     val callouts get() = this == CLUB || this == FIELD
@@ -43,8 +44,9 @@ enum class VisualizerStyle(val label: String, val blurb: String, /** For tight s
         ACID -> AcidScene()
         FIELD -> FieldScene()
         CLUB -> ClubScene()
-        BEAT_POP -> GlowScene(low = false)
-        KARAOKE -> GlowScene(low = true)
+        DRIVE -> DriveScene()
+        LOFI -> LofiScene()
+        BEAT_POP -> GlowScene()
     }
 }
 
@@ -94,6 +96,6 @@ fun AmbientVisualizer(
             // Only Club and LED Field shout the effect names; the others show effects as light and motion.
             if (style.callouts) layer.drawCallout(this, state, measurer)
         }
-        if (style.lyrics) LyricOverlay(style, state, tick, Modifier.fillMaxSize(), lyricsClearBottom)
+        if (style.lyrics) LyricOverlay(state, tick, Modifier.fillMaxSize(), lyricsClearBottom)
     }
 }
