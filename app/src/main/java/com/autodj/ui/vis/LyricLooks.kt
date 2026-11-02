@@ -40,11 +40,10 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** The flame lettering for the song's key word and the word being sung. */
+/** The flame lettering for the song's key word. */
 private val FIRE = Brush.verticalGradient(listOf(Color(0xFFFFF3B0), Color(0xFFFFB020), Color(0xFFFF5A1F), Color(0xFFD7261E)))
 private val TEXT = Color(0xFFF2F2F5)
 private val MUTED = Color(0xFF8E8A99)
-private val UNSUNG = Color(0xFF5A5664)
 
 /** One sung line: its words, in order. */
 private class SungLine(val words: List<LyricWord>) {
@@ -61,12 +60,12 @@ private fun hookOf(l: TimedLyrics): String? =
     l.counts.filter { (k, n) -> n >= 3 && WordKey.linkable(k) }.maxByOrNull { (k, n) -> n * k.length }?.key
 
 /**
- * The words over a lyric look, read from the song the room hears: Beat Pop builds the sung
- * line up a word per beat, Karaoke lights each word as it's sung. Every word is shown in
- * English letters (lyrics in Telugu and other scripts were converted when they were fetched).
+ * The words over Beat Pop, read from the song the room hears: the sung line builds up a word
+ * per beat. Every word is shown in English letters (lyrics in Telugu and other scripts were
+ * converted when they were fetched).
  */
 @Composable
-internal fun LyricOverlay(style: VisualizerStyle, s: VisualState, tick: Long, modifier: Modifier = Modifier, clearBottom: Dp = 0.dp) {
+internal fun LyricOverlay(s: VisualState, tick: Long, modifier: Modifier = Modifier, clearBottom: Dp = 0.dp) {
     tick // redraw every frame
     // Lyrics can arrive while the song plays: look again every few seconds until they do.
     val lyrics = remember(s.songUri, (s.time / 4f).toInt()) { if (s.songUri.isEmpty()) null else LyricsStore.get(s.songUri) }
@@ -92,7 +91,6 @@ internal fun LyricOverlay(style: VisualizerStyle, s: VisualState, tick: Long, mo
                 when {
                     lyrics == null -> Note("No timed lyrics for this song", k)
                     line == null -> BeatDots(s, k)
-                    style == VisualizerStyle.KARAOKE -> Karaoke(lines, idx, pos, s, k)
                     else -> BeatPop(lines, idx, line, pos, s, hook, k)
                 }
             }
@@ -142,50 +140,6 @@ private fun BeatPop(lines: List<SungLine>, idx: Int, line: SungLine, pos: Double
     }
 }
 
-/** The previous, current and next lines; the current one lit word by word, with a progress bar and the bar's beats. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Karaoke(lines: List<SungLine>, idx: Int, pos: Double, s: VisualState, k: Float) {
-    val line = lines[idx]
-    // Long lines get smaller type, so a line stays a line or two.
-    val size = when {
-        line.words.size <= 7 -> 34f
-        line.words.size <= 11 -> 28f
-        else -> 24f
-    } * k
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy((24 * k).dp)) {
-        Text(lines.getOrNull(idx - 1)?.text ?: "", color = UNSUNG, fontSize = (18 * k).sp, lineHeight = (24 * k).sp)
-        Column(verticalArrangement = Arrangement.spacedBy((12 * k).dp)) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy((10 * k).dp), verticalArrangement = Arrangement.spacedBy((4 * k).dp)) {
-                for (word in line.words) {
-                    val now = pos >= word.startSec && pos < word.endSec
-                    val sung = pos >= word.endSec
-                    val pulse = if (now) 1f + 0.12f * exp(-(pos - word.startSec).toFloat() * 6f) else 1f
-                    Text(
-                        word.text,
-                        style = when {
-                            now -> TextStyle(brush = FIRE)
-                            sung -> TextStyle(color = TEXT)
-                            else -> TextStyle(color = UNSUNG)
-                        },
-                        fontSize = size.sp, fontWeight = FontWeight.ExtraBold, lineHeight = (size * 1.18f).sp,
-                        modifier = Modifier.graphicsLayer {
-                            scaleX = pulse; scaleY = pulse
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
-                        },
-                    )
-                }
-            }
-            val progress = ((pos - line.start) / max(0.5, line.end - line.start)).toFloat().coerceIn(0f, 1f)
-            Box(Modifier.fillMaxWidth().height((4 * k).dp).background(Color(0xFF2A2633), RoundedCornerShape(50))) {
-                Box(Modifier.fillMaxWidth(progress).height((4 * k).dp).background(Brush.horizontalGradient(listOf(Color(0xFFFFB020), Color(0xFFFF5A1F))), RoundedCornerShape(50)))
-            }
-        }
-        Text(lines.getOrNull(idx + 1)?.text ?: "", color = UNSUNG, fontSize = (18 * k).sp, lineHeight = (24 * k).sp)
-        BeatDots(s, k)
-    }
-}
-
 /** The four beats of the bar, the current one lit: shown between sung lines too. */
 @Composable
 private fun BeatDots(s: VisualState, k: Float) {
@@ -219,19 +173,19 @@ private fun Note(text: String, k: Float) {
 }
 
 /**
- * The quiet room behind the lyric looks: near-black with one glow that breathes with the kick,
- * low and violet for Karaoke, central and ember for Beat Pop, so the words stay readable.
+ * The quiet room behind Beat Pop: near-black with one central ember glow that breathes with
+ * the kick, so the words stay readable.
  */
-class GlowScene(private val low: Boolean) : Scene {
+class GlowScene : Scene {
     override fun draw(ds: DrawScope, s: VisualState) = with(ds) {
         val w = size.width
         val h = size.height
         drawRect(Color(0xFF0B0810))
         val (c1, c2) = s.palette
-        val centre = if (low) Offset(w / 2, h * 1.05f) else Offset(w / 2, h * 0.5f)
-        val r = max(w, h) * (if (low) 0.6f else 0.55f)
+        val centre = Offset(w / 2, h * 0.5f)
+        val r = max(w, h) * 0.55f
         val a = (0.18f + 0.45f * s.kick).coerceAtMost(0.75f)
-        val inner = if (low) Color(0xFF7C5CFF) else Color(0xFFFF6A1A)
+        val inner = Color(0xFFFF6A1A)
         drawCircle(Brush.radialGradient(listOf(inner.copy(alpha = a), c2.copy(alpha = a * 0.4f), Color.Transparent), centre, r), r, centre)
         drawCircle(Brush.radialGradient(listOf(c1.copy(alpha = 0.06f + 0.1f * s.energy), Color.Transparent), Offset(w * 0.2f, h * 0.2f), r), r, Offset(w * 0.2f, h * 0.2f))
     }

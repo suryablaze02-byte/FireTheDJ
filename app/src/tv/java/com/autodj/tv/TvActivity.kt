@@ -88,12 +88,12 @@ private val TV_TOUR = listOf(
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
     TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
     TourStep("tv_settings", "Settings", "Updates and what's new, supporting FireTheDJ, and clearing the library."),
-    TourStep(null, "During the mix", "Now Playing shows both decks, the mix between them and the effects as they play. The visualizer button takes the screen over with the look you pick (Acid Trip, or Beat Pop and Karaoke with the lyrics); ◀ ▶ change it, and Back returns to the decks."),
+    TourStep(null, "During the mix", "Now Playing shows both decks, the mix between them and the effects as they play. The visualizer button takes the screen over with the look you pick (Chill Drive, Lo-fi Vibe, Acid Trip, or Beat Pop with the lyrics); ◀ ▶ change it, and Back returns to the decks."),
 )
 
 /** What's new on the TV since 1.3, oldest first: each step shows once, to TVs that had an earlier version. */
 private val TV_WHATS_NEW = listOf(
-    TourStep(null, "Lyrics on the big screen", "Beat Pop and Karaoke put the song's words up in time with the singing: ◀ ▶ while the visualizer plays.", since = "1.3.0"),
+    TourStep(null, "Lyrics on the big screen", "Beat Pop puts the song's words up in time with the singing: ◀ ▶ while the visualizer plays.", since = "1.3.0"),
     TourStep("tv_mode", "Trickster, rebuilt", "A trick about every 30 seconds: bass kills that slam back on the drop, rising rolls, tape stops, key lifts, and sounds that follow each song's language.", since = "1.4.0"),
     TourStep(null, "Acid Trip", "A new look: a melting kaleidoscope. Effect names now show only on Club and LED Field.", since = "1.5.0"),
     TourStep("tv_add", "Stream", "YT Music and Spotify playlists, with one search across both. Spotify songs play from YouTube, and talking intros and skits are skipped.", since = "1.5.1"),

@@ -136,8 +136,8 @@ fun FullscreenVisualizer(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                // Pick a look; the choice is remembered. Scenes on one row, the lyric looks on another.
-                for (row in VisualizerStyle.entries.partition { !it.lyrics }.toList()) {
+                // Pick a look; the choice is remembered. Four to a row, so the names fit on a phone.
+                for (row in VisualizerStyle.entries.chunked(4)) {
                     GlassSegmented(
                         row, style, { it.short }, { onStyle(it); touches++ },
                         Modifier.fillMaxWidth(), height = 44.dp, fontSize = 12.sp,
