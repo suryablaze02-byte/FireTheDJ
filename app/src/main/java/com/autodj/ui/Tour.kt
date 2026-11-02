@@ -125,6 +125,7 @@ private val PHONE_WHATS_NEW = listOf(
     TourStep("tab_now", "Skip", "On Now Playing, next to play: the song mixes out at its next phrase; tap again for the next bar. Headphone and car next buttons do the same.", since = "1.4.0"),
     TourStep("tab_now", "Turn it sideways", "Now Playing shows both decks, the mix and the effects as they play. There's a new look, Acid Trip, and effect names now show only on Club and LED Field.", since = "1.5.0"),
     TourStep("stream", "Stream", "YT Music and Spotify playlists on one page, with one search. Spotify songs play from YouTube, and talking intros and skits are skipped.", TourScreen.MUSIC, since = "1.5.1"),
+    TourStep("tab_now", "Two new looks", "Open the visualizer from Now Playing: Chill Drive cruises a neon highway with fireworks on the beat, and Lo-fi Vibe's rooftop city bounces along. Karaoke has gone; Beat Pop shows the lyrics.", since = "1.6.1"),
     TourStep("settings", "Settings", "What's new for your version, analysis that keeps going in the background, and updates that download as soon as you allow them.", since = "1.3.1"),
     STEMS_STEP,
 )
