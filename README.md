@@ -140,6 +140,12 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 
 Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte/FireTheDJ/releases) page. From 1.2.0 on, FireTheDJ tells you when a new version is out and installs it from **Settings**.
 
+Or get it with [Obtainium](https://github.com/ImranR98/Obtainium), which installs straight from these releases and keeps the app updated:
+
+[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/suryablaze02-byte/FireTheDJ)
+
+Each release has a phone APK and a TV APK. If Obtainium asks which one to use, set the **APK filter** to `FireTheDJ-v[\d.]+\.apk` for the phone app, or `FireTheDJ-TV` for the TV app.
+
 | App | For |
 |---|---|
 | **FireTheDJ** | Android phones and tablets |
