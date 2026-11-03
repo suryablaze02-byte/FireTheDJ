@@ -142,9 +142,11 @@ Grab the latest APK from the [**Releases**](https://github.com/suryablaze02-byte
 
 Or get it with [Obtainium](https://github.com/ImranR98/Obtainium), which installs straight from these releases and keeps the app updated:
 
-[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/suryablaze02-byte/FireTheDJ)
+[<img src=".github/obtainium-badge.png" alt="Get FireTheDJ on Obtainium" height="54">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.autodj%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fsuryablaze02-byte%2FFireTheDJ%22%2C%22author%22%3A%22suryablaze02-byte%22%2C%22name%22%3A%22FireTheDJ%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22FireTheDJ-v%5B%5C%5C%5C%5Cd.%5D%2B%5C%5C%5C%5C.apk%5C%22%7D%22%7D)
 
-Each release has a phone APK and a TV APK. If Obtainium asks which one to use, set the **APK filter** to `FireTheDJ-v[\d.]+\.apk` for the phone app, or `FireTheDJ-TV` for the TV app.
+Tap the badge on your Android phone with Obtainium installed; it sets Obtainium up to pick the phone APK. For the TV app, use [this link](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.autodj.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fsuryablaze02-byte%2FFireTheDJ%22%2C%22author%22%3A%22suryablaze02-byte%22%2C%22name%22%3A%22FireTheDJ%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22FireTheDJ-TV-v%5B%5C%5C%5C%5Cd.%5D%2B%5C%5C%5C%5C.apk%5C%22%7D%22%7D) on the TV.
+
+If nothing happens, open the link in Chrome rather than the GitHub app, and tap **Click here if you are not redirected**. Or add it by hand: in Obtainium, tap **Add App**, paste `https://github.com/suryablaze02-byte/FireTheDJ`, and set the **APK filter** to `FireTheDJ-v[\d.]+\.apk` for the phone or `FireTheDJ-TV-v[\d.]+\.apk` for the TV.
 
 | App | For |
 |---|---|
