@@ -15,12 +15,12 @@ object Changelog {
     val versions = listOf(
         Version(
             "1.7.0",
-            "A new look: frosted glass on plum, one flat orange, and Now Playing in the colour of each song.",
+            "A new look: frosted glass, one flat orange, and Now Playing in the colour of each song.",
             listOf(
                 Section(
                     "What's new",
                     listOf(
-                        Change("Glass on plum", "Panels, buttons and the tab bar are frosted glass floating over a calm plum, with no gradients. Lists scroll under the tab bar."),
+                        Change("Frosted glass", "Panels, buttons and the tab bar are frosted glass floating over one dark background colour, with no gradients. Lists scroll under the tab bar."),
                         Change("Now Playing in the song's colour", "The player and the decks take a deep shade of each song's cover, fading from song to song."),
                         Change("One orange", "A single flat orange for what you press, with black text on it so it's easy to read. The app icon and logo are flat orange too."),
                         Change("Spinning decks", "Sideways and on TV, both decks spin glass records with their spectrum round them, and the effects box between them shouts each effect as the Club look does."),
