@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.autodj.support.KoFi
 import com.autodj.support.Upi
 import com.autodj.ui.Glass
 import com.autodj.ui.songs
@@ -77,24 +78,26 @@ fun TvUpdateCard(state: UpdateState, modifier: Modifier) {
     }
 }
 
-/** Support on the TV: pick an amount and scan the UPI code with a phone. */
+/** Support on the TV: Ko-fi or UPI, each a code to scan with a phone; UPI picks an amount first. */
 @Composable
 fun TvSupportDialog(onDismiss: () -> Unit) {
+    var kofi by remember { mutableStateOf(false) }
     var rupees by remember { mutableIntStateOf(100) }
-    val qr = remember(rupees) { qrCode(Upi.link(rupees).toString()) }
+    val qr = remember(kofi, rupees) { qrCode(if (kofi) KoFi.URL else Upi.link(rupees).toString()) }
     TvGlassDialog(onDismiss = onDismiss, width = 760.dp) { first ->
         Row(horizontalArrangement = Arrangement.spacedBy(34.dp)) {
             Column(Modifier.width(380.dp)) {
                 Text("Support FireTheDJ", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
-                Text("Free, with no ads. If it has played at your party, scan the code with any UPI app on your phone.",
+                Text("Free, with no ads. If it has played at your party, scan the code with your phone: Ko-fi from anywhere, or any UPI app.",
                     color = Glass.Muted, fontSize = 16.sp, lineHeight = 23.sp, modifier = Modifier.padding(start = TV_EDGE, top = 8.dp, bottom = 14.dp))
-                // Two rows of two amounts; the code follows the one picked.
-                Upi.AMOUNTS.chunked(2).forEachIndexed { row, pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 8.dp)) {
+                    TvCard("UPI", null, Modifier.width(160.dp).focusRequester(first), selected = !kofi) { kofi = false }
+                    TvCard("Ko-fi", null, Modifier.width(160.dp), selected = kofi) { kofi = true }
+                }
+                // UPI: two rows of two amounts; the code follows the one picked.
+                if (!kofi) Upi.AMOUNTS.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 8.dp)) {
-                        pair.forEach { a ->
-                            val focus = if (row == 0 && a == Upi.AMOUNTS[1]) Modifier.focusRequester(first) else Modifier
-                            TvCard("₹$a", null, Modifier.width(160.dp).then(focus), selected = a == rupees) { rupees = a }
-                        }
+                        pair.forEach { a -> TvCard("₹$a", null, Modifier.width(160.dp), selected = a == rupees) { rupees = a } }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -104,11 +107,16 @@ fun TvSupportDialog(onDismiss: () -> Unit) {
                 Image(
                     qr, null,
                     Modifier.size(250.dp).background(Color.White, RoundedCornerShape(22.dp)).padding(14.dp)
-                        .semantics { contentDescription = "UPI code to pay ₹$rupees to ${Upi.NAME}" },
+                        .semantics { contentDescription = if (kofi) "Code for FireTheDJ's Ko-fi page" else "UPI code to pay ₹$rupees to ${Upi.NAME}" },
                 )
-                Text("₹$rupees", color = Glass.Text, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 14.dp))
-                Text(Upi.NAME, color = Glass.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                Text(Upi.ID, color = Glass.Muted, fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+                if (kofi) {
+                    Text("Ko-fi", color = Glass.Text, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 14.dp))
+                    Text(KoFi.SHORT, color = Glass.Muted, fontSize = 15.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(top = 4.dp))
+                } else {
+                    Text("₹$rupees", color = Glass.Text, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 14.dp))
+                    Text(Upi.NAME, color = Glass.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                    Text(Upi.ID, color = Glass.Muted, fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+                }
             }
         }
     }
@@ -134,7 +142,7 @@ fun TvSettingsDialog(
             Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth(),
         ) { whatsNew = true }
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
-            TvCard("Support FireTheDJ", "Chip in over UPI", Modifier.width(260.dp), onClick = onSupport)
+            TvCard("Support FireTheDJ", "Chip in on Ko-fi or UPI", Modifier.width(260.dp), onClick = onSupport)
             TvCard(
                 "Clear library",
                 if (librarySize == 0) "The library is empty" else "Remove all ${songs(librarySize)}",

@@ -76,6 +76,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autodj.analysis.AnalysisJobs
 import com.autodj.dj.stems.Stems
 import com.autodj.dj.stems.StemModel
+import com.autodj.support.KoFi
 import com.autodj.support.Upi
 import com.autodj.update.Changelog
 import com.autodj.update.Release
@@ -239,13 +240,14 @@ fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, mo
 }
 
 /**
- * Support over UPI: pick an amount (₹50 or more) and Android asks which UPI app to pay with.
- * The UPI ID can be copied for paying by hand.
+ * Support FireTheDJ: Ko-fi opens the Ko-fi page in the browser; UPI picks an amount (₹50 or more)
+ * and Android asks which UPI app to pay with. The UPI ID can be copied for paying by hand.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SupportSheet(onClose: () -> Unit) {
     val context = LocalContext.current
+    var upi by rememberSaveable { mutableStateOf(false) }
     var picked by rememberSaveable { mutableIntStateOf(100) }
     var other by rememberSaveable { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
@@ -268,7 +270,14 @@ fun SupportSheet(onClose: () -> Unit) {
                 }
                 Text("Support FireTheDJ", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
             }
-            Text("FireTheDJ is free, with no ads. If it has played at your party, you can chip in over UPI.",
+            if (!upi) {
+                Text("FireTheDJ is free, with no ads. If it has played at your party, you can chip in.",
+                    color = Glass.Muted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp, bottom = 18.dp))
+                SupportOption("Ko-fi", "${KoFi.SHORT} · from anywhere") { open(context, KoFi.URL); onClose() }
+                SupportOption("UPI", "GPay, PhonePe, Paytm or any UPI app", Modifier.padding(top = 10.dp)) { upi = true }
+                return@Column
+            }
+            Text("Pay over UPI from ₹${Upi.MIN_RUPEES}, with the UPI app of your choice.",
                 color = Glass.Muted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp, bottom = 18.dp))
             GlassHeading("Amount", Modifier.padding(bottom = 8.dp))
             Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -328,6 +337,22 @@ fun SupportSheet(onClose: () -> Unit) {
                 ) { Text("Copy UPI ID", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
             }
         }
+    }
+}
+
+/** One way to support in [SupportSheet]: its [name], a line on how it pays, and a tap to go on. */
+@Composable
+private fun SupportOption(name: String, sub: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().height(68.dp).glass(RoundedCornerShape(18.dp))
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(sub, color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
     }
 }
 
