@@ -14,6 +14,23 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.7.0",
+            "A new look: frosted glass on plum, one flat orange, and Now Playing in the colour of each song.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Glass on plum", "Panels, buttons and the tab bar are frosted glass floating over a calm plum, with no gradients. Lists scroll under the tab bar."),
+                        Change("Now Playing in the song's colour", "The player and the decks take a deep shade of each song's cover, fading from song to song."),
+                        Change("One orange", "A single flat orange for what you press, with black text on it so it's easy to read. The app icon and logo are flat orange too."),
+                        Change("Spinning decks", "Sideways and on TV, both decks spin glass records with their spectrum round them, and the effects box between them shouts each effect as the Club look does."),
+                        Change("Easier to read", "Cleaner song titles without \"Full Video Song\" and the like, larger small print, and cards that grow with large text."),
+                        Change("Small things", "Songs of unclear genre are a note on Mix instead of a crate, Now Playing offers Go to Mix when nothing plays, and records hold still when Android's Remove animations is on."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.6.2",
             "Support FireTheDJ on Ko-fi or over UPI.",
             listOf(
