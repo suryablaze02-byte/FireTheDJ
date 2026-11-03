@@ -14,6 +14,19 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.7.1",
+            "Apple Music playlists, and real covers on the Spotify and Apple Music cards.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Apple Music playlists", "Stream now has Apple Music beside YT Music and Spotify: pick one of Apple Music's own playlists (Telugu, Tamil, Bollywood, Punjabi, party, chill and more) or paste any public Apple Music playlist link. Its songs are found on YouTube Music and played from there, up to 100 a playlist. No Apple account needed."),
+                        Change("Real playlist covers", "Spotify and Apple Music cards show each playlist's own cover, with its name underneath. Covers are kept on your phone, so they load once."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.7.0",
             "A new look: frosted glass, one flat orange, and Now Playing in the colour of each song.",
             listOf(
