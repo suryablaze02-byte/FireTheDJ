@@ -172,7 +172,7 @@ fun CastDialog(onClose: () -> Unit) {
         onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         // A solid smoky base, so the screen behind never shows through the words; the rows on it are glass.
-        containerColor = Color(0xFF241A20),
+        containerColor = Color(0xFF2A1F3D),
         contentColor = Glass.Text,
         scrimColor = Color.Black.copy(alpha = 0.5f),
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp),

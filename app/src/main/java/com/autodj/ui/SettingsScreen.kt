@@ -36,6 +36,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -115,7 +124,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Switch(
                     checked = auto,
                     onCheckedChange = { auto = it; Updates.setAutoCheck(context, it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+                    colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
                 )
             }
 
@@ -172,7 +181,7 @@ private fun UpdateCard(state: UpdateState, checkedAt: Long) {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(48.dp).background(Glass.Fire, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                DownloadGlyph(Color.White)
+                DownloadGlyph(Glass.OnAccent)
             }
             Column(Modifier.weight(1f)) {
                 Text(title, color = Glass.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -258,14 +267,14 @@ fun SupportSheet(onClose: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF241A20),
+        containerColor = Color(0xFF2A1F3D),
         contentColor = Glass.Text,
         scrimColor = Color.Black.copy(alpha = 0.5f),
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp),
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.size(48.dp).background(Glass.Fire, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(48.dp).background(Color(0xFFFF375F), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Filled.Favorite, null, tint = Color.White)
                 }
                 Text("Support FireTheDJ", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
@@ -273,8 +282,9 @@ fun SupportSheet(onClose: () -> Unit) {
             if (!upi) {
                 Text("FireTheDJ is free, with no ads. If it has played at your party, you can chip in.",
                     color = Glass.Muted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp, bottom = 18.dp))
-                SupportOption("Ko-fi", "${KoFi.SHORT} · from anywhere") { open(context, KoFi.URL); onClose() }
-                SupportOption("UPI", "GPay, PhonePe, Paytm or any UPI app", Modifier.padding(top = 10.dp)) { upi = true }
+                SupportOption("Ko-fi", "${KoFi.SHORT} · from anywhere", Glass.Ember, icon = { CupGlyph(Glass.OnAccent) }) { open(context, KoFi.URL); onClose() }
+                SupportOption("UPI", "GPay, PhonePe, Paytm or any UPI app", Color(0xFF30D158), Modifier.padding(top = 10.dp),
+                    icon = { Icon(Icons.Filled.Phone, null, tint = Color.Black, modifier = Modifier.size(20.dp)) }) { upi = true }
                 return@Column
             }
             Text("Pay over UPI from ₹${Upi.MIN_RUPEES}, with the UPI app of your choice.",
@@ -318,7 +328,7 @@ fun SupportSheet(onClose: () -> Unit) {
                     .clickable(enabled = valid, role = Role.Button) { note = pay(context, amount!!) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (valid) "Pay ₹$amount with a UPI app" else "Pick ₹${Upi.MIN_RUPEES} or more", color = if (valid) Color.White else Glass.Muted,
+                Text(if (valid) "Pay ₹$amount with a UPI app" else "Pick ₹${Upi.MIN_RUPEES} or more", color = if (valid) Glass.OnAccent else Glass.Muted,
                     fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
             Text(note ?: "Android asks which app: GPay, PhonePe, Paytm, BHIM or any UPI app.", color = if (note != null) Dj.Warn else Glass.Muted,
@@ -342,17 +352,37 @@ fun SupportSheet(onClose: () -> Unit) {
 
 /** One way to support in [SupportSheet]: its [name], a line on how it pays, and a tap to go on. */
 @Composable
-private fun SupportOption(name: String, sub: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun SupportOption(name: String, sub: String, tile: Color, modifier: Modifier = Modifier, icon: @Composable () -> Unit, onClick: () -> Unit) {
     Row(
-        modifier.fillMaxWidth().height(68.dp).glass(RoundedCornerShape(18.dp))
-            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp),
+        modifier.fillMaxWidth().heightIn(min = 72.dp).glass(RoundedCornerShape(18.dp))
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        Box(Modifier.size(40.dp).background(tile, RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) { icon() }
         Column(Modifier.weight(1f)) {
             Text(name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(sub, color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
         }
         Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
+    }
+}
+
+/** A coffee cup for Ko-fi, drawn in [color] strokes. */
+@Composable
+private fun CupGlyph(color: Color) {
+    Canvas(Modifier.size(22.dp)) {
+        val u = size.width / 24f
+        val stroke = Stroke(2f * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val cup = Path().apply {
+            moveTo(3 * u, 8 * u); lineTo(17 * u, 8 * u); lineTo(17 * u, 17 * u)
+            quadraticTo(17 * u, 21 * u, 13 * u, 21 * u); lineTo(7 * u, 21 * u)
+            quadraticTo(3 * u, 21 * u, 3 * u, 17 * u); close()
+        }
+        drawPath(cup, color, style = stroke)
+        drawArc(color, -90f, 180f, false, Offset(14 * u, 9 * u), Size(7 * u, 7 * u), style = stroke)
+        drawLine(color, Offset(7 * u, 2.5f * u), Offset(7 * u, 4.5f * u), 2f * u, StrokeCap.Round)
+        drawLine(color, Offset(11 * u, 2.5f * u), Offset(11 * u, 4.5f * u), 2f * u, StrokeCap.Round)
     }
 }
 
@@ -432,7 +462,7 @@ private fun AnalysisSettings() {
             Switch(
                 checked = settings.background,
                 onCheckedChange = { AnalysisJobs.setBackground(it) },
-                colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+                colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
             )
         }
         Divider()
@@ -494,7 +524,7 @@ private fun StemSettings() {
             LinearProgressIndicator(
                 progress = { (s.bytes / StemModel.SIZE.toFloat()).coerceIn(0f, 1f) },
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                color = Color(0xFFFF7A2E), trackColor = Glass.FillSelected,
+                color = Glass.Ember, trackColor = Glass.FillSelected,
             )
         }
         StemModel.State.Ready -> {
@@ -506,7 +536,7 @@ private fun StemSettings() {
                 Switch(
                     checked = on,
                     onCheckedChange = { on = it; Stems.setOn(context, it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+                    colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
                 )
             }
             if (on) {
@@ -520,7 +550,7 @@ private fun StemSettings() {
                     Switch(
                         checked = tricks,
                         onCheckedChange = { tricks = it; Stems.setTricksOn(context, it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF7A2E), checkedThumbColor = Color.White),
+                        colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
                     )
                 }
             }
@@ -598,7 +628,7 @@ private fun FireButton(label: String, onClick: () -> Unit) {
         Modifier.padding(top = 18.dp).fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Glass.Fire)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(label, color = Glass.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable

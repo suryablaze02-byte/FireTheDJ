@@ -62,7 +62,7 @@ fun SourceTile(kind: SourceKind, modifier: Modifier, onClick: () -> Unit) {
             }
         }
         Text(kind.title, color = Dj.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text(kind.hint, color = Dj.Muted, fontSize = 10.sp, maxLines = 1)
+        Text(kind.hint, color = Dj.Muted, fontSize = 12.sp, maxLines = 1)
     }
 }
 

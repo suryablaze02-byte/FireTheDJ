@@ -1,6 +1,5 @@
 package com.autodj.ui
 
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,12 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -56,22 +51,38 @@ fun NowPlayingScreen(
     setLanguage: String? = null,
     /** A song's language by its uri. */
     languageOf: (String) -> String? = { null },
+    /** With nothing playing: over to the Mix tab to pick a crate. */
+    onGoToMix: () -> Unit = {},
 ) {
     val deck = state.current
     val track = state.set.getOrNull(state.index)
     if (deck == null || track == null) {
-        Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-            Text(
-                "Pick a crate on the Mix tab to start a set.",
-                color = Glass.Muted,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center,
-            )
+        Column(
+            Modifier.fillMaxSize().padding(start = 32.dp, end = 32.dp, bottom = LocalTabBarInset.current),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            GlassPlatter(Modifier.size(168.dp)) {
+                Box(Modifier.size(64.dp).glass(CircleShape), contentAlignment = Alignment.Center) { NoteGlyph(Glass.Muted) }
+            }
+            Text("Nothing playing yet", color = Glass.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 28.dp))
+            Text("Pick a crate and FireTheDJ takes it from there.", color = Glass.Muted, fontSize = 15.sp, lineHeight = 21.sp,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+            Row(
+                Modifier.padding(top = 24.dp).height(52.dp).clip(CircleShape).background(Glass.Ember)
+                    .border(1.dp, Color.White.copy(alpha = 0.45f), CircleShape)
+                    .clickable(role = Role.Button, onClick = onGoToMix).padding(horizontal = 30.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Go to Mix", color = Glass.OnAccent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.OnAccent)
+            }
         }
         return
     }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp + LocalTabBarInset.current)) {
             // The set label is "Source · Genre" for a folder or playlist set, else just the genre.
             val label = state.crate.orEmpty()
             val source = label.substringBeforeLast(" · ", "")
@@ -98,15 +109,13 @@ fun NowPlayingScreen(
             // The glass record with the live spectrum round it; it takes whatever height is left.
             DjVisualizer(visual, artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxWidth().weight(1f).padding(vertical = 6.dp), glass = true)
 
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                Column(Modifier.weight(1f)) {
-                    Text(deck.title, color = Glass.Text, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (deck.artist.isNotBlank()) Text(deck.artist, color = Glass.Muted, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                val key = if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key
-                val lang = languageOf(deck.uri)?.let { " · $it" }.orEmpty()
-                Text("${"%.0f".format(deck.bpm)} BPM · $key$lang", color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, bottom = 3.dp))
-            }
+            // The title gets the full width and up to two lines; the details sit under the artist.
+            Text(displayTitle(deck.title), color = Glass.Text, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (deck.artist.isNotBlank()) Text(deck.artist, color = Glass.Text.copy(alpha = 0.9f), fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val key = if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key
+            val lang = languageOf(deck.uri)?.let { " · $it" }.orEmpty()
+            Text("${"%.0f".format(deck.bpm)} BPM · Key $key$lang", color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
 
             // Where the set is in this track.
             val progress = if (deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
@@ -162,18 +171,6 @@ fun NowPlayingScreen(
     }
 }
 
-/**
- * The playing track's cover, blown up and blurred, lighting the glass behind the whole screen,
- * tab bar included (Android 12+; older phones keep the ambient light).
- */
-@Composable
-fun NowPlayingBackdrop(state: EngineState, artwork: Map<String, String>) {
-    val deck = state.current ?: return
-    if (Build.VERSION.SDK_INT < 31) return
-    Artwork(artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxSize().blur(80.dp).alpha(0.55f), RectangleShape)
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.45f)))))
-}
-
 /** The next track and the transition FireTheDJ has planned; opens the mixing view. */
 @Composable
 private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: () -> Unit, modifier: Modifier) {
@@ -206,7 +203,7 @@ private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: 
             }
             Text(line, color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                listOf(next.title, next.artist).filter { it.isNotBlank() }.joinToString(" · "),
+                listOf(displayTitle(next.title), next.artist).filter { it.isNotBlank() }.joinToString(" · "),
                 color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }

@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -117,7 +122,16 @@ fun MixScreen(
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val header: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth().padding(top = if (landscape) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FireTheDjWordmark(20.sp, Modifier.weight(1f))
+            // The logo in a floating glass capsule.
+            Row(
+                Modifier.height(44.dp).glass(CircleShape).padding(start = 7.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                AppIcon(30.dp, 9.dp)
+                FireTheDjWordmark(18.sp)
+            }
+            Spacer(Modifier.weight(1f))
             Box {
                 GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", onClick = onSettings, modifier = Modifier.tourTarget("settings")) {
                     Icon(Icons.Filled.Settings, null, tint = Glass.Text, modifier = Modifier.size(22.dp))
@@ -137,6 +151,9 @@ fun MixScreen(
         )
     }
     val columns = if (landscape) 3 else 2
+    // Upright, Start floats over the bottom of the crates, above the floating tab bar.
+    val endSpace = if (landscape) 12.dp else LocalTabBarInset.current + 76.dp
+    val unclassified = counts[Genres.UNCLASSIFIED] ?: 0
     val body: @Composable (Modifier) -> Unit = { modifier ->
         if (library.isEmpty()) {
             Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -155,27 +172,47 @@ fun MixScreen(
             LazyVerticalGrid(
                 GridCells.Fixed(columns),
                 modifier.tourTarget("crates"),
-                contentPadding = PaddingValues(bottom = 12.dp),
+                contentPadding = PaddingValues(bottom = endSpace),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 item(span = { GridItemSpan(columns) }) {
                     CrateCard("All genres", "${songs(allCount)} · moves across genres", crate == ALL, allCount > 0) { onPickCrate(ALL) }
                 }
-                items(crates) { c ->
-                    val n = counts[c] ?: 0
-                    val sub = if (c == Genres.UNCLASSIFIED) "${songs(n)} · not mixed" else songs(n)
-                    CrateCard(c, sub, crate == c, c != Genres.UNCLASSIFIED) { onPickCrate(c) }
+                // Songs of unclear genre are never mixed, so they're a note rather than a crate.
+                items(crates.filter { it != Genres.UNCLASSIFIED }) { c ->
+                    CrateCard(c, songs(counts[c] ?: 0), crate == c, true) { onPickCrate(c) }
+                }
+                if (unclassified > 0) {
+                    item(span = { GridItemSpan(columns) }) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .clickable(role = Role.Button, onClickLabel = "See them on the Music tab", onClick = onAddMusic)
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(Icons.Outlined.Info, null, tint = Glass.Muted, modifier = Modifier.size(18.dp).padding(top = 1.dp))
+                            Text(
+                                buildAnnotatedString {
+                                    append("${songs(unclassified).replaceFirstChar { it.uppercase() }} ${if (unclassified == 1) "has" else "have"} an unclear genre, so ")
+                                    append(if (unclassified == 1) "it's" else "they're")
+                                    append(" left out of mixes. ")
+                                    withStyle(SpanStyle(color = Glass.EmberText, fontWeight = FontWeight.SemiBold)) { append("See them") }
+                                },
+                                color = Glass.Muted, fontSize = 13.sp, lineHeight = 18.sp,
+                            )
+                        }
+                    }
                 }
                 if (analysing > 0) {
                     item(span = { GridItemSpan(columns) }) {
                         Row(
-                            Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            CircularProgressIndicator(Modifier.size(22.dp), color = Glass.Ember, trackColor = Glass.FillStrong, strokeWidth = 3.dp)
-                            Text("Analysing ${songs(analysing)}. They join the set as they're ready.", color = Glass.Muted, fontSize = 13.sp)
+                            CircularProgressIndicator(Modifier.size(18.dp), color = Glass.Ember, trackColor = Glass.FillStrong, strokeWidth = 2.5.dp)
+                            Text("Analysing ${songs(analysing)}. They join the set as they're ready.", color = Glass.Muted, fontSize = 13.sp, lineHeight = 18.sp)
                         }
                     }
                 }
@@ -204,10 +241,12 @@ fun MixScreen(
             body(Modifier.weight(1f).fillMaxHeight().padding(top = 4.dp))
         }
     } else {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            header()
-            body(Modifier.weight(1f).padding(top = 16.dp))
-            start(Modifier.padding(top = 8.dp, bottom = 12.dp))
+        Box(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            Column(Modifier.fillMaxSize()) {
+                header()
+                body(Modifier.weight(1f).padding(top = 16.dp))
+            }
+            start(Modifier.align(Alignment.BottomCenter).padding(bottom = LocalTabBarInset.current + 8.dp))
         }
     }
 }
@@ -250,7 +289,7 @@ private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boo
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Column(
-        Modifier.fillMaxWidth().height(84.dp)
+        Modifier.fillMaxWidth().heightIn(min = 84.dp)
             .glass(
                 shape,
                 if (selected) Glass.FireSelected else Glass.Fill,
@@ -264,10 +303,12 @@ private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boo
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(name, color = if (enabled) Glass.Text else Glass.Muted, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (selected) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                lineHeight = 21.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (selected) Box(Modifier.size(22.dp).background(Glass.Ember, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Check, null, tint = Glass.OnAccent, modifier = Modifier.size(15.dp))
+            }
         }
-        Text(sub, color = if (selected) Color.White.copy(alpha = 0.85f) else Glass.Muted, fontSize = 13.sp, maxLines = 1)
+        Text(sub, color = if (selected) Color.White.copy(alpha = 0.9f) else Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -277,11 +318,11 @@ private fun StartButton(label: String, enabled: Boolean, modifier: Modifier, onC
     val shape = RoundedCornerShape(28.dp)
     Box(
         modifier.fillMaxWidth().height(56.dp).clip(shape)
-            .then(if (enabled) Modifier.background(Glass.Fire, shape) else Modifier.glass(shape))
+            .then(if (enabled) Modifier.background(Glass.Fire, shape).border(1.dp, Color.White.copy(alpha = 0.45f), shape) else Modifier.glass(shape, Glass.FillStrong))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (enabled) Color.White else Glass.Muted, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, color = if (enabled) Glass.OnAccent else Glass.Muted, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -324,7 +365,7 @@ fun MusicScreen(
     }
     val status = library.associateBy { it.uri }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp + LocalTabBarInset.current)) {
         item {
             Text("Music", color = Glass.Text, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp,
                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 14.dp))
@@ -482,7 +523,7 @@ private fun TrackRow(item: LibraryItem, art: String?, shape: Shape, onRemove: (S
                 Box(Modifier.size(44.dp).background(Glass.FillStrong, RoundedCornerShape(8.dp)))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(info?.title ?: item.name, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(info?.title?.let(::displayTitle) ?: item.name, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 when (item.status) {
                     AnalysisStatus.READY -> {
                         info!!

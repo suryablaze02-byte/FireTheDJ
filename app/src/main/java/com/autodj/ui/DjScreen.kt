@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -133,9 +135,9 @@ fun DjScreen(vm: DjViewModel) {
     }
 
     Box(Modifier.fillMaxSize()) {
-        // Light behind the glass; Now Playing lays the track's own art over it.
-        AmbientLight(Modifier.fillMaxSize())
-        if (tab == Tab.NOW_PLAYING) NowPlayingBackdrop(state, artwork)
+        // The ground behind the glass: on Now Playing, a deep shade of the playing song's cover, as Apple Music tints its player.
+        val songColour = songGround(state.current?.uri?.let { artwork[it] })
+        AmbientLight(Modifier.fillMaxSize(), if (tab == Tab.NOW_PLAYING && state.running) songColour else Glass.Ground)
         // Sideways, the tabs move to a rail down the left and Now Playing shows both decks.
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val tabs = Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) }
@@ -149,8 +151,9 @@ fun DjScreen(vm: DjViewModel) {
                     if (state.running) GlassIconButton("Open the full-screen visualizer", onClick = { fullscreen = true }) { ExpandGlyph(Glass.Text) }
                 }
             }
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            Box(Modifier.weight(1f)) {
+        // Upright, the tab bar floats over the bottom of the screen and the tab's content scrolls under it.
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            CompositionLocalProvider(LocalTabBarInset provides if (landscape) 0.dp else TAB_BAR_SPACE) {
                 when (tab) {
                     Tab.MIX -> MixScreen(
                         library, folders,
@@ -212,6 +215,7 @@ fun DjScreen(vm: DjViewModel) {
                                 onFullscreen = { fullscreen = true },
                                 onCast = { castDialog = true },
                                 setLanguage = setLanguage,
+                                onGoToMix = { tab = Tab.MIX },
                                 languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
                             )
                         }
@@ -223,7 +227,9 @@ fun DjScreen(vm: DjViewModel) {
                     tabs,
                     tab.ordinal,
                     onSelect = { tab = Tab.entries[it] },
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                    // Nothing scrolls under it on Now Playing, so there it's clear glass over the song's colour.
+                    fill = if (tab == Tab.NOW_PLAYING) Glass.FillStrong else GlassOverContent,
                 )
             }
         }
