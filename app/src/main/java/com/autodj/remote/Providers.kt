@@ -17,6 +17,7 @@ object StreamProviders {
         InternetArchiveProvider(http),
         YouTubeMusicProvider(),
         SpotifyProvider(),
+        AppleMusicProvider(),
         WebPlaylistProvider(http),
     )
 }

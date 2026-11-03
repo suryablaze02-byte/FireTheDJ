@@ -98,9 +98,10 @@ class SpotifyProvider(
         private const val BROWSER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36"
 
-        private val progress = MutableStateFlow<Pair<Int, Int>?>(null)
+        /** Written by every provider that looks songs up on YouTube (Spotify, Apple Music). */
+        internal val progress = MutableStateFlow<Pair<Int, Int>?>(null)
 
-        /** Songs looked up on YouTube so far, of how many, while a Spotify list is being added. */
+        /** Songs looked up on YouTube so far, of how many, while a Spotify or Apple Music list is being added. */
         val matching: StateFlow<Pair<Int, Int>?> = progress
 
         /** The playlist or album on an embed page: the page's own data, as the embedded player reads it. */

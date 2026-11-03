@@ -220,7 +220,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(horizontal = EDGE, vertical = 12.dp)) {
                     TvCard("This TV & USB", "Scan for songs", Modifier.width(300.dp), accent = SourceKind.PHONE.color,
                         icon = { SourceGlyph(SourceKind.PHONE, 30.dp) }) { scanWithPermission() }
-                    TvCard("Stream", "YT Music or Spotify playlists", Modifier.width(300.dp), accent = SourceKind.STREAM.color,
+                    TvCard("Stream", "YT Music, Spotify or Apple Music", Modifier.width(300.dp), accent = SourceKind.STREAM.color,
                         icon = { SourceGlyph(SourceKind.STREAM, 30.dp) }, onClick = onYtMusic)
                 }
                 scanNote?.let { Text(it, color = Glass.EmberText, fontSize = 15.sp, modifier = Modifier.padding(start = EDGE)) }

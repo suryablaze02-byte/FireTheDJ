@@ -84,7 +84,7 @@ class TvActivity : ComponentActivity() {
 /** The TV app's first-launch tour, over the home screen, driven by the remote. */
 private val TV_TOUR = listOf(
     TourStep(null, "Welcome to FireTheDJ TV", "Your AI DJ on the big screen. Use the remote: arrows to move, OK to choose. Here's a quick tour."),
-    TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or stream YT Music and Spotify playlists. Each song is analysed once, then sorted into crates."),
+    TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or stream YT Music, Spotify and Apple Music playlists. Each song is analysed once, then sorted into crates."),
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
     TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
     TourStep("tv_settings", "Settings", "Updates and what's new, supporting FireTheDJ, and clearing the library."),
