@@ -35,8 +35,9 @@ enum class SourceKind(val title: String, val hint: String, val color: Color) {
     PHONE("This phone", "a music folder", Color(0xFFF2C14E)),
     YOUTUBE("YT Music", "curated playlists", Color(0xFFFF4E45)),
     SPOTIFY("Spotify", "played from YouTube", Color(0xFF1ED760)),
-    /** The door to YT Music and Spotify. */
-    STREAM("Stream", "YT Music or Spotify", Color(0xFFFF6A5C)),
+    APPLE_MUSIC("Apple Music", "played from YouTube", Color(0xFFFF4F7B)),
+    /** The door to YT Music, Spotify and Apple Music. */
+    STREAM("Stream", "YT Music, Spotify, Apple", Color(0xFFFF6A5C)),
     LINK("Link", "other services", Color(0xFF5AA8FF)),
 }
 
@@ -57,6 +58,7 @@ fun SourceTile(kind: SourceKind, modifier: Modifier, onClick: () -> Unit) {
                     SourceKind.PHONE -> folderGlyph(kind.color)
                     SourceKind.YOUTUBE, SourceKind.STREAM -> playGlyph(kind.color)
                     SourceKind.SPOTIFY -> listGlyph(kind.color)
+                    SourceKind.APPLE_MUSIC -> noteGlyph(kind.color)
                     SourceKind.LINK -> linkGlyph(kind.color)
                 }
             }
@@ -140,4 +142,15 @@ private inline fun DrawScope.rotate45(block: DrawScope.() -> Unit) {
     drawContext.transform.rotate(-45f, center)
     block()
     drawContext.transform.rotate(45f, center)
+}
+
+/** Apple Music: a beamed pair of notes. */
+private fun DrawScope.noteGlyph(c: Color) {
+    val w = size.width
+    val s = w * 0.11f
+    drawLine(c, Offset(w * 0.36f, w * 0.74f), Offset(w * 0.36f, w * 0.18f), s, StrokeCap.Round)
+    drawLine(c, Offset(w * 0.36f, w * 0.18f), Offset(w * 0.88f, w * 0.08f), s, StrokeCap.Round)
+    drawLine(c, Offset(w * 0.88f, w * 0.08f), Offset(w * 0.88f, w * 0.64f), s, StrokeCap.Round)
+    drawCircle(c, w * 0.15f, Offset(w * 0.22f, w * 0.76f))
+    drawCircle(c, w * 0.15f, Offset(w * 0.74f, w * 0.66f))
 }

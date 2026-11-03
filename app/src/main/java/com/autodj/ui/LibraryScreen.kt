@@ -439,6 +439,7 @@ private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, language
         !folder.remote -> SourceKind.PHONE
         "youtube" in folder.uri -> SourceKind.YOUTUBE
         "spotify" in folder.uri -> SourceKind.SPOTIFY
+        "music.apple.com" in folder.uri -> SourceKind.APPLE_MUSIC
         else -> SourceKind.LINK
     }
     val total = folder.tracks.size
@@ -583,7 +584,7 @@ internal fun ImportDialog(youTube: Boolean, state: ImportState, onImport: (Strin
                         "In YouTube Music, open a playlist or album, tap Share, then Copy link, and paste it here. " +
                             "Its tracks stream when they're analysed and played, and are never saved on the phone."
                     } else {
-                        "A Spotify or YouTube Music playlist or album (Spotify songs stream from YouTube), an Audius or " +
+                        "A Spotify playlist or album, an Apple Music or YouTube Music playlist (Spotify and Apple Music songs stream from YouTube), an Audius or " +
                             "Jamendo playlist, an Internet Archive release, an M3U playlist, or a direct link to an audio file. " +
                             "Its tracks are analysed like your own, then mixed."
                     },

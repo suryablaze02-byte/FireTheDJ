@@ -118,6 +118,12 @@ fun SourceGlyph(kind: SourceKind, size: Dp = 26.dp) {
                 drawLine(c, Offset(20 * u, 10 * u), Offset(20 * u, 19 * u), 1.8f * u, StrokeCap.Round)
                 drawCircle(c, 2.4f * u, Offset(17.6f * u, 19.4f * u), style = s)
             }
+            SourceKind.APPLE_MUSIC -> {
+                // Two beamed notes.
+                drawPath(Path().apply { moveTo(9 * u, 18 * u); lineTo(9 * u, 5 * u); lineTo(21 * u, 3 * u); lineTo(21 * u, 16 * u) }, c, style = s)
+                drawCircle(c, 3 * u, Offset(6 * u, 18 * u), style = s)
+                drawCircle(c, 3 * u, Offset(18 * u, 16 * u), style = s)
+            }
             SourceKind.LINK -> {
                 drawLine(c, Offset(9 * u, 15 * u), Offset(15 * u, 9 * u), 1.8f * u, StrokeCap.Round)
                 drawRoundRect(c, Offset(11 * u, 3 * u), androidx.compose.ui.geometry.Size(10 * u, 7 * u),

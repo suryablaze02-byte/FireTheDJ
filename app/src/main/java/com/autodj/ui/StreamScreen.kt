@@ -56,7 +56,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.autodj.remote.AppleMusicCard
+import com.autodj.remote.AppleMusicCatalogue
+import com.autodj.remote.PlaylistCovers
 import com.autodj.remote.SpotifyCard
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import java.io.File
 import com.autodj.remote.SpotifyCatalogue
 import com.autodj.remote.YtMusicSearch
 import com.autodj.remote.YtPlaylistCard
@@ -69,11 +78,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class StreamPage { CHOOSE, YT_MUSIC, SPOTIFY }
+private enum class StreamPage { CHOOSE, YT_MUSIC, SPOTIFY, APPLE_MUSIC }
 
 /**
- * Stream: YT Music or Spotify, and one search across both. Whichever is picked, the songs
- * stream from YouTube; Spotify only supplies the playlist.
+ * Stream: YT Music, Spotify or Apple Music, and one search across all three. Whichever is
+ * picked, the songs stream from YouTube; Spotify and Apple Music only supply the playlist.
  */
 @Composable
 fun StreamScreen(
@@ -87,7 +96,20 @@ fun StreamScreen(
     var page by rememberSaveable { mutableStateOf(StreamPage.CHOOSE) }
     when (page) {
         StreamPage.YT_MUSIC -> YtMusicScreen(folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE })
-        StreamPage.SPOTIFY -> SpotifyScreen(folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE })
+        StreamPage.SPOTIFY -> CatalogueScreen(
+            "Spotify", SourceKind.SPOTIFY,
+            "Spotify's playlists, played from YouTube: each song is found on YouTube Music. Up to 100 songs a playlist; " +
+                "songs YouTube doesn't have are left out.",
+            SpotifyCatalogue.sections.map { s -> s.title to s.cards.map { it.pick() } },
+            folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE },
+        )
+        StreamPage.APPLE_MUSIC -> CatalogueScreen(
+            "Apple Music", SourceKind.APPLE_MUSIC,
+            "Apple Music's playlists, played from YouTube: each song is found on YouTube Music. Up to 100 songs a playlist; " +
+                "songs YouTube doesn't have are left out.",
+            AppleMusicCatalogue.sections.map { s -> s.title to s.cards.map { it.pick() } },
+            folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE },
+        )
         StreamPage.CHOOSE -> StreamHome(folders, importState, onImport, onImportClosed, onBack, onPick = { page = it })
     }
 }
@@ -128,19 +150,28 @@ private fun StreamHome(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         )
         if (query.isBlank()) {
-            // Both tiles as tall as the taller one, which grows with large text.
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ServiceTile(SourceKind.YOUTUBE, "YT Music", "YouTube Music's curated playlists, by mood and genre", Modifier.weight(1f)) { onPick(StreamPage.YT_MUSIC) }
-                ServiceTile(SourceKind.SPOTIFY, "Spotify", "Spotify's own playlists, played from YouTube", Modifier.weight(1f)) { onPick(StreamPage.SPOTIFY) }
+            // The tiles as tall as the tallest, which grows with large text.
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ServiceTile(SourceKind.YOUTUBE, "YT Music", "Curated, by mood and genre", Modifier.weight(1f)) { onPick(StreamPage.YT_MUSIC) }
+                ServiceTile(SourceKind.SPOTIFY, "Spotify", "Its own playlists, from YouTube", Modifier.weight(1f)) { onPick(StreamPage.SPOTIFY) }
+                ServiceTile(SourceKind.APPLE_MUSIC, "Apple Music", "Its own playlists, from YouTube", Modifier.weight(1f)) { onPick(StreamPage.APPLE_MUSIC) }
             }
             Text(
-                "Search finds Spotify playlists and any public YouTube Music playlist. Got a Spotify or YouTube Music link? " +
-                    "Paste it. Nothing plays from Spotify and there's nothing to sign in to: every song streams from YouTube.",
+                "Search finds Spotify and Apple Music playlists and any public YouTube Music playlist. Got a Spotify, Apple Music " +
+                    "or YouTube Music link? Paste it. Nothing plays from Spotify or Apple Music and there's nothing to sign in to: " +
+                    "every song streams from YouTube.",
                 color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
         } else {
             StatusLine(importState, tapped)
-            val spotify = remember(query) { SpotifyCatalogue.search(query) }
+            val spotify = remember(query) { SpotifyCatalogue.search(query).map { it.pick() } }
+            val appleMusic = remember(query) { AppleMusicCatalogue.search(query).map { it.pick() } }
+            val pick = { card: PickCard ->
+                if (importState != ImportState.Working && card.link !in added) {
+                    tapped = card.title
+                    onImport(card.link, card.origin)
+                }
+            }
             LazyColumn(
                 Modifier.weight(1f),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalTabBarInset.current),
@@ -151,13 +182,19 @@ private fun StreamHome(
                         if (spotify.isEmpty()) {
                             Note("No Spotify playlists match. Paste a Spotify link to add any public one.")
                         } else {
-                            CardRow(spotify, key = { it.id }) { card ->
-                                SpotifyTile(card, card.link in added, busy = importState == ImportState.Working && tapped == card.title) {
-                                    if (importState != ImportState.Working && card.link !in added) {
-                                        tapped = card.title
-                                        onImport(card.link, card.origin)
-                                    }
-                                }
+                            CardRow(spotify, key = { it.key }) { card ->
+                                PickTile(card, card.link in added, busy = importState == ImportState.Working && tapped == card.title) { pick(card) }
+                            }
+                        }
+                    }
+                }
+                item {
+                    ResultRow("Apple Music", SourceKind.APPLE_MUSIC) {
+                        if (appleMusic.isEmpty()) {
+                            Note("No Apple Music playlists match. Paste an Apple Music link to add any public one.")
+                        } else {
+                            CardRow(appleMusic, key = { it.key }) { card ->
+                                PickTile(card, card.link in added, busy = importState == ImportState.Working && tapped == card.title) { pick(card) }
                             }
                         }
                     }
@@ -195,9 +232,13 @@ private fun StreamHome(
     }
 }
 
-/** Spotify's own playlists by section; tapping one finds its songs on YouTube and adds it. */
+/** A service's own playlists by section (Spotify, Apple Music); tapping one finds its songs on YouTube and adds it. */
 @Composable
-private fun SpotifyScreen(
+private fun CatalogueScreen(
+    title: String,
+    kind: SourceKind,
+    blurb: String,
+    sections: List<Pair<String, List<PickCard>>>,
     folders: List<MusicFolder>,
     importState: ImportState,
     onImport: (String, String?) -> Unit,
@@ -209,26 +250,22 @@ private fun SpotifyScreen(
     var tapped by remember { mutableStateOf<String?>(null) }
     val added = remember(folders) { folders.filter { it.remote }.map { it.uri }.toSet() }
     Column(Modifier.fillMaxSize()) {
-        Header("Spotify", onBack) {
+        Header(title, onBack) {
             if (importState != ImportState.Working) onImportClosed()
             pasting = true
         }
-        Text(
-            "Spotify's playlists, played from YouTube: each song is found on YouTube Music. Up to 100 songs a playlist; " +
-                "songs YouTube doesn't have are left out.",
-            color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp),
-        )
-        StatusLine(importState, tapped, SPOTIFY_GREEN)
+        Text(blurb, color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
+        StatusLine(importState, tapped, kind.color)
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp + LocalTabBarInset.current),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(SpotifyCatalogue.sections, key = { it.title }) { section ->
+            items(sections, key = { it.first }) { (section, cards) ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(section.title, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp))
-                    CardRow(section.cards, key = { it.id }) { card ->
-                        SpotifyTile(card, card.link in added, busy = importState == ImportState.Working && tapped == card.title) {
+                    Text(section, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp))
+                    CardRow(cards, key = { it.key }) { card ->
+                        PickTile(card, card.link in added, busy = importState == ImportState.Working && tapped == card.title, showSection = false) {
                             if (importState != ImportState.Working && card.link !in added) {
                                 tapped = card.title
                                 onImport(card.link, card.origin)
@@ -271,17 +308,17 @@ private fun ServiceTile(kind: SourceKind, title: String, hint: String, modifier:
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(18.dp)
     Column(
-        modifier.fillMaxHeight().heightIn(min = 150.dp).scale(if (focused) 1.04f else 1f).clip(shape)
+        modifier.fillMaxHeight().heightIn(min = 132.dp).scale(if (focused) 1.04f else 1f).clip(shape)
             .background(kind.color.copy(alpha = 0.16f), shape)
             .border(if (focused) 3.dp else 1.dp, kind.color.copy(alpha = if (focused) 1f else 0.45f), shape)
             .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Open $title", onClick = onClick)
-            .padding(16.dp),
+            .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(40.dp).background(kind.color.copy(alpha = 0.2f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
             SourceGlyph(kind, 22.dp)
         }
-        Text(title, color = Dj.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeight = 19.sp)
         Text(hint, color = Dj.Muted, fontSize = 12.sp)
     }
 }
@@ -310,51 +347,83 @@ private fun Note(text: String) {
     Text(text, color = Dj.Muted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
 }
 
+/** A Spotify or Apple Music playlist as a card: what it's called, where it's listed, and how to get its cover. */
+private class PickCard(
+    val title: String,
+    val section: String,
+    val link: String,
+    val origin: String,
+    val kind: SourceKind,
+    /** Unique within its service: the row's key and the cover's. */
+    val key: String,
+    val cover: (PlaylistCovers) -> File?,
+)
+
+private fun SpotifyCard.pick() = PickCard(title, section, link, origin, SourceKind.SPOTIFY, id) { it.spotify(id) }
+private fun AppleMusicCard.pick() = PickCard(title, section, link, origin, SourceKind.APPLE_MUSIC, path) { it.appleMusic(path) }
+
+/** One cover store for the app; it only keeps a folder. */
+private var coverStore: PlaylistCovers? = null
+
+/** The card's cover, looked up and kept the first time it shows; null until it's there, or when there's none. */
+@Composable
+private fun rememberCover(card: PickCard): ImageBitmap? {
+    val context = LocalContext.current
+    val path by produceState<String?>(null, card.kind, card.key) {
+        val store = coverStore ?: PlaylistCovers(context.applicationContext).also { coverStore = it }
+        value = withContext(Dispatchers.IO) { runCatching { card.cover(store) }.getOrNull()?.path }
+    }
+    return rememberArtwork(path)
+}
+
 /**
- * A Spotify playlist card. Spotify's covers aren't fetched (that's a page load per card), so
- * each section gets its own colours, with the name set large on the cover.
+ * A Spotify or Apple Music playlist card: the playlist's own cover (a colour per section until
+ * it loads, or offline) with the service's mark, and its name and section underneath.
  */
 @Composable
-private fun SpotifyTile(card: SpotifyCard, isAdded: Boolean, busy: Boolean, onClick: () -> Unit) {
+private fun PickTile(card: PickCard, isAdded: Boolean, busy: Boolean, showSection: Boolean = true, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val (top, _) = SECTION_COLOURS[Math.floorMod(card.section.hashCode(), SECTION_COLOURS.size)]
+    val (fallback, _) = SECTION_COLOURS[Math.floorMod(card.section.hashCode(), SECTION_COLOURS.size)]
+    val cover = rememberCover(card)
     Column(
         Modifier.width(144.dp).scale(if (focused) 1.07f else 1f).clip(shape)
             .clickable(interaction, indication = null, role = Role.Button, onClickLabel = if (isAdded) "Already added" else "Add ${card.title}", onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f)
-                .border(3.dp, if (focused) SPOTIFY_GREEN else Color.Transparent, RoundedCornerShape(17.dp))
+                .border(3.dp, if (focused) card.kind.color else Color.Transparent, RoundedCornerShape(17.dp))
                 .padding(5.dp)
-                .clip(shape).background(top, shape),
+                .clip(shape).background(fallback.copy(alpha = 0.55f), shape),
         ) {
-            Text(
-                card.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 19.sp,
-                maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
-            )
-            Box(Modifier.align(Alignment.TopStart).padding(8.dp)) { SourceGlyph(SourceKind.SPOTIFY, 18.dp) }
+            // The real cover carries the service's own mark; the stand-in gets ours.
+            if (cover != null) Image(cover, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            else Box(Modifier.align(Alignment.TopStart).padding(6.dp).background(Color(0x73000000), RoundedCornerShape(7.dp)).padding(3.dp)) {
+                SourceGlyph(card.kind, 16.dp)
+            }
             when {
                 busy -> Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
                 }
                 isAdded -> Text(
-                    "Added", color = Dj.Bg, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).background(SPOTIFY_GREEN, RoundedCornerShape(8.dp))
+                    "Added", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).background(card.kind.color, RoundedCornerShape(8.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp),
                 )
             }
         }
         Text(
-            card.section, color = if (focused) SPOTIFY_GREEN else Dj.Muted, fontSize = 12.sp, maxLines = 1,
+            card.title, color = if (focused) card.kind.color else Dj.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 5.dp),
+        )
+        if (showSection) Text(
+            card.section, color = Dj.Muted, fontSize = 12.sp, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 5.dp),
         )
     }
 }
-
-private val SPOTIFY_GREEN = SourceKind.SPOTIFY.color
 
 private val SECTION_COLOURS = listOf(
     Color(0xFF1DB954) to Color(0xFF0B3D2A),

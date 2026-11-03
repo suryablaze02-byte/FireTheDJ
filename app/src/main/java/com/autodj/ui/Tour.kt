@@ -99,7 +99,7 @@ fun Modifier.tourTarget(key: String): Modifier {
 fun phoneTour(stems: Boolean) = listOfNotNull(
     TourStep(null, "Welcome to FireTheDJ", "Your AI DJ. It picks every song, mixes on the beat and drops the effects, all on its own. Here's a quick tour."),
     TourStep("tab_music", "Add your music", "The Music tab: a folder on this phone, Stream, or a link. Each song is analysed once for tempo, key, drops, vocals, language and genre."),
-    TourStep("stream", "Stream", "YT Music and Spotify playlists, with one search across both. Spotify songs play from YouTube: no account needed.", TourScreen.MUSIC),
+    TourStep("stream", "Stream", "YT Music, Spotify and Apple Music playlists, with one search across all three. Spotify and Apple Music songs play from YouTube: no account needed.", TourScreen.MUSIC),
     TourStep("from", "Mix from", "The whole library, or just one folder or playlist."),
     TourStep("crates", "Pick a crate", "Songs sort themselves into genre crates. One crate keeps the party in one style; All genres moves across them."),
     TourStep("mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster drops a trick about every 30 seconds: rolls, bass kills, scratches, word loops, and sounds that suit each song's language."),
