@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.6.2",
+            "Support FireTheDJ on Ko-fi or over UPI.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Ko-fi or UPI", "Support FireTheDJ in Settings now asks how: Ko-fi opens the Ko-fi page, from anywhere, and UPI pays from ₹50 with the UPI app of your choice. On TV, pick either and scan the code with your phone."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.6.1",
             "Two new visualizers: Chill Drive and Lo-fi Vibe.",
             listOf(
