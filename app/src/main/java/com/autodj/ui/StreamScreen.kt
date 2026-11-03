@@ -44,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
@@ -144,7 +143,7 @@ private fun StreamHome(
             val spotify = remember(query) { SpotifyCatalogue.search(query) }
             LazyColumn(
                 Modifier.weight(1f),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalTabBarInset.current),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item {
@@ -222,7 +221,7 @@ private fun SpotifyScreen(
         StatusLine(importState, tapped, SPOTIFY_GREEN)
         LazyColumn(
             Modifier.weight(1f),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp + LocalTabBarInset.current),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             items(SpotifyCatalogue.sections, key = { it.title }) { section ->
@@ -273,7 +272,7 @@ private fun ServiceTile(kind: SourceKind, title: String, hint: String, modifier:
     val shape = RoundedCornerShape(18.dp)
     Column(
         modifier.fillMaxHeight().heightIn(min = 150.dp).scale(if (focused) 1.04f else 1f).clip(shape)
-            .background(Brush.verticalGradient(listOf(kind.color.copy(alpha = 0.28f), Dj.Surface)), shape)
+            .background(kind.color.copy(alpha = 0.16f), shape)
             .border(if (focused) 3.dp else 1.dp, kind.color.copy(alpha = if (focused) 1f else 0.45f), shape)
             .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Open $title", onClick = onClick)
             .padding(16.dp),
@@ -320,7 +319,7 @@ private fun SpotifyTile(card: SpotifyCard, isAdded: Boolean, busy: Boolean, onCl
     val shape = RoundedCornerShape(12.dp)
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val (top, bottom) = SECTION_COLOURS[Math.floorMod(card.section.hashCode(), SECTION_COLOURS.size)]
+    val (top, _) = SECTION_COLOURS[Math.floorMod(card.section.hashCode(), SECTION_COLOURS.size)]
     Column(
         Modifier.width(144.dp).scale(if (focused) 1.07f else 1f).clip(shape)
             .clickable(interaction, indication = null, role = Role.Button, onClickLabel = if (isAdded) "Already added" else "Add ${card.title}", onClick = onClick),
@@ -330,7 +329,7 @@ private fun SpotifyTile(card: SpotifyCard, isAdded: Boolean, busy: Boolean, onCl
             Modifier.fillMaxWidth().aspectRatio(1f)
                 .border(3.dp, if (focused) SPOTIFY_GREEN else Color.Transparent, RoundedCornerShape(17.dp))
                 .padding(5.dp)
-                .clip(shape).background(Brush.linearGradient(listOf(top, bottom)), shape),
+                .clip(shape).background(top, shape),
         ) {
             Text(
                 card.title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 19.sp,
@@ -342,7 +341,7 @@ private fun SpotifyTile(card: SpotifyCard, isAdded: Boolean, busy: Boolean, onCl
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
                 }
                 isAdded -> Text(
-                    "Added", color = Dj.Bg, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    "Added", color = Dj.Bg, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).background(SPOTIFY_GREEN, RoundedCornerShape(8.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp),
                 )

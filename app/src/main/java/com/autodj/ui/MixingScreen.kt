@@ -45,7 +45,7 @@ fun MixingScreen(state: EngineState, artwork: Map<String, String>, onBack: () ->
     val next = state.next
     val b = state.incoming
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp + LocalTabBarInset.current),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -129,7 +129,7 @@ fun MixingScreen(state: EngineState, artwork: Map<String, String>, onBack: () ->
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                ph.label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                ph.label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 color = if (active) Dj.Bg else Dj.BlueText,
                                 fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                             )
@@ -138,7 +138,7 @@ fun MixingScreen(state: EngineState, artwork: Map<String, String>, onBack: () ->
                 }
                 Box(Modifier.offset(x = maxWidth * state.mixProgress).width(2.dp).fillMaxHeight().background(Dj.Text))
             }
-            Text("FireTheDJ picks the effects, key and tempo for each mix. There's no manual Mix now.", color = Dj.Muted, fontSize = 11.sp)
+            Text("FireTheDJ picks the effects, key and tempo for each mix. There's no manual Mix now.", color = Dj.Muted, fontSize = 12.sp)
         }
         Spacer(Modifier.height(4.dp))
     }
@@ -163,7 +163,7 @@ private fun DeckCard(
     ) {
         // Each deck's own visualizer: deck A is the set's deck, deck B the one coming in.
         DjVisualizer(visual, art, seed, title, Modifier.size(140.dp), only = !accent, showLabels = false)
-        Text(label, color = Dj.Muted, fontSize = 11.sp)
+        Text(label, color = Dj.Muted, fontSize = 12.sp)
         Text(title, color = Dj.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(bpmText, color = Dj.Muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
         Box(Modifier.fillMaxWidth().height(6.dp).background(Dj.Border, RoundedCornerShape(3.dp))) {
@@ -175,7 +175,7 @@ private fun DeckCard(
 @Composable
 private fun Readout(modifier: Modifier, label: String, value: String) {
     Column(modifier.background(Dj.Surface, RoundedCornerShape(10.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, color = Dj.Muted, fontSize = 11.sp, maxLines = 2)
+        Text(label, color = Dj.Muted, fontSize = 12.sp, maxLines = 2)
         Text(value, color = Dj.Text, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
     }
 }
@@ -193,7 +193,7 @@ private fun FxCard(fx: FxStatus, modifier: Modifier) {
         Box(Modifier.size(9.dp).background(if (fx.active) Dj.Accent else Dj.LightIdle, CircleShape))
         Column {
             Text(fx.name, color = Dj.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(fx.detail, color = Dj.Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(fx.detail, color = Dj.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -258,7 +258,7 @@ fun MixingScreenLandscape(state: EngineState, onBack: () -> Unit) {
                                     .background(if (active) Dj.Accent else Dj.PhaseIdle, RoundedCornerShape(6.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(ph.label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (active) Dj.Bg else Dj.BlueText,
+                                Text(ph.label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (active) Dj.Bg else Dj.BlueText,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
                             }
                         }

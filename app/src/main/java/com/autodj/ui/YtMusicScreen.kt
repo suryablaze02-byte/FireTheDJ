@@ -139,7 +139,7 @@ fun YtMusicScreen(
                     is Loadable.Failed -> Centered { Retry(s.reason) { selected?.let(vm::select) } }
                     is Loadable.Ready -> LazyColumn(
                         Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp + LocalTabBarInset.current),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         items(s.value) { shelf ->
@@ -232,7 +232,7 @@ internal fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean,
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
                 }
                 isAdded -> Text(
-                    "Added", color = Dj.Bg, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    "Added", color = Dj.Bg, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).background(Dj.Accent, RoundedCornerShape(8.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp),
                 )

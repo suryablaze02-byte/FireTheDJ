@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -153,7 +154,14 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.padding(horizontal = EDGE)) {
-                FireTheDjWordmark(32.sp)
+                Row(
+                    Modifier.height(48.dp).glass(CircleShape).padding(start = 8.dp, end = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    com.autodj.ui.AppIcon(32.dp, 10.dp)
+                    FireTheDjWordmark(22.sp)
+                }
                 Spacer(Modifier.weight(1f))
                 GlassSegmented(
                     MixMode.entries, mode, { it.label }, vm::setMode,
@@ -242,7 +250,7 @@ fun TvGlassDialog(onDismiss: () -> Unit, width: Dp = 620.dp, content: @Composabl
     val first = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.width(width).background(Color(0xFF241A20), RoundedCornerShape(30.dp)).glass(RoundedCornerShape(30.dp), Glass.Fill).padding(28.dp),
+            Modifier.width(width).background(Color(0xFF2A1F3D), RoundedCornerShape(30.dp)).glass(RoundedCornerShape(30.dp), Glass.Fill).padding(28.dp),
         ) { content(first) }
     }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }

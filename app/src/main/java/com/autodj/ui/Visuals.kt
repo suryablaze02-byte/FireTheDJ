@@ -1,6 +1,8 @@
 package com.autodj.ui
 
+import com.autodj.lyrics.LyricsSources
 import android.graphics.BitmapFactory
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -44,18 +46,32 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
-/** The club palette from the approved mockup. */
+/**
+ * A song title as the screen shows it, without upload clutter: "Kushi Movie Video Songs | ..." →
+ * "Kushi Movie". A remix or rework keeps its bracketed name, only losing what follows a "|".
+ */
+fun displayTitle(raw: String): String =
+    if (LyricsSources.versionOf(raw) != null) raw.split('|', '｜').first().trim().ifEmpty { raw.trim() }
+    else LyricsSources.cleanTitle(raw).replace(FULL_SONG, "").trim().ifEmpty { raw.trim() }
+
+/** "Song Full Song …" and the "Song With" left of "Song With Lyrics": the lyrics cleaner keeps them, the screen doesn't need them. */
+private val FULL_SONG = Regex("""\s+full\s+songs?\b.*$|\s+song\s+with\s*$""", RegexOption.IGNORE_CASE)
+
+/** The club palette, on the same plum ground and orange accent as the glass. */
 object Dj {
-    val Bg = Color(0xFF0D0D10)
-    val Surface = Color(0xFF17171C)
-    val Border = Color(0xFF2A2A32)
-    val Divider = Color(0xFF1C1C22)
+    val Bg = Color(0xFF1B1030)
+    val Surface = Color(0xFF2A1F3D)
+    val Border = Color(0xFF3D3152)
+    val Divider = Color(0xFF241A36)
     val Text = Color(0xFFF2F2F5)
-    val Muted = Color(0xFFB4B4BE)
-    val Accent = Color(0xFFFF7A45)
-    val AccentBg = Color(0xFF241A15)
-    val Blue = Color(0xFF5AA8FF)
+    val Muted = Color(0xFFC4C0CC)
+    val Accent = Color(0xFFFF9F0A)
+    val AccentBg = Color(0xFF3A2414)
+    val Blue = Color(0xFF64B5FF)
     val BlueText = Color(0xFF8EC5FF)
     val BlueDim = Color(0xFF2F5E8F)
     val PhaseIdle = Color(0xFF1F2A3A)
@@ -81,6 +97,47 @@ private fun decode(path: String, maxPx: Int): ImageBitmap? {
     while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
     val opts = BitmapFactory.Options().apply { inSampleSize = sample }
     return BitmapFactory.decodeFile(path, opts)?.asImageBitmap()
+}
+
+/**
+ * The ground behind a playing song, as Apple Music tints its player: one deep shade of the
+ * cover's main colour, fading from song to song. Plum when there's no cover or it has no colour
+ * to speak of (black and white, grey).
+ */
+@Composable
+fun songGround(path: String?): Color {
+    val target by produceState(Glass.Ground, path) {
+        value = path?.let { withContext(Dispatchers.Default) { runCatching { deepCoverColour(it) }.getOrNull() } } ?: Glass.Ground
+    }
+    return animateColorAsState(target, tween(900), label = "ground").value
+}
+
+/** The cover's strongest hue, as a shade deep enough for white text on it; null for a colourless cover. */
+private fun deepCoverColour(path: String): Color? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    var sample = 1
+    while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 64) sample *= 2
+    val full = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+    val small = android.graphics.Bitmap.createScaledBitmap(full, 24, 24, true)
+    // Twelve hue buckets, each pixel weighted by how vivid it is; grey, black and white count for nothing.
+    val weight = FloatArray(12)
+    val sinSum = FloatArray(12)
+    val cosSum = FloatArray(12)
+    val hsv = FloatArray(3)
+    for (y in 0 until small.height) for (x in 0 until small.width) {
+        android.graphics.Color.colorToHSV(small.getPixel(x, y), hsv)
+        if (hsv[1] < 0.25f || hsv[2] < 0.2f) continue
+        val w = hsv[1] * hsv[2]
+        val b = (hsv[0] / 30f).toInt().coerceIn(0, 11)
+        val rad = Math.toRadians(hsv[0].toDouble())
+        weight[b] += w; sinSum[b] += (sin(rad) * w).toFloat(); cosSum[b] += (cos(rad) * w).toFloat()
+    }
+    val best = weight.indices.maxBy { weight[it] }
+    // Too little colour (under about a tenth of the cover, vividly): keep plum.
+    if (weight[best] < small.width * small.height * 0.06f) return null
+    val hue = ((Math.toDegrees(atan2(sinSum[best].toDouble(), cosSum[best].toDouble())) + 360) % 360).toFloat()
+    return Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.72f, 0.24f)))
 }
 
 /** Cover art, or a generated cover (stable per track) when there is none. */
@@ -139,8 +196,9 @@ fun Vinyl(
     modifier: Modifier = Modifier,
 ) {
     val angle = remember { Animatable(0f) }
+    val still = rememberReduceMotion()
     LaunchedEffect(spinning, reverse) {
-        if (!spinning) return@LaunchedEffect
+        if (!spinning || still) return@LaunchedEffect
         val dir = if (reverse) -1f else 1f
         val period = if (reverse) 600 else 1800
         while (true) {

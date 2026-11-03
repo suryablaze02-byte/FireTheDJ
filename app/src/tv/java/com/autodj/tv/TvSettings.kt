@@ -66,7 +66,7 @@ fun TvUpdateCard(state: UpdateState, modifier: Modifier) {
     TvCard(
         title, sub, modifier,
         selected = state is UpdateState.Available,
-        icon = { Box(Modifier.size(46.dp).background(Glass.Fire, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { com.autodj.ui.DownloadGlyph(Color.White, 24.dp) } },
+        icon = { Box(Modifier.size(46.dp).background(Glass.Fire, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { com.autodj.ui.DownloadGlyph(Glass.OnAccent, 24.dp) } },
     ) {
         when (state) {
             is UpdateState.Available -> Updates.install(context, state.release)

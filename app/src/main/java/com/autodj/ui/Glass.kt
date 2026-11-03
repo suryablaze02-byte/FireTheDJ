@@ -26,6 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.platform.LocalContext
+import android.provider.Settings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -35,6 +38,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,22 +50,27 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The frosted-glass look: translucent white panels with a bright top edge, over a softly lit
- * ground. The ground is already soft (blurred light or artwork), so the panels read as frosted
- * glass without a live backdrop blur, which keeps every frame cheap, on phones and on TVs.
+ * The frosted-glass look: translucent white panels with a bright top edge, floating over one
+ * solid ground colour, with no gradients. Panels have no live backdrop blur, which keeps every
+ * frame cheap, on phones and on TVs.
  */
 object Glass {
+    /** The ground everything floats on: a deep plum. */
+    val Ground = Color(0xFF1B1030)
     val Fill = Color.White.copy(alpha = 0.08f)
     val FillStrong = Color.White.copy(alpha = 0.14f)
     val FillSelected = Color.White.copy(alpha = 0.22f)
     /** Over a busy visualizer: darker, so text on it stays readable. */
     val FillDark = Color(0xFF140E12).copy(alpha = 0.55f)
     val Text = Color.White
-    val Muted = Color.White.copy(alpha = 0.74f)
-    val Ember = Color(0xFFFFB43A)
-    val EmberText = Color(0xFFFFC98A)
-    val Fire = Brush.horizontalGradient(listOf(Color(0xFFE8174A), Color(0xFFFF5A1F), Color(0xFFFFB43A)))
-    val FireSelected = Color(0xFFFF6A1F).copy(alpha = 0.32f)
+    val Muted = Color.White.copy(alpha = 0.78f)
+    /** The one accent: flat orange. Text on it is [OnAccent]. */
+    val Ember = Color(0xFFFF9F0A)
+    val EmberText = Color(0xFFFFB340)
+    val OnAccent = Color.Black
+    /** Main buttons: flat orange (black text on it reads at about 10:1). */
+    val Fire: Brush = SolidColor(Ember)
+    val FireSelected = Ember.copy(alpha = 0.18f)
 
     /** The edge: light catching the top of the glass, fading down its sides. */
     val Edge = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0.08f)))
@@ -70,20 +80,10 @@ object Glass {
 fun Modifier.glass(shape: Shape, fill: Color = Glass.Fill, edge: Brush = Glass.Edge, edgeWidth: Dp = 1.dp): Modifier =
     this.clip(shape).background(fill, shape).border(edgeWidth, edge, shape)
 
-/** Light behind the glass: soft pools of colour on near-black, like stage light through haze. */
+/** The ground behind the glass: one solid colour, plum unless a playing song lends its own. */
 @Composable
-fun AmbientLight(modifier: Modifier, a: Color = Color(0xFFFF5A1F), b: Color = Color(0xFFC2185B), c: Color = Color(0xFF5B2BD6)) {
-    Canvas(modifier) {
-        drawRect(Color(0xFF0B0A0F))
-        fun pool(color: Color, x: Float, y: Float, r: Float, alpha: Float) {
-            val center = Offset(size.width * x, size.height * y)
-            val radius = size.maxDimension * r
-            drawCircle(Brush.radialGradient(listOf(color.copy(alpha = alpha), Color.Transparent), center, radius), radius, center)
-        }
-        pool(a, 0.05f, 0.02f, 0.62f, 0.55f)
-        pool(b, 1.0f, 0.45f, 0.5f, 0.42f)
-        pool(c, 0.2f, 1.0f, 0.58f, 0.48f)
-    }
+fun AmbientLight(modifier: Modifier, color: Color = Glass.Ground) {
+    Box(modifier.background(color))
 }
 
 /**
@@ -177,13 +177,29 @@ fun GlassHeading(text: String, modifier: Modifier = Modifier) {
     Text(text.uppercase(), color = Glass.Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, modifier = modifier)
 }
 
+/** True when Android's "Remove animations" is on: records and discs then hold still. */
+@Composable
+fun rememberReduceMotion(): Boolean {
+    val context = LocalContext.current
+    return remember { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
+}
+
+/** Room the floating tab bar takes at the bottom: 64dp of bar and its 10dp margin, plus a little air. */
+val TAB_BAR_SPACE = 84.dp
+
+/** How much of the bottom the floating tab bar covers; scrolling content pads its end by this. */
+val LocalTabBarInset = compositionLocalOf { 0.dp }
+
 /** One tab of the floating glass tab bar; [tourKey] lets the guided tour point at it. */
 class GlassTab(val label: String, val tourKey: String? = null, val icon: @Composable (Color) -> Unit)
 
+/** Glass that content scrolls under: nearly solid, since nothing blurs what's behind it, so text under it never shows through. */
+val GlassOverContent = Color(0xFF2A1F3D).copy(alpha = 0.97f)
+
 /** The floating glass tab bar along the bottom. */
 @Composable
-fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().height(64.dp).glass(RoundedCornerShape(26.dp)).selectableGroup()) {
+fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier, fill: Color = GlassOverContent) {
+    Row(modifier.fillMaxWidth().height(64.dp).glass(CircleShape, fill).padding(5.dp).selectableGroup()) {
         tabs.forEachIndexed { i, t -> TabItem(t, i == selected) { onSelect(i) } }
     }
 }
@@ -200,7 +216,7 @@ fun GlassTabRail(
     modifier: Modifier = Modifier,
     footer: (@Composable () -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxHeight().width(76.dp).glass(RoundedCornerShape(26.dp))) {
+    Column(modifier.fillMaxHeight().width(76.dp).glass(RoundedCornerShape(38.dp))) {
         Column(Modifier.weight(1f).fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.Center) { RailTabs(tabs, selected, onSelect) }
         if (footer != null) {
             Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
@@ -219,13 +235,15 @@ private fun RailTabs(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Uni
         val on = i == selected
         val color = if (on) Glass.Ember else Glass.Muted
         Column(
-            Modifier.fillMaxWidth().height(72.dp).then(t.tourKey?.let { Modifier.tourTarget(it) } ?: Modifier)
+            Modifier.padding(horizontal = 6.dp, vertical = 2.dp).fillMaxWidth().height(72.dp).then(t.tourKey?.let { Modifier.tourTarget(it) } ?: Modifier)
+                .clip(RoundedCornerShape(20.dp)).background(if (on) Glass.FillStrong else Color.Transparent)
                 .selectable(on, role = Role.Tab) { onSelect(i) },
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { t.icon(color) }
-            Text(t.label, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+            Text(t.label, color = color, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
@@ -235,11 +253,12 @@ private fun RowScope.TabItem(tab: GlassTab, on: Boolean, onClick: () -> Unit) {
     val color = if (on) Glass.Ember else Glass.Muted
     Column(
         Modifier.weight(1f).fillMaxHeight().then(tab.tourKey?.let { Modifier.tourTarget(it) } ?: Modifier)
+            .clip(CircleShape).background(if (on) Glass.FillStrong else Color.Transparent)
             .selectable(on, role = Role.Tab, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { tab.icon(color) }
-        Text(tab.label, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+        Text(tab.label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
     }
 }

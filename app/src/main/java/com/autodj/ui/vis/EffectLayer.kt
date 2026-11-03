@@ -395,6 +395,12 @@ class EffectLayer {
             FxType.DARBUKA to Color(0xFF3DE0D0), FxType.CLAPS to Color(0xFF3DE0D0), FxType.MIZMAR to Color(0xFF8FF5EA),
         )
 
+        /** The colour the screen shouts [type] in; one without its own takes a warm white. */
+        fun calloutColor(type: FxType): Color = CALLOUT_COLOR[type] ?: Color(0xFFFFE1C2)
+
+        /** The loud hits (drums, horns, drops): their words burn with an orange glow. */
+        fun isHot(type: FxType) = type in HOT
+
         /** What the screen shouts when an effect kicks in. */
         fun label(type: FxType) = when (type) {
             FxType.HIGH_PASS -> "FILTER UP"

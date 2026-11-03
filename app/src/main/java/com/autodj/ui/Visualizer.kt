@@ -85,6 +85,7 @@ fun DjVisualizer(
     var labels by remember { mutableStateOf<List<Pair<String, Color>>>(emptyList()) }
     // The glass record's turn, in degrees: it turns while the set plays and stops when paused.
     val turn = remember { FloatArray(2) } // [angle, last frame time in s]
+    val still = rememberReduceMotion()
     LaunchedEffect(only) {
         while (true) {
             withFrameNanos { now ->
@@ -92,7 +93,7 @@ fun DjVisualizer(
                 scene.update(f?.let { v -> VisualFrame(v.decks.filter { only == null || it.incoming == only }, v.paused, v.cue) }, now)
                 if (scene.labels != labels) labels = scene.labels
                 val t = now / 1e9f
-                if (f != null && !f.paused && turn[1] > 0f) turn[0] = (turn[0] + (t - turn[1]) * RECORD_DEG_PER_S) % 360f
+                if (!still && f != null && !f.paused && turn[1] > 0f) turn[0] = (turn[0] + (t - turn[1]) * RECORD_DEG_PER_S) % 360f
                 turn[1] = t
                 tick = now
             }
@@ -142,7 +143,7 @@ private const val RECORD_DEG_PER_S = 60f
  * shows it turning, and the cover art as its centre label.
  */
 @Composable
-private fun GlassRecord(artworkPath: String?, seed: String, title: String) {
+internal fun GlassRecord(artworkPath: String?, seed: String, title: String) {
     GlassPlatter(Modifier.fillMaxSize()) {
         Artwork(artworkPath, seed, title, Modifier.align(Alignment.Center).fillMaxSize(0.56f).border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape), CircleShape)
         Box(Modifier.align(Alignment.Center).fillMaxSize(0.06f).background(Color(0xFF0F0A0E), CircleShape).border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape))
@@ -157,7 +158,7 @@ private fun FxTag(label: String, color: Color) {
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box(Modifier.size(6.dp).background(color, CircleShape))
-        Text(label, color = Dj.Text, fontSize = 11.sp, maxLines = 1)
+        Text(label, color = Dj.Text, fontSize = 12.sp, maxLines = 1)
     }
 }
 

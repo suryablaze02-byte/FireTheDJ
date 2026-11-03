@@ -18,7 +18,6 @@ import androidx.media3.common.util.UnstableApi
 import com.autodj.ui.AmbientLight
 import com.autodj.ui.DjViewModel
 import com.autodj.ui.MixingScreenLandscape
-import com.autodj.ui.NowPlayingBackdrop
 import com.autodj.ui.TvDeckButtons
 import com.autodj.ui.TwoDeckScreen
 
@@ -38,8 +37,7 @@ fun TvDecks(vm: DjViewModel, onHome: () -> Unit, onVisualizer: () -> Unit) {
     KeepScreenOn()
 
     Box(Modifier.fillMaxSize()) {
-        AmbientLight(Modifier.fillMaxSize())
-        NowPlayingBackdrop(state, artwork)
+        AmbientLight(Modifier.fillMaxSize(), com.autodj.ui.songGround(state.current?.uri?.let { artwork[it] }))
         // Inside the TV's overscan margin.
         Box(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 18.dp)) {
             if (effects) {
