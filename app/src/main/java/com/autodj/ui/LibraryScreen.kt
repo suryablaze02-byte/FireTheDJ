@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autodj.analysis.Genres
 import com.autodj.dj.MixMode
+import com.autodj.model.TrackInfo
 import com.autodj.remote.SpotifyProvider
 import kotlin.math.roundToInt
 
@@ -120,6 +121,7 @@ fun MixScreen(
 
     // Sideways, the choices and Start sit in a column on the left and the crates fill the right.
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val roomy = landscape && isRoomyLandscape()
     val header: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth().padding(top = if (landscape) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // The logo in a floating glass capsule.
@@ -132,13 +134,13 @@ fun MixScreen(
                 FireTheDjWordmark(18.sp)
             }
             Spacer(Modifier.weight(1f))
-            Box {
+            // Sideways, Settings and Cast live at the foot of the tab rail.
+            if (!landscape) Box {
                 GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", onClick = onSettings, modifier = Modifier.tourTarget("settings")) {
                     Icon(Icons.Filled.Settings, null, tint = Glass.Text, modifier = Modifier.size(22.dp))
                 }
                 if (update != null) Box(Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 7.dp).size(9.dp).background(Glass.Ember, CircleShape))
             }
-            // Sideways, cast lives at the bottom of the tab rail.
             if (!landscape) Box(Modifier.tourTarget("cast")) { CastButton(rememberCasting(), diameter = 44.dp, onClick = onCast) }
         }
         if (update != null && showBanner) UpdateBanner(update, onOpen = onSettings, onDismiss = onDismissUpdate, Modifier.padding(top = 12.dp))
@@ -177,11 +179,11 @@ fun MixScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 item(span = { GridItemSpan(columns) }) {
-                    CrateCard("All genres", "${songs(allCount)} · moves across genres", crate == ALL, allCount > 0) { onPickCrate(ALL) }
+                    CrateCard("All genres", "${songs(allCount)} · moves across genres", crate == ALL, allCount > 0, roomy) { onPickCrate(ALL) }
                 }
                 // Songs of unclear genre are never mixed, so they're a note rather than a crate.
                 items(crates.filter { it != Genres.UNCLASSIFIED }) { c ->
-                    CrateCard(c, songs(counts[c] ?: 0), crate == c, true) { onPickCrate(c) }
+                    CrateCard(c, songs(counts[c] ?: 0), crate == c, true, roomy) { onPickCrate(c) }
                 }
                 if (unclassified > 0) {
                     item(span = { GridItemSpan(columns) }) {
@@ -232,9 +234,14 @@ fun MixScreen(
     }
 
     if (landscape) {
-        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(Modifier.width(290.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+        // A big screen gets a wider left pane, with what the picked crate would make of a set.
+        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(if (roomy) 20.dp else 14.dp)) {
+            Column(Modifier.width(if (roomy) 400.dp else 290.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                 header()
+                if (roomy && mixable) {
+                    val tracks = ready.filter { if (crate == ALL) it.genreFamily != Genres.UNCLASSIFIED else it.genreFamily == crate }
+                    YourSet(if (crate == ALL) "All genres" else crate, tracks, mode, inSource, Modifier.padding(top = 18.dp))
+                }
                 Spacer(Modifier.weight(1f))
                 start(Modifier.padding(top = 12.dp, bottom = 12.dp))
             }
@@ -248,6 +255,51 @@ fun MixScreen(
             }
             start(Modifier.align(Alignment.BottomCenter).padding(bottom = LocalTabBarInset.current + 8.dp))
         }
+    }
+}
+
+/**
+ * On a big screen, beside the crates: what the picked crate would make of a set before it starts.
+ * Its songs, how long they run together, their tempo range, what the mode does, and the languages
+ * most of it is sung in.
+ */
+@Composable
+private fun YourSet(name: String, tracks: List<TrackInfo>, mode: MixMode, library: List<LibraryItem>, modifier: Modifier) {
+    val minutes = (tracks.sumOf { it.durationSec } / 60).roundToInt()
+    val length = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} m" else "$minutes min"
+    val bpms = tracks.map { it.bpm.roundToInt() }.filter { it > 0 }
+    val bpm = when {
+        bpms.isEmpty() -> "–"
+        bpms.min() == bpms.max() -> "${bpms.min()}"
+        else -> "${bpms.min()}–${bpms.max()}"
+    }
+    val uris = tracks.mapTo(HashSet()) { it.uri }
+    val languages = library.filter { it.uri in uris }.mapNotNull { it.language }
+        .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(2).map { it.key }
+    val how = when (mode) {
+        MixMode.SMOOTH -> "Smooth: long blends, bass swaps and tempo ramps, with no tricks inside songs."
+        MixMode.TRICKSTER -> "Trickster: a trick about every 30 seconds: drops, rolls, tape stops and key lifts."
+    }
+    val sung = when (languages.size) {
+        0 -> ""
+        1 -> " Mostly ${languages[0]}."
+        else -> " Mostly ${languages[0]} and ${languages[1]}."
+    }
+    Column(
+        modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp)).padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        GlassHeading("Your set")
+        Text(name, color = Glass.Text, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            listOf("${tracks.size}" to "songs", length to "of music", bpm to "BPM").forEach { (value, what) ->
+                Column(Modifier.weight(1f)) {
+                    Text(value, color = Glass.Text, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(what, color = Glass.Muted, fontSize = 13.sp)
+                }
+            }
+        }
+        Text(how + sung, color = Glass.Muted, fontSize = 15.sp, lineHeight = 21.sp)
     }
 }
 
@@ -284,12 +336,12 @@ private fun SourcePicker(total: Int, folders: List<MusicFolder>, picked: MusicFo
 
 /** A genre crate as a glass card; the picked one glows ember with a check. */
 @Composable
-private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boolean, roomy: Boolean = false, onClick: () -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Column(
-        Modifier.fillMaxWidth().heightIn(min = 84.dp)
+        Modifier.fillMaxWidth().heightIn(min = if (roomy) 124.dp else 84.dp)
             .glass(
                 shape,
                 if (selected) Glass.FireSelected else Glass.Fill,
@@ -302,13 +354,13 @@ private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boo
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(name, color = if (enabled) Glass.Text else Glass.Muted, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+            Text(name, color = if (enabled) Glass.Text else Glass.Muted, fontSize = if (roomy) 21.sp else 17.sp, fontWeight = FontWeight.Bold,
                 lineHeight = 21.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (selected) Box(Modifier.size(22.dp).background(Glass.Ember, CircleShape), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.Check, null, tint = Glass.OnAccent, modifier = Modifier.size(15.dp))
             }
         }
-        Text(sub, color = if (selected) Color.White.copy(alpha = 0.9f) else Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+        Text(sub, color = if (selected) Color.White.copy(alpha = 0.9f) else Glass.Muted, fontSize = if (roomy) 15.sp else 13.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
