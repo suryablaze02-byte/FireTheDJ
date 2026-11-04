@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import android.provider.Settings
 import androidx.compose.runtime.getValue
@@ -205,8 +206,20 @@ fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, mo
 }
 
 /**
- * The same tabs as a column down the side, for landscape where height is short, with [footer]
- * (buttons that apply to every tab) under a divider at the bottom.
+ * A big screen held sideways, like a tablet: wide enough and tall enough for the roomy layouts
+ * (a wider rail, bigger records, the mix plan and what's coming up). A phone on its side is
+ * wide but too short for them.
+ */
+@Composable
+fun isRoomyLandscape(): Boolean {
+    val c = LocalConfiguration.current
+    return c.screenWidthDp >= 840 && c.screenHeightDp >= 600
+}
+
+/**
+ * The same tabs as a column down the side, for landscape where height is short, spread evenly
+ * down it, with [footer] (Cast and the like) under a divider at the bottom. [roomy] widens it for
+ * a big screen.
  */
 @Composable
 fun GlassTabRail(
@@ -214,10 +227,11 @@ fun GlassTabRail(
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    roomy: Boolean = false,
     footer: (@Composable () -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxHeight().width(76.dp).glass(RoundedCornerShape(38.dp))) {
-        Column(Modifier.weight(1f).fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.Center) { RailTabs(tabs, selected, onSelect) }
+    Column(modifier.fillMaxHeight().width(if (roomy) 96.dp else 76.dp).glass(RoundedCornerShape(if (roomy) 48.dp else 38.dp))) {
+        Column(Modifier.weight(1f).fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.SpaceEvenly) { RailTabs(tabs, selected, onSelect) }
         if (footer != null) {
             Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
             Column(

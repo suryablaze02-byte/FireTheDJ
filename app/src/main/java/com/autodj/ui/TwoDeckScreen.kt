@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import com.autodj.dj.PhaseUi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -106,7 +110,11 @@ fun TwoDeckScreen(
     }
     val next = state.next
     val incoming = state.incoming
-    Row(Modifier.fillMaxSize().padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // A big screen gets bigger records and type; there and on a TV the middle column also shows
+    // the mix plan, the songs coming up and how far into the set it is.
+    val roomy = tv == null && isRoomyLandscape()
+    val coming = if (roomy) 3 else if (tv != null) 2 else 0
+    Row(Modifier.fillMaxSize().padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(if (roomy) 14.dp else 8.dp)) {
         // Deck A: the song carrying the set.
         DeckPanel(
             label = "DECK A", color = DeckA, labelColor = Glass.EmberText,
@@ -117,10 +125,13 @@ fun TwoDeckScreen(
             track = track, positionSec = deck.positionSec,
             markSec = state.exitSec, markLabel = state.exitSec?.let { "Mix out ${formatTime(it)}" },
             chip = state.trickNow?.let { "Now: $it" } ?: state.trickNext?.let { "$it in ${formatTime(state.secondsToTrick ?: 0.0)}" },
-            artworkPath = artwork[deck.uri], visual = visual,
+            artworkPath = artwork[deck.uri], visual = visual, roomy = roomy,
             modifier = Modifier.weight(1f),
         )
-        MixerPanel(state, visual, onToggle, onStop, onSkip, onOpenEffects, tv, Modifier.width(if (tv != null) 300.dp else 220.dp).fillMaxHeight())
+        MixerPanel(
+            state, visual, artwork, coming, onToggle, onStop, onSkip, onOpenEffects, tv,
+            Modifier.width(if (tv != null) 300.dp else if (roomy) 320.dp else 220.dp).fillMaxHeight(),
+        )
         // Deck B: the next song, cued, then mixing in.
         if (next != null) {
             val bLive = incoming != null
@@ -142,7 +153,7 @@ fun TwoDeckScreen(
                 track = next, positionSec = incoming?.positionSec ?: (state.entrySec ?: 0.0),
                 markSec = state.entrySec, markLabel = state.entrySec?.let { "In at ${formatTime(it)}" },
                 chip = null,
-                artworkPath = artwork[next.uri], visual = visual,
+                artworkPath = artwork[next.uri], visual = visual, roomy = roomy,
                 modifier = Modifier.weight(1f),
             )
         } else {
@@ -173,6 +184,7 @@ private fun DeckPanel(
     artworkPath: String?,
     visual: () -> VisualFrame?,
     modifier: Modifier,
+    roomy: Boolean = false,
 ) {
     Column(
         modifier.fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = if (live) 0.07f else 0.04f))
@@ -187,7 +199,7 @@ private fun DeckPanel(
         }
         Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically)) {
             // The record: live spectrum while the deck plays, the cover waiting while it's cued.
-            Box(Modifier.weight(1f, fill = false).size(160.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.weight(1f, fill = false).size(if (roomy) 340.dp else 160.dp), contentAlignment = Alignment.Center) {
                 if (live) {
                     DjVisualizer(visual, artworkPath, track.uri, title, Modifier.fillMaxSize(), only = only, showLabels = false, glass = true)
                 } else {
@@ -207,29 +219,30 @@ private fun DeckPanel(
                     }
                 }
             }
-            Text(title, color = Glass.Text, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-            Text(details, color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+            Text(title, color = Glass.Text, fontSize = if (roomy) 26.sp else 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+            Text(details, color = Glass.Muted, fontSize = if (roomy) 15.sp else 12.sp, maxLines = if (roomy) 2 else 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             if (chip != null) {
-                Text(chip, color = AText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(chip, color = AText, fontSize = if (roomy) 15.sp else 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x2EFF7A1A))
                         .border(1.dp, Color(0xFFFF7A1A), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 3.dp))
             }
         }
-        Overview(track, positionSec, markSec, color, live)
+        Overview(track, positionSec, markSec, color, live, if (roomy) 64.dp else 50.dp)
+        val small = if (roomy) 15.sp else 12.sp
         Row(Modifier.fillMaxWidth()) {
-            Text(formatTime(positionSec), color = Glass.Muted, fontSize = 12.sp)
-            Text(markLabel.orEmpty(), color = DeckBText, fontSize = 12.sp, modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+            Text(formatTime(positionSec), color = Glass.Muted, fontSize = small)
+            Text(markLabel.orEmpty(), color = DeckBText, fontSize = small, modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
                 textAlign = TextAlign.Center, maxLines = 1)
-            Text(formatTime(track.durationSec), color = Glass.Muted, fontSize = 12.sp)
+            Text(formatTime(track.durationSec), color = Glass.Muted, fontSize = small)
         }
     }
 }
 
 /** The whole song as bars of its energy: played part in the deck's colour, the mix point marked in blue. */
 @Composable
-private fun Overview(t: TrackInfo, positionSec: Double, markSec: Double?, color: Color, live: Boolean) {
+private fun Overview(t: TrackInfo, positionSec: Double, markSec: Double?, color: Color, live: Boolean, height: Dp = 50.dp) {
     val energy = t.barEnergy
-    Canvas(Modifier.fillMaxWidth().height(50.dp).semantics { contentDescription = "Waveform of ${t.title}, ${formatTime(positionSec)} of ${formatTime(t.durationSec)}" }) {
+    Canvas(Modifier.fillMaxWidth().height(height).semantics { contentDescription = "Waveform of ${t.title}, ${formatTime(positionSec)} of ${formatTime(t.durationSec)}" }) {
         if (energy.isEmpty() || t.durationSec <= 0) return@Canvas
         val n = energy.size
         val step = size.width / n
@@ -259,6 +272,9 @@ private fun Overview(t: TrackInfo, positionSec: Double, markSec: Double?, color:
 private fun MixerPanel(
     state: EngineState,
     visual: () -> VisualFrame?,
+    artwork: Map<String, String>,
+    /** How many songs to show coming up; 0 keeps the phone's plain column (no plan, no queue). */
+    coming: Int,
     onToggle: () -> Unit,
     onStop: () -> Unit,
     onSkip: () -> Unit,
@@ -286,7 +302,10 @@ private fun MixerPanel(
             // How the next song comes in: its tempo against the set, and where in it the mix starts.
             val how = listOfNotNull(state.tempoChange, state.entrySec?.let { "B from ${formatTime(it)}" }).joinToString(" · ")
             if (how.isNotEmpty()) Text(how, color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 1.dp))
-            if (live && state.mixBars <= 1) {
+            if (coming > 0 && state.phases.isNotEmpty()) {
+                // Room for the plan: its phases along a strip, the mix's progress marked once it's under way.
+                PhaseStrip(state.phases, if (live) state.mixProgress else null, Modifier.padding(top = 8.dp))
+            } else if (live && state.mixBars <= 1) {
                 // A cut: no bars to count, just the moment passing.
                 Bar(state.mixProgress, DeckA, Modifier.padding(top = 5.dp), 6.dp)
             } else if (live) {
@@ -306,10 +325,99 @@ private fun MixerPanel(
             val locked = state.incoming != null
             Crossfader(state.current?.gain ?: 1f, state.incoming?.gain ?: 0f, locked, if (locked) "Beats locked · ${abs(state.phaseErrMs).roundToInt()} ms" else "Beats lock on entry")
         }
-        // The panel keeps its size; on a short screen it's clipped so the controls below always show.
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) { EffectsPanel(visual, onOpenEffects, if (tv != null) 30.sp else 26.sp) }
+        if (coming > 0) {
+            // A big screen or a TV: the effect on one line, then what's coming and how far in the set is.
+            EffectsPanel(visual, onOpenEffects, if (tv != null) 26.sp else 30.sp, compact = true)
+            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ComingUp(state, artwork, coming)
+                    SetProgress(state, compact = tv != null)
+                }
+            }
+        } else {
+            // The panel keeps its size; on a short screen it's clipped so the controls below always show.
+            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) { EffectsPanel(visual, onOpenEffects, 26.sp) }
+        }
         Controls(state, onToggle, onStop, onSkip, tv)
     }
+}
+
+/**
+ * The mix's plan as a strip: each phase as long as its share of the mix, named under it, and a
+ * white line at [progress] (0..1) once the mix is under way.
+ */
+@Composable
+private fun PhaseStrip(phases: List<PhaseUi>, progress: Float?, modifier: Modifier) {
+    val colours = listOf(DeckB, DeckA, Color.White.copy(alpha = 0.4f), DeckBText, Glass.EmberText)
+    Box(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            phases.forEachIndexed { i, ph ->
+                Column(Modifier.weight((ph.end - ph.start).coerceAtLeast(0.04f)), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp)).background(colours[i % colours.size]))
+                    Text(ph.label, color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        if (progress != null) BoxWithConstraints(Modifier.fillMaxWidth().height(7.dp)) {
+            Box(Modifier.offset(x = maxWidth * progress.coerceIn(0f, 1f) - 1.dp).width(2.dp).fillMaxHeight().background(Color.White))
+        }
+    }
+}
+
+/** The next songs in the set, with their cover, BPM and key; the first is the one the next mix brings in. */
+@Composable
+private fun ComingUp(state: EngineState, artwork: Map<String, String>, count: Int) {
+    val ahead = state.set.drop(state.index + 1).take(count)
+    if (ahead.isEmpty()) return
+    Card {
+        Text("COMING UP", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        ahead.forEachIndexed { i, t ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Artwork(artwork[t.uri], t.uri, t.title, Modifier.size(38.dp), RoundedCornerShape(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(displayTitle(t.title), color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${t.bpm.roundToInt()} BPM · ${Camelot.code(t.keyPc, t.keyMinor)}", color = Glass.Muted, fontSize = 12.sp, maxLines = 1)
+                }
+                if (i == 0) Text("NEXT", color = DeckBText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/**
+ * How far into the set: which song of how many, the minutes played and about how long is left.
+ * [compact] fits it on one line, for the TV's short middle column.
+ */
+@Composable
+private fun SetProgress(state: EngineState, compact: Boolean = false) {
+    val total = state.set.size
+    if (total == 0) return
+    val now = state.current?.positionSec ?: 0.0
+    val played = state.set.take(state.index).sumOf { it.durationSec } + now
+    val left = (state.set.drop(state.index).sumOf { it.durationSec } - now).coerceAtLeast(0.0)
+    if (compact) {
+        Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Song ${state.index + 1} of $total", color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("${minutes(played)} in · ${minutes(left)} left", color = Glass.Muted, fontSize = 14.sp, maxLines = 1)
+            }
+        }
+        return
+    }
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Song ${state.index + 1} of $total", color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("${minutes(played)} in", color = Glass.Muted, fontSize = 12.sp)
+        }
+        Bar((played / (played + left).coerceAtLeast(1.0)).toFloat(), Color.White, Modifier.padding(top = 7.dp), 5.dp)
+        Text("About ${minutes(left)} left", color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+    }
+}
+
+/** "14 min" or "3 h 20 min". */
+private fun minutes(sec: Double): String {
+    val m = (sec / 60).roundToInt()
+    return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
 }
 
 /** What a TV adds to the decks' controls: Home on the left, the visualizer on the right (where the remote starts). */
@@ -318,70 +426,62 @@ class TvDeckButtons(val onHome: () -> Unit, val onVisualizer: () -> Unit) {
 }
 
 /**
- * The effects box, in the Club look's words: the newest effect playing shouted big in its own
- * colour (the loud hits glowing orange), the others still running as small dark tags under it.
- * Like the visualizer, it shows only what is playing right now. A tap opens the full effects view.
+ * The effects box, in the Club look's words: the effect playing now, newest first, shouted in its
+ * own colour (the loud hits glowing orange). Only that one: the others running alongside, and the
+ * ones still to come, aren't shown. [compact] puts it on one line, beside its label, for the
+ * roomier middle columns that have more to show. A tap opens the full effects view.
  */
 @Composable
-private fun EffectsPanel(visual: () -> VisualFrame?, onOpen: () -> Unit, wordSize: TextUnit) {
-    // Effects playing on either deck, newest first; it changes only when one starts or ends.
-    var playing by remember { mutableStateOf<List<FxType>>(emptyList()) }
+private fun EffectsPanel(visual: () -> VisualFrame?, onOpen: () -> Unit, wordSize: TextUnit, compact: Boolean = false) {
+    // The newest effect playing on either deck; it changes only when one starts or ends.
+    var playing by remember { mutableStateOf<FxType?>(null) }
     LaunchedEffect(visual) {
         val since = LinkedHashMap<FxType, Long>()
         while (true) withFrameNanos { now ->
             val types = visual()?.decks.orEmpty().flatMap { d -> d.fx.filter { it.progress < 0.97f }.map { it.type } }.toSet()
             since.keys.retainAll(types)
             types.forEach { since.getOrPut(it) { now } }
-            val order = since.entries.sortedByDescending { it.value }.map { it.key }
-            if (order != playing) playing = order
+            val newest = since.entries.maxByOrNull { it.value }?.key
+            if (newest != playing) playing = newest
         }
     }
     // On a TV the remote lands on it: then it's ringed in white.
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(16.dp)
-    Column(
-        Modifier.fillMaxWidth().height(EFFECTS_HEIGHT).clip(shape)
-            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen)
-            .semantics { contentDescription = if (playing.isEmpty()) "Effects" else "Effects now: " + playing.joinToString { EffectLayer.label(it) } }
-            .background(if (focused) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.42f))
-            .border(if (focused) 3.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.14f), shape)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Row(Modifier.fillMaxWidth()) {
-            Text("EFFECTS", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
-            Text("All ›", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        }
-        Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            val top = playing.firstOrNull()
-            if (top == null) {
-                Text("Effects light up here as they play", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
-            } else {
-                val color = EffectLayer.calloutColor(top)
-                Text(
-                    EffectLayer.label(top), color = color, fontSize = wordSize, fontWeight = FontWeight.Black, letterSpacing = 2.sp,
-                    maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
-                    style = TextStyle(shadow = Shadow(if (EffectLayer.isHot(top)) Color(0xFFFF6414) else color.copy(alpha = 0.6f), Offset.Zero, 28f)),
-                )
-                val rest = playing.drop(1)
-                if (rest.isNotEmpty()) Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    rest.take(2).forEach { FxPill(EffectLayer.label(it), EffectLayer.calloutColor(it)) }
-                    if (rest.size > 2) FxPill("+${rest.size - 2}", Glass.Muted)
-                }
-            }
+    val box = Modifier.fillMaxWidth().clip(shape)
+        .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen)
+        .semantics { contentDescription = playing?.let { "Effect now: " + EffectLayer.label(it) } ?: "Effects" }
+        .background(if (focused) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.42f))
+        .border(if (focused) 3.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.14f), shape)
+    val word: @Composable () -> Unit = {
+        val top = playing
+        if (top == null) {
+            Text(if (compact) "Lights up as they play" else "Effects light up here as they play", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+        } else {
+            val color = EffectLayer.calloutColor(top)
+            Text(
+                EffectLayer.label(top), color = color, fontSize = wordSize, fontWeight = FontWeight.Black, letterSpacing = 2.sp,
+                maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
+                style = TextStyle(shadow = Shadow(if (EffectLayer.isHot(top)) Color(0xFFFF6414) else color.copy(alpha = 0.6f), Offset.Zero, 28f)),
+            )
         }
     }
-}
-
-/** A long effect still running, as the Club look tags it: a small dark pill. */
-@Composable
-private fun FxPill(label: String, color: Color) {
-    Text(
-        label, color = color, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, maxLines = 1,
-        modifier = Modifier.clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
-            .border(1.dp, color.copy(alpha = 0.35f), CircleShape).padding(horizontal = 9.dp, vertical = 3.dp),
-    )
+    if (compact) {
+        Row(box.heightIn(min = 56.dp).padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("EFFECT", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { word() }
+            Text("›", color = Glass.Muted, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        }
+        return
+    }
+    Column(box.height(EFFECTS_HEIGHT).padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(Modifier.fillMaxWidth()) {
+            Text("EFFECT", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
+            Text("All ›", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { word() }
+    }
 }
 
 private val EFFECTS_HEIGHT = 100.dp

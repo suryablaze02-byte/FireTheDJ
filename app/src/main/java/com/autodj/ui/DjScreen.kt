@@ -7,6 +7,11 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -143,12 +148,22 @@ fun DjScreen(vm: DjViewModel) {
         val tabs = Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) }
         Row(Modifier.fillMaxSize().safeDrawingPadding()) {
             if (landscape) {
+                val roomy = isRoomyLandscape()
                 GlassTabRail(
                     tabs, tab.ordinal, onSelect = { tab = Tab.entries[it] }, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp),
+                    roomy = roomy,
                 ) {
+                    val button = if (roomy) 52.dp else 44.dp
                     // Cast, then the visualizer (while a set plays): from any tab.
-                    CastButton(rememberCasting(), diameter = 44.dp, onClick = { castDialog = true })
-                    if (state.running) GlassIconButton("Open the full-screen visualizer", onClick = { fullscreen = true }) { ExpandGlyph(Glass.Text) }
+                    CastButton(rememberCasting(), diameter = button, onClick = { castDialog = true })
+                    if (state.running) GlassIconButton("Open the full-screen visualizer", size = button, onClick = { fullscreen = true }) { ExpandGlyph(Glass.Text) }
+                    // Settings belongs with Mix: sideways it sits at the foot of the rail, on that tab only.
+                    if (tab == Tab.MIX) Box(Modifier.tourTarget("settings")) {
+                        GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", size = button, onClick = { settings = true }) {
+                            Icon(Icons.Filled.Settings, null, tint = Glass.Text, modifier = Modifier.size(22.dp))
+                        }
+                        if (update != null) Box(Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 7.dp).size(9.dp).background(Glass.Ember, CircleShape))
+                    }
                 }
             }
         // Upright, the tab bar floats over the bottom of the screen and the tab's content scrolls under it.
