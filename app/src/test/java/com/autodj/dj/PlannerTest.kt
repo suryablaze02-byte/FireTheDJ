@@ -141,7 +141,8 @@ class PlannerTest {
         val bar = a.barSec
         val span = t.handoverSec - t.exitSec
         val bAt = { aSec: Double -> t.bPlan.gain.at(t.entrySec + (aSec - t.exitSec)) }
-        assertTrue("B audible within 2 bars", bAt(t.exitSec + 2 * bar) > 0.25f)
+        // The new song arrives early: clearly heard within a quarter of the blend (2 bars of an 8-bar one).
+        assertTrue("B audible within a quarter of the blend", bAt(t.exitSec + maxOf(2 * bar, span / 4)) > 0.25f)
         assertTrue("A never drops at once", (1..15).all { i ->
             val x = t.exitSec + span * i / 16
             t.aPlan.gain.at(x) - t.aPlan.gain.at(x + span / 16) < 0.25f
@@ -168,8 +169,9 @@ class PlannerTest {
     @Test
     fun filterFadeIsLongWhenTemposMatch() {
         val a = track("a", 124.0)
+        // House: a filter fade runs the genre's 32 bars.
         val matched = TransitionPlanner.plan(a, 0, 10.0, track("b", 125.0), forced = Recipe.FILTER_FADE)
-        assertEquals(8 * a.barSec, matched.handoverSec - matched.exitSec, 1e-6)
+        assertEquals(32 * a.barSec, matched.handoverSec - matched.exitSec, 1e-6)
         val apart = TransitionPlanner.plan(a, 0, 10.0, track("c", 100.0), forced = Recipe.FILTER_FADE)
         assertEquals(4 * a.barSec, apart.handoverSec - apart.exitSec, 1e-6)
     }
@@ -828,5 +830,257 @@ class PlannerTest {
         assertEquals(0, b.musicStartBar)
         assertEquals(b.barCount, b.musicEndBar)
         assertEquals(TransitionPlanner.plan(a, 0, 10.0, b).exitBar, TransitionPlanner.plan(a, 0, 10.0, b.withNonMusic(emptyList())).exitBar)
+    }
+
+    private fun blendBars(t: Transition, a: TrackInfo) = Math.round((t.endSec - t.exitSec) / a.barSec).toInt()
+
+    @Test
+    fun houseBlendsRunThirtyTwoBarsWithTheBassSwapOnTheSixteen() {
+        val a = track("a", 124.0, bars = 200, outro = 184, drop = 104)
+        val b = track("b", 124.0, bars = 200, outro = 184, drop = 104)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND, styleFamily = Genres.HOUSE)
+        assertEquals(32, blendBars(t, a))
+        val swap = t.exitSec + 16 * a.barSec
+        assertEquals(1f, t.aPlan.bass.at(swap - a.beatSec), 1e-3f)
+        assertEquals(0f, t.aPlan.bass.at(swap + a.beatSec), 1e-3f)
+    }
+
+    @Test
+    fun technoBlendsForSixtyFourBarsWhenThereIsRoom() {
+        // Techno tracks come with long DJ intros and outros (32 bars here), made for long blends.
+        val a = track("a", 130.0, family = Genres.TECHNO, bars = 240, intro = 32, outro = 208, drop = 120)
+        val b = track("b", 130.0, family = Genres.TECHNO, bars = 240, intro = 32, outro = 208, drop = 120)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND, styleFamily = Genres.TECHNO)
+        assertEquals(64, blendBars(t, a))
+    }
+
+    @Test
+    fun drumAndBassBlendsStayShort() {
+        val a = track("a", 174.0, family = Genres.DNB, bars = 200, outro = 184, drop = 104)
+        val b = track("b", 174.0, family = Genres.DNB, bars = 200, outro = 184, drop = 104)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND, styleFamily = Genres.DNB)
+        assertTrue("${blendBars(t, a)} bars", blendBars(t, a) <= 8)
+    }
+
+    @Test
+    fun tricksterHalvesTheBlend() {
+        val a = track("a", 124.0, bars = 200, outro = 184, drop = 104)
+        val b = track("b", 124.0, bars = 200, outro = 184, drop = 104)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND, styleFamily = Genres.HOUSE, mode = MixMode.TRICKSTER)
+        assertEquals(16, blendBars(t, a))
+    }
+
+    @Test
+    fun aShortSongStillGetsABlendJustAShorterOne() {
+        // Barely two minutes: no room for 32 bars after enough of A has played.
+        val a = track("a", 124.0, bars = 64, intro = 8, outro = 56, drop = 32)
+        val b = track("b", 124.0, bars = 200, outro = 184, drop = 104)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND, styleFamily = Genres.HOUSE)
+        assertEquals(Recipe.BASS_SWAP_BLEND, t.recipe)
+        assertTrue("${blendBars(t, a)} bars", blendBars(t, a) in setOf(8, 16, 32))
+    }
+
+    @Test
+    fun blendsRideTheEqOneSongsMidsAtATimeAndTheOldHighsOut() {
+        val a = track("a", 124.0, bars = 200, outro = 184, drop = 104)
+        val b = track("b", 124.0, bars = 200, outro = 184, drop = 104)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND, styleFamily = Genres.HOUSE)
+        val swap = t.exitSec + 16 * a.barSec
+        val toB = { aSec: Double -> t.entrySec + (aSec - t.exitSec) }
+        fun cut(plan: com.autodj.dj.fx.FxPlan, type: FxType, at: Double) = plan.active(type, at)?.amount(at) ?: 0f
+        // First half: A's mids lead, B's are held back.
+        assertEquals(0f, cut(t.aPlan, FxType.MID_CUT, t.exitSec + 2 * a.barSec), 1e-3f)
+        assertTrue(cut(t.bPlan, FxType.MID_CUT, toB(t.exitSec + 2 * a.barSec)) > 0.4f)
+        // Second half: B's mids lead, A's step back and its highs ease out.
+        assertEquals(0f, cut(t.bPlan, FxType.MID_CUT, toB(swap + a.barSec)), 1e-3f)
+        assertTrue(cut(t.aPlan, FxType.MID_CUT, t.endSec - 2 * a.barSec) > 0.4f)
+        assertTrue(cut(t.aPlan, FxType.TREBLE_CUT, t.endSec - 2 * a.barSec) > 0.6f)
+        assertTrue(cut(t.aPlan, FxType.TREBLE_CUT, swap + a.barSec) < cut(t.aPlan, FxType.TREBLE_CUT, t.endSec - 2 * a.barSec))
+    }
+
+    @Test
+    fun setsOpenCalmPeakLateReleaseAndFinishBig() {
+        // Twenty house tracks from quiet (-16 dB) to loud (-6 dB), shuffled.
+        val tracks = (0 until 20).map { i -> track("t$i", 124.0, loudness = -16.0 + i * 0.5) }.shuffled(Random(7))
+        val shape = SetShape.forSet(tracks)!!
+        val set = mutableListOf(SetPlanner.opener(tracks, Random(3), shape))
+        val left = (tracks - set.first()).toMutableList()
+        while (left.isNotEmpty()) {
+            val next = SetPlanner.pickNext(set.last(), left, shape = shape, progress = set.size.toDouble() / (tracks.size - 1))!!
+            left.remove(next)
+            set += next
+        }
+        val e = set.map { shape.energyOf(it) }
+        fun avg(from: Double, to: Double) = e.subList((from * e.size).toInt(), (to * e.size).toInt()).average()
+        assertTrue("opener ${e[0]}", e[0] <= 0.34)
+        assertTrue("opening ${avg(0.0, 0.2)} < peak ${avg(0.5, 0.75)}", avg(0.0, 0.2) < avg(0.5, 0.75))
+        assertTrue("peak ${avg(0.5, 0.75)} > release ${avg(0.75, 0.9)}", avg(0.5, 0.75) > avg(0.75, 0.9))
+        assertTrue("finale ${avg(0.9, 1.0)} > release ${avg(0.75, 0.9)}", avg(0.9, 1.0) > avg(0.75, 0.9))
+    }
+
+    @Test
+    fun shortSetsHaveNoArc() {
+        assertNull(SetShape.forSet((0 until 5).map { track("t$it", 124.0) }))
+    }
+
+    @Test
+    fun aReverbWashLeavesOnlyTheTailAsBComesIn() {
+        val a = track("a", 124.0)
+        val t = TransitionPlanner.plan(a, 0, 10.0, track("b", 124.0), forced = Recipe.REVERB_WASH)
+        assertEquals(Recipe.REVERB_WASH, t.recipe)
+        val wash = t.aPlan.events.single { it.type == FxType.REVERB }
+        assertEquals(t.exitSec, wash.end, 1e-6)
+        assertTrue("a long wash", wash.p1 >= 5f)
+        // A's dry sound is gone a bar after the one; the wash rings on past it.
+        assertEquals(0f, t.aPlan.gain.at(t.exitSec + a.barSec), 1e-6f)
+        assertTrue(t.endSec > t.exitSec + 2 * a.barSec)
+    }
+
+    @Test
+    fun aSongThatFadesOutLoopsItsLastFullBarsForTheBlend() {
+        // Full energy until bar 72, then a long fade (energy 0.4) to the end.
+        val a = track("a", 124.0, bars = 112, outro = 72, drop = 40)
+        val t = TransitionPlanner.plan(a, 0, 10.0, track("b", 124.0), forced = Recipe.LOOP_MIX)
+        assertEquals(Recipe.LOOP_MIX, t.recipe)
+        val loop = t.aPlan.events.single { it.type == FxType.LOOP_ROLL }
+        assertEquals("4 bars at 124 BPM", 16f, loop.p1, 1e-6f)
+        assertEquals(t.exitSec, loop.start, 1e-6)
+        assertTrue("loops through the blend", loop.end >= t.handoverSec)
+    }
+
+    @Test
+    fun aSongThatDoesntFadeIsntLooped() {
+        val t = TransitionPlanner.plan(track("a", 124.0), 0, 10.0, track("b", 124.0), forced = Recipe.LOOP_MIX)
+        assertNotEquals(Recipe.LOOP_MIX, t.recipe)
+    }
+
+    @Test
+    fun anAcapellaMashupLaysBsVoiceOverAsInstrumental() {
+        val a = track("a", 124.0, keyConfidence = 0.8f)
+        val b = track("b", 124.0, vocalBars = 16 until 48, keyConfidence = 0.8f)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.ACAPELLA_MASHUP)
+        assertEquals(Recipe.ACAPELLA_MASHUP, t.recipe)
+        val mid = t.exitSec + 4 * a.barSec
+        val bMid = t.entrySec + 4 * a.barSec
+        // A plays on at full with its vocal gone; B is only its voice, under it.
+        assertEquals(1f, t.aPlan.gain.at(mid), 1e-6f)
+        assertEquals(1f, t.aPlan.active(FxType.VOCAL_CUT, mid)!!.amount(mid), 1e-6f)
+        assertEquals(1f, t.bPlan.active(FxType.VOCAL_ISOLATE, bMid)!!.amount(bMid), 1e-6f)
+        assertEquals(0.72f, t.bPlan.gain.at(bMid), 1e-3f)
+        // After the beat swap B is all there and A has gone.
+        assertNull(t.bPlan.active(FxType.VOCAL_ISOLATE, t.entrySec + 10 * a.barSec))
+        assertEquals(0f, t.aPlan.gain.at(t.exitSec + 16 * a.barSec), 1e-6f)
+    }
+
+    @Test
+    fun aPowerCutStopsDeadForABeatThenBDrops() {
+        val a = track("a", 124.0)
+        val t = TransitionPlanner.plan(a, 0, 10.0, track("b", 124.0, intro = 0), forced = Recipe.POWER_CUT)
+        assertEquals(Recipe.POWER_CUT, t.recipe)
+        assertEquals(0f, t.aPlan.gain.at(t.exitSec - a.beatSec / 2), 1e-6f)
+        assertNotNull(t.aPlan.active(FxType.MUTE, t.exitSec - a.beatSec / 2))
+        assertEquals(1f, t.bPlan.gain.at(t.entrySec + 0.05), 1e-6f)
+    }
+
+    @Test
+    fun tricksterHouseUsesTheEffectCombos() {
+        val combos = setOf("Riser swell", "Chaos", "Swirl", "Afro echo")
+        val t = track("a", 124.0, bars = 200, outro = 184, drop = 104)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.TRICKSTER)
+        val used = p.tricks.map { it.label.removeSuffix(" + hit") }.filter { it in combos }
+        assertTrue("tricks ${p.tricks.map { it.label }}", used.isNotEmpty())
+    }
+
+    @Test
+    fun anAfroEchoFadesTheTrackUnderItsEchoAndBringsItBackOnTheOne() {
+        val t = track("a", 120.0, family = Genres.LATIN, bars = 200, outro = 184, drop = 104)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 120.0, mode = MixMode.TRICKSTER)
+        val trick = p.tricks.firstOrNull { it.label.startsWith("Afro echo") }
+        assertNotNull("tricks ${p.tricks.map { it.label }}", trick)
+        val fade = p.events.single { it.type == FxType.MUTE && it.end == trick!!.endSec }
+        // Fading from full sound to silence across the bar, with the echo fed all the way.
+        assertEquals(0f, fade.amount(fade.start), 1e-6f)
+        assertEquals(1f, fade.amount(fade.end - 1e-6), 1e-3f)
+        assertNotNull(p.events.firstOrNull { it.type == FxType.ECHO && it.end == fade.end })
+    }
+
+    @Test
+    fun twoSingersInClashingKeysAreNeverBlended() {
+        // C major into F# minor, both singing from start to end: any overlap would sing out of tune.
+        val a = track("a", 124.0, keyConfidence = 0.8f, vocalBars = 0 until 112)
+        val b = track("b", 124.0, keyPc = 6, keyMinor = true, keyConfidence = 0.8f, vocalBars = 0 until 112)
+        assertFalse(TransitionPlanner.keyShift(a, 0, b).second)
+        repeat(10) { seed ->
+            val t = TransitionPlanner.plan(a, 0, 10.0, b, random = Random(seed))
+            assertTrue("seed $seed: ${t.recipe}", t.recipe.cut)
+        }
+    }
+
+    @Test
+    fun twoSingersInMatchingKeysCanStillBlend() {
+        val a = track("a", 124.0, keyConfidence = 0.8f, vocalBars = 0 until 112)
+        val b = track("b", 124.0, keyConfidence = 0.8f, vocalBars = 0 until 112)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.BASS_SWAP_BLEND)
+        assertEquals(Recipe.BASS_SWAP_BLEND, t.recipe)
+    }
+
+    @Test
+    fun theTimeOfNightShapesThePeak() {
+        assertEquals(0.9, SetShape.target(0.6, hour = 23), 1e-9)
+        assertTrue("8 pm: people still arriving", SetShape.target(0.6, hour = 20) <= 0.7)
+        assertTrue("4 am: winding down", SetShape.target(0.6, hour = 4) < SetShape.target(0.6, hour = 23))
+        // The opening is calm at any hour.
+        assertEquals(SetShape.target(0.1, hour = 23), SetShape.target(0.1, hour = 20), 1e-9)
+    }
+
+    @Test
+    fun threeSkipsInARowChangeTheSetsCourse() {
+        val current = track("now", 126.0, loudness = -7.0)
+        val sameAgain = (0 until 3).map { track("loud house $it", 126.0, loudness = -7.0 - it * 0.2) }
+        val other = track("calmer techno", 126.0, family = Genres.TECHNO, loudness = -11.0)
+        val remaining = sameAgain + other
+        // Normally more of the same follows best...
+        assertTrue(SetPlanner.pickNext(current, remaining)!!.title.startsWith("loud house"))
+        // ...but after three of those were skipped, the set goes somewhere else.
+        val skipped = (0 until 3).map { track("skipped $it", 126.0, loudness = -7.0) }
+        assertEquals("calmer techno", SetPlanner.pickNext(current, remaining, avoid = skipped)!!.title)
+        // Two skips aren't a verdict yet.
+        assertTrue(SetPlanner.pickNext(current, remaining, avoid = skipped.take(2))!!.title.startsWith("loud house"))
+    }
+
+    @Test
+    fun smoothSongsGetOneGentleSwellIntoTheirDrop() {
+        // A breakdown from bar 64, the drop landing on bar 80.
+        val t = track("a", 124.0)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.SMOOTH)
+        val swells = p.tricks.filter { it.label == "Riser swell" || it.label == "Filter swell" }
+        assertEquals("tricks ${p.tricks.map { it.label }}", 1, swells.size)
+        assertEquals(t.barTime(80), swells.single().endSec, 1e-6)
+        // Nothing that interrupts the song.
+        val interrupting = setOf(FxType.LOOP_ROLL, FxType.MUTE, FxType.BASS_KILL, FxType.BRAKE, FxType.BACKSPIN, FxType.PHASER)
+        assertTrue(p.events.none { it.type in interrupting })
+    }
+
+    @Test
+    fun smoothLeavesASungRunUpAlone() {
+        val t = track("a", 124.0, vocalBars = 70 until 90)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.SMOOTH)
+        assertTrue(p.tricks.none { it.label.endsWith("swell") })
+    }
+
+    @Test
+    fun aReverbWashIsASmoothMove() {
+        assertTrue(Recipe.REVERB_WASH.smooth)
+        assertFalse("a dead stop isn't smooth", Recipe.POWER_CUT.smooth)
+    }
+
+    @Test
+    fun theComingUpListKeepsTheBiggestSongForTheFinale() {
+        val tracks = (0 until 20).map { i -> track("t$i", 124.0, loudness = -16.0 + i * 0.5) }.shuffled(Random(7))
+        val shape = SetShape.forSet(tracks)!!
+        val opener = SetPlanner.opener(tracks, Random(3), shape)
+        val list = SetPlanner.upcoming(opener, tracks - opener, shape, atIndex = 0, setSize = tracks.size)
+        val biggest = tracks.maxBy { shape.energyOf(it) }
+        assertTrue("biggest at ${list.indexOf(biggest)} of ${list.size}", list.indexOf(biggest) >= list.size - 2)
     }
 }

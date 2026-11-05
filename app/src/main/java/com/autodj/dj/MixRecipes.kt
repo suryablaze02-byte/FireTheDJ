@@ -6,6 +6,7 @@ import com.autodj.dj.fx.FxEvent
 import com.autodj.dj.fx.FxPlan
 import com.autodj.dj.fx.FxType
 import com.autodj.dj.fx.Lane
+import com.autodj.dj.fx.LOOP_CAPTURE_SEC
 import com.autodj.dj.fx.Law
 import com.autodj.dj.fx.Ramp
 import com.autodj.model.TrackInfo
@@ -60,6 +61,26 @@ enum class Recipe(
 
     /** A sings a word and B answers with the same word (or a rhyme); planned from lyrics by [WordPlay]. */
     WORD_PLAY("Word play", cut = true, preBars = 0, tailBars = 1),
+
+    /**
+     * A soaks in a long reverb over its last bars until only the wash is left; B comes in under it.
+     * The music never stops, so a Smooth set plays it as one of its own.
+     */
+    REVERB_WASH("Reverb wash", cut = true, preBars = 2, tailBars = 4, smooth = true),
+
+    /** A's last full bars loop through the blend, so a song that fades out still gets a full overlap. */
+    LOOP_MIX("Loop mix", cut = false),
+
+    /** B's vocal alone sings over A's instrumental, then B's beat comes in under its own voice. */
+    ACAPELLA_MASHUP("A cappella mashup", cut = false),
+
+    /** A stops dead mid-phrase, a beat of silence, and B's drop lands on the one. */
+    POWER_CUT("Power cut", cut = true, preBars = 1, tailBars = 1),
+}
+
+/** The loop a [Recipe.LOOP_MIX] repeats: 4 bars when the deck can hold them, else 2. */
+object LoopMix {
+    fun bars(t: TrackInfo) = if (16 * t.beatSec <= LOOP_CAPTURE_SEC - 0.1) 4 else 2
 }
 
 /** The two ways AutoDJ can play a set. */
@@ -69,6 +90,32 @@ enum class MixMode(val label: String) {
 
     /** Trick-heavy: scratches, rolls, brakes, echo throws and DJ sound effects throughout. */
     TRICKSTER("Trickster"),
+}
+
+/**
+ * How long a genre's blends run, the way DJs of that music mix it: techno over 64 bars (a couple
+ * of minutes of patient EQ work), house and trance over 32 (so the bass swap, halfway, lands on
+ * the 16-bar line), pop and Latin over 16, drum & bass, dubstep, hip-hop and rock short and on the
+ * phrase. [options] are the lengths to try, longest first; the planner takes the one nearest
+ * [target] that both songs have room for.
+ */
+class BlendLength(val target: Int, val options: List<Int>) {
+    companion object {
+        fun of(family: String, mode: MixMode): BlendLength {
+            val (target, options) = when (family) {
+                Genres.TECHNO -> 64 to listOf(64, 32, 16)
+                Genres.HOUSE, Genres.TRANCE -> 32 to listOf(32, 16, 8)
+                Genres.DNB, Genres.BASS, Genres.HIPHOP, Genres.ROCK -> 8 to listOf(8, 4)
+                else -> 16 to listOf(16, 8)
+            }
+            // Trickster's tricks are the show, not the overlap: its blends run half as long.
+            if (mode == MixMode.TRICKSTER) {
+                val t = maxOf(8, target / 2)
+                return BlendLength(t, options.filter { it <= maxOf(16, t) })
+            }
+            return BlendLength(target, options)
+        }
+    }
 }
 
 /** A labelled stretch of the transition timeline, in A's track seconds. */
@@ -81,38 +128,41 @@ class Phase(val label: String, val startSec: Double, val endSec: Double)
 object DecisionEngine {
     private val byFamily: Map<String, Map<Recipe, Double>> = mapOf(
         Genres.HOUSE to mapOf(
-            Recipe.BASS_SWAP_BLEND to 3.0, Recipe.PHASER_BLEND to 2.2, Recipe.BREAKDOWN_SWAP to 2.0, Recipe.ECHO_OUT to 1.6,
-            Recipe.DROP_SWAP to 1.4, Recipe.FLANGER_BLEND to 1.2,
+            Recipe.BASS_SWAP_BLEND to 3.0, Recipe.PHASER_BLEND to 2.2, Recipe.BREAKDOWN_SWAP to 2.0, Recipe.LOOP_MIX to 2.0,
+            Recipe.REVERB_WASH to 1.8, Recipe.ECHO_OUT to 1.6, Recipe.DROP_SWAP to 1.4, Recipe.FLANGER_BLEND to 1.2,
         ),
         Genres.TECHNO to mapOf(
             Recipe.BASS_SWAP_BLEND to 2.6, Recipe.BREAKDOWN_SWAP to 2.4, Recipe.FLANGER_BLEND to 2.2, Recipe.GATE_BUILD to 2.2,
-            Recipe.ECHO_OUT to 1.4, Recipe.DROP_SWAP to 1.2,
+            Recipe.LOOP_MIX to 2.0, Recipe.ECHO_OUT to 1.4, Recipe.REVERB_WASH to 1.4, Recipe.DROP_SWAP to 1.2,
         ),
         Genres.TRANCE to mapOf(
             Recipe.GATE_BUILD to 2.6, Recipe.BREAKDOWN_SWAP to 2.4, Recipe.BASS_SWAP_BLEND to 2.2, Recipe.ECHO_OUT to 2.0,
-            Recipe.DROP_SWAP to 2.0, Recipe.FLANGER_BLEND to 1.2,
+            Recipe.REVERB_WASH to 2.0, Recipe.DROP_SWAP to 2.0, Recipe.FLANGER_BLEND to 1.2,
         ),
         Genres.DNB to mapOf(
-            Recipe.ECHO_OUT to 2.6, Recipe.DROP_SWAP to 2.4, Recipe.BACKSPIN_DROP to 2.2, Recipe.BASS_SWAP_BLEND to 1.6,
-            Recipe.HARD_CUT to 1.4, Recipe.GATE_BUILD to 1.2,
+            Recipe.ECHO_OUT to 2.6, Recipe.DROP_SWAP to 2.4, Recipe.BACKSPIN_DROP to 2.2, Recipe.POWER_CUT to 2.0,
+            Recipe.BASS_SWAP_BLEND to 1.6, Recipe.HARD_CUT to 1.4, Recipe.GATE_BUILD to 1.2,
         ),
         Genres.BASS to mapOf(
-            Recipe.DROP_SWAP to 2.8, Recipe.BACKSPIN_DROP to 2.6, Recipe.ECHO_OUT to 2.2, Recipe.GATE_BUILD to 1.8,
-            Recipe.HARD_CUT to 1.4, Recipe.SCRATCH_CUT to 1.2,
+            Recipe.DROP_SWAP to 2.8, Recipe.BACKSPIN_DROP to 2.6, Recipe.POWER_CUT to 2.2, Recipe.ECHO_OUT to 2.2,
+            Recipe.GATE_BUILD to 1.8, Recipe.HARD_CUT to 1.4, Recipe.SCRATCH_CUT to 1.2,
         ),
         Genres.HIPHOP to mapOf(
             Recipe.SCRATCH_CUT to 2.6, Recipe.HARD_CUT to 2.4, Recipe.BACKSPIN_DROP to 2.2, Recipe.BRAKE_STOP to 2.0,
-            Recipe.ECHO_OUT to 1.6, Recipe.LOFI_FADE to 1.6,
+            Recipe.POWER_CUT to 1.8, Recipe.ECHO_OUT to 1.6, Recipe.LOFI_FADE to 1.6,
         ),
         Genres.LATIN to mapOf(
-            Recipe.ECHO_OUT to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.HARD_CUT to 2.0, Recipe.BACKSPIN_DROP to 1.6,
-            Recipe.BRAKE_STOP to 1.4,
+            Recipe.ECHO_OUT to 2.2, Recipe.REVERB_WASH to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.HARD_CUT to 2.0,
+            Recipe.BACKSPIN_DROP to 1.6, Recipe.LOOP_MIX to 1.6, Recipe.BRAKE_STOP to 1.4, Recipe.POWER_CUT to 1.2,
         ),
         Genres.POP to mapOf(
             Recipe.ECHO_OUT to 2.2, Recipe.BASS_SWAP_BLEND to 2.0, Recipe.DROP_SWAP to 1.8, Recipe.HARD_CUT to 1.6,
-            Recipe.BACKSPIN_DROP to 1.4, Recipe.BRAKE_STOP to 1.4, Recipe.FILTER_FADE to 1.2,
+            Recipe.LOOP_MIX to 1.6, Recipe.BACKSPIN_DROP to 1.4, Recipe.BRAKE_STOP to 1.4, Recipe.FILTER_FADE to 1.2,
+            Recipe.REVERB_WASH to 1.2, Recipe.POWER_CUT to 1.2,
         ),
-        Genres.CHILL to mapOf(Recipe.PHASER_BLEND to 2.6, Recipe.LOFI_FADE to 2.2, Recipe.FILTER_FADE to 1.6, Recipe.BREAKDOWN_SWAP to 1.4),
+        Genres.CHILL to mapOf(
+            Recipe.PHASER_BLEND to 2.6, Recipe.LOFI_FADE to 2.2, Recipe.REVERB_WASH to 2.2, Recipe.FILTER_FADE to 1.6, Recipe.BREAKDOWN_SWAP to 1.4,
+        ),
         Genres.ROCK to mapOf(
             Recipe.ECHO_OUT to 2.2, Recipe.FILTER_FADE to 2.0, Recipe.HARD_CUT to 1.8, Recipe.BRAKE_STOP to 1.6,
             Recipe.BACKSPIN_DROP to 1.2,
@@ -130,7 +180,9 @@ object DecisionEngine {
     )
 
     /** Blends that need the beats locked for their whole length. */
-    private val needsBeatmatch = setOf(Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP, Recipe.BREAKDOWN_SWAP)
+    private val needsBeatmatch = setOf(
+        Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP, Recipe.BREAKDOWN_SWAP, Recipe.LOOP_MIX, Recipe.ACAPELLA_MASHUP,
+    )
 
     private val vocalGenres = setOf(Genres.POP, Genres.HOUSE, Genres.HIPHOP, Genres.LATIN)
 
@@ -188,6 +240,12 @@ object DecisionEngine {
             !beatmatched || !keysFit -> Double.NEGATIVE_INFINITY // two vocals must share tempo and key
             family in vocalGenres -> 3.0
             else -> 2.3
+        }
+        // The mashup is the vocal swap's bolder cousin: a little rarer, under the same rules.
+        base[Recipe.ACAPELLA_MASHUP] = when {
+            !beatmatched || !keysFit -> Double.NEGATIVE_INFINITY
+            family in vocalGenres -> 2.4
+            else -> 1.6
         }
         // Whether B has a drop to land on is checked by the planner when it picks B's entry.
         base[Recipe.BASS_DROP] = if (mode == MixMode.SMOOTH) 3.4 else 1.8
@@ -338,6 +396,10 @@ internal class RecipeBuilder(
         Recipe.FILTER_FADE -> filterFade(mixBars)
         Recipe.LOFI_FADE -> lofiFade(mixBars)
         Recipe.ECHO_OUT -> echoOut()
+        Recipe.REVERB_WASH -> reverbWash()
+        Recipe.LOOP_MIX -> loopMix(mixBars)
+        Recipe.ACAPELLA_MASHUP -> acapellaMashup()
+        Recipe.POWER_CUT -> powerCut()
         Recipe.GATE_BUILD -> gateBuild()
         Recipe.BACKSPIN_DROP -> backspin()
         Recipe.SCRATCH_CUT -> scratch()
@@ -365,16 +427,26 @@ internal class RecipeBuilder(
             Recipe.FLANGER_BLEND -> listOf(FxEvent(FxType.FLANGER, mid, end, 0f, 0.7f, p1 = 0.25f))
             else -> emptyList()
         }
+        // Three-band EQ, as a DJ rides it: one song's mids in front at a time (A's until the bass
+        // swap, then B's), and A's highs eased down after the swap to make room for B's.
+        val aEq = listOf(
+            FxEvent(FxType.MID_CUT, mid, end, 0f, BLEND_MID_CUT),
+            FxEvent(FxType.TREBLE_CUT, mid, end, 0f, BLEND_TREBLE_CUT),
+        )
         val aOut = aPlan(
             gain = aGain,
             bass = listOf(Ramp(mid - beat / 2, mid + beat / 2, 1f, 0f)),
-            events = aEvents,
+            events = aEvents + aEq,
         )
-        // Only B's lows are trimmed, and only at first, so its music is heard straight away.
+        // B's lows are trimmed only at first, so its music is heard straight away; its mids wait
+        // behind A's until the swap.
         val bIn = bPlan(
             gain = bGain,
             bass = listOf(Ramp(toB(mid - beat / 2), toB(mid + beat / 2), 0f, 1f)),
-            events = listOf(FxEvent(FxType.HIGH_PASS, toB(e), toB(e + (mid - e) / 2), 0.4f, 0f)),
+            events = listOf(
+                FxEvent(FxType.HIGH_PASS, toB(e), toB(e + (mid - e) / 2), 0.4f, 0f),
+                FxEvent(FxType.MID_CUT, toB(e), toB(mid), BLEND_MID_CUT, 0f),
+            ),
         )
         val outLabel = when (recipe) {
             Recipe.PHASER_BLEND -> "Phaser out"
@@ -455,6 +527,91 @@ internal class RecipeBuilder(
             aOut, bIn, p - 2 * bar, p + 4 * bar,
             listOf(Phase("Echo", p - 2 * bar, p - bar), Phase("Roll", p - bar, p), Phase("Crossfade · echo tail", p, p + bar)),
             handoverSec = p + bar,
+        )
+    }
+
+    /**
+     * A soaks in a long reverb that swells over its last two bars (its top end dulling a little), its
+     * dry sound gone on the one, so only the wash rings on while B comes in under it.
+     */
+    private fun reverbWash(): Built {
+        val p = exitSec
+        val aOut = aPlan(
+            gain = aOutAt(p),
+            bass = listOf(Ramp(p - bar, p - bar + beat, 1f, 0f)),
+            events = listOf(
+                FxEvent(FxType.REVERB, p - 2 * bar, p, 0.2f, 1f, p1 = WASH_SEC),
+                FxEvent(FxType.LOW_PASS, p - bar, p, 0f, 0.35f),
+            ),
+        )
+        val bIn = bDropIn(listOf(FxEvent(FxType.HIGH_PASS, entrySec, toB(p + 2 * bar), 0.5f, 0f)))
+        return Built(
+            aOut, bIn, p - 2 * bar, p + 4 * bar,
+            listOf(Phase("Reverb swells", p - 2 * bar, p), Phase("Wash · B in", p, p + 2 * bar)),
+            handoverSec = p + bar,
+        )
+    }
+
+    /**
+     * A's bars from the exit, looped ([LoopMix.bars]) for the whole blend, so a song that fades out
+     * still has a full groove for B to ride in over. Otherwise it is a bass-swap blend: the same
+     * crossfade, EQ and bass swap.
+     */
+    private fun loopMix(mixBars: Int): Built {
+        val base = blend(Recipe.BASS_SWAP_BLEND, mixBars)
+        val loop = FxEvent(FxType.LOOP_ROLL, exitSec, base.endSec, p1 = LoopMix.bars(a) * 4f)
+        return Built(
+            base.aPlan.withEvents(listOf(loop)), base.bPlan, base.startSec, base.endSec,
+            listOf(Phase("Loop · B in", exitSec, exitSec + mixBars / 2 * bar)) + base.phases.drop(1),
+            handoverSec = base.handoverSec,
+        )
+    }
+
+    /**
+     * B's vocal alone (its stems, or the centre of a stereo mix) sings over A's instrumental for 8
+     * bars: a live mashup. Both stay up, since A is only its music and B only its voice. Then B's
+     * own beat comes in under its singer, the basslines swap, and A eases out over 8 bars.
+     */
+    private fun acapellaMashup(): Built {
+        val e = exitSec
+        val swap = e + 8 * bar
+        val end = e + 16 * bar
+        val aOut = aPlan(
+            // Never both near full: A dips under B's voice as B's beat arrives, then fades out.
+            gain = listOf(Ramp(swap, swap + bar, 1f, MASHUP_VOICE), Ramp(swap + bar, end, MASHUP_VOICE, 0f, Law.CONSTANT_POWER)),
+            bass = listOf(Ramp(swap - beat / 2, swap + beat / 2, 1f, 0f)),
+            events = listOf(
+                FxEvent(FxType.VOCAL_CUT, e, e + bar, 0f, 1f),
+                FxEvent(FxType.VOCAL_CUT, e + bar, end, 1f, 1f),
+            ),
+        )
+        val bIn = bPlan(
+            gain = listOf(
+                Ramp(toB(e), toB(e + bar), 0f, MASHUP_VOICE, Law.CONSTANT_POWER),
+                // B rises past A only once A has dipped.
+                Ramp(toB(swap + bar), toB(swap + 2 * bar), MASHUP_VOICE, 1f),
+            ),
+            bass = listOf(Ramp(toB(swap - beat / 2), toB(swap + beat / 2), 0f, 1f)),
+            events = listOf(
+                FxEvent(FxType.VOCAL_ISOLATE, toB(e), toB(swap), 1f, 1f),
+                FxEvent(FxType.VOCAL_ISOLATE, toB(swap), toB(swap + bar), 1f, 0f),
+            ),
+        )
+        return Built(
+            aOut, bIn, e, end,
+            listOf(Phase("A cappella over A", e, swap), Phase("Beat swap", swap, swap + 2 * bar), Phase("A out", swap + 2 * bar, end)),
+        )
+    }
+
+    /** A stops dead a beat before the bar line, with no brake or effect: a beat of silence, then B's drop on the one. */
+    private fun powerCut(): Built {
+        val p = exitSec
+        val stop = p - beat
+        val aOut = aPlan(gain = aCutAt(stop), bass = emptyList(), events = listOf(FxEvent(FxType.MUTE, stop, p + GAP_HOLD_SEC)))
+        return Built(
+            aOut, bCutIn(), stop, p + bar,
+            listOf(Phase("Dead stop", stop, p), Phase("B's drop", p, p + bar)),
+            handoverSec = p,
         )
     }
 
@@ -693,6 +850,21 @@ internal class RecipeBuilder(
 
     private companion object {
         const val CUT_SEC = 0.012
+
+        /** In a blend, the mids of the song not in front sit this far down (1 = −18 dB): about −11 dB. */
+        const val BLEND_MID_CUT = 0.6f
+
+        /** And the outgoing song's highs ease down to this by the end (about −14 dB). */
+        const val BLEND_TREBLE_CUT = 0.8f
+
+        /** How long a reverb wash rings on, in seconds. */
+        const val WASH_SEC = 6.0f
+
+        /**
+         * B's voice alone over A's instrumental: a voice on its own carries over a band, and no mix
+         * may have both decks near full (above 0.75).
+         */
+        const val MASHUP_VOICE = 0.72f
 
         /** The gap before a cut holds until A has faded out, so no blip of A plays as B comes in. */
         const val GAP_HOLD_SEC = 2 * CUT_SEC

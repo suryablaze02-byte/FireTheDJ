@@ -12,6 +12,7 @@ import com.autodj.model.TrackInfo
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -174,9 +175,10 @@ object TransitionPlanner {
 
         // The best few styles first; if none of them fits anywhere, every style.
         val skip = exitAt?.let { Skip(it, nowSec) }
-        var options = search(ranked.take(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched, skip)
+        val lengths = BlendLength.of(family, mode)
+        var options = search(ranked.take(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched, lengths, keysFit, skip)
         if (options.isEmpty() && ranked.size > 5) {
-            options = search(ranked.drop(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched, skip)
+            options = search(ranked.drop(5), a, aEntryBar, b, entries, firstPhrase, steadyEntry, firstBar, lastBar, rampBars, beatmatched, lengths, keysFit, skip)
         }
         // Variety: any style nearly as good as the best is fair game, so sets don't repeat one move.
         val top = options.maxOfOrNull { it.score }
@@ -439,12 +441,13 @@ object TransitionPlanner {
         lastBar: Int,
         rampBars: Int,
         beatmatched: Boolean,
+        lengths: BlendLength,
+        keysFit: Boolean,
         skip: Skip? = null,
     ): List<Candidate> = recipes.mapNotNull { (recipe, recipeScore) ->
         var best: Candidate? = null
         run {
-            for (entry in entries) {
-                val mix = mixBarsFor(recipe, beatmatched, b, entry)
+            for (entry in entries) for (mix in mixOptions(recipe, beatmatched, b, entry, lengths)) {
                 val pre = if (recipe == Recipe.LOOP_RAMP) rampBars else recipe.preBars
                 val exits = when {
                     // A skip's bar, if the move's lead-in hasn't already passed and A lasts through it.
@@ -457,15 +460,30 @@ object TransitionPlanner {
                     else -> firstBar..lastBar - mix
                 }
                 for (exit in exits) {
-                    if (skip == null && !a.isPhraseStart(exit)) continue
+                    // A power cut stops A mid-phrase on purpose; every other move waits for a phrase.
+                    if (skip == null && recipe != Recipe.POWER_CUT && !a.isPhraseStart(exit)) continue
+                    // A loop mix is for a song that fades out: full bars to loop, then a thin tail
+                    // that a plain blend would only ride over.
+                    if (recipe == Recipe.LOOP_MIX) {
+                        val loop = LoopMix.bars(a)
+                        if (a.energyIn(exit, exit + loop) < LOOP_SOURCE_ENERGY || a.energyIn(exit + loop, exit + mix) >= LOOP_TAIL_ENERGY) continue
+                    }
                     // An overlap needs both tracks at their main tempo for its whole length,
                     // or the beat grids drift apart (a half-time intro, a tempo switch).
+                    var voices = 0.0
                     if (!recipe.cut && mix > 0) {
                         if (!a.steadyIn(a.barTime(exit), a.barTime(exit + mix))) continue
                         if (!b.steadyIn(b.barTime(entry), b.barTime(entry + mix))) continue
+                        // Two singers at once is where a key clash is heard at once: never in
+                        // clashing keys, and best avoided even in matching ones. (A vocal swap and
+                        // a mashup take one voice out themselves.)
+                        if (recipe !in VOICE_HANDLING && a.vocalIn(exit, exit + mix) >= SINGING && b.vocalIn(entry, entry + mix) >= SINGING) {
+                            if (!keysFit) continue
+                            voices = -BOTH_SINGING_COST
+                        }
                     }
                     val score = recipeScore + exitScore(a, aEntryBar, exit, recipe, mix, skipped = skip != null) +
-                        entryScore(b, entry, firstPhrase, steadyEntry, recipe, mix)
+                        entryScore(b, entry, firstPhrase, steadyEntry, recipe, mix) + lengthScore(recipe, mix, lengths) + voices
                     if (score > (best?.score ?: Double.NEGATIVE_INFINITY)) best = Candidate(recipe, entry, exit, mix, score)
                 }
             }
@@ -500,19 +518,38 @@ object TransitionPlanner {
     /** A skip: B must come in on A's bar [exitBar], planned at [nowSec]. */
     private class Skip(val exitBar: Int, val nowSec: Double)
 
-    private fun mixBarsFor(recipe: Recipe, beatmatched: Boolean, b: TrackInfo, entry: Int): Int = when {
-        recipe.cut -> 0
+    /** The overlap lengths to try for [recipe], in bars; a blend's come from its genre ([lengths]). */
+    private fun mixOptions(recipe: Recipe, beatmatched: Boolean, b: TrackInfo, entry: Int, lengths: BlendLength): List<Int> = when {
+        recipe.cut -> listOf(0)
         // Lead-in bars up to B's drop, plus the bar after it.
-        recipe == Recipe.BASS_DROP -> (b.introEndBar - entry).let { if (it == 8 || it == 16) it + 1 else 0 }
-        recipe == Recipe.VOCAL_SWAP -> 12
-        recipe == Recipe.BREAKDOWN_SWAP -> 8
-        // Different tempos can only overlap briefly; matched ones get a full 8-bar filter fade.
-        !beatmatched -> 4
-        recipe == Recipe.FILTER_FADE -> 8
-        recipe == Recipe.LOFI_FADE -> 8
-        quietBars(b, entry) >= 16 -> 12
-        else -> 8
+        recipe == Recipe.BASS_DROP -> listOf((b.introEndBar - entry).let { if (it == 8 || it == 16) it + 1 else 0 })
+        recipe == Recipe.VOCAL_SWAP -> listOf(12)
+        recipe == Recipe.ACAPELLA_MASHUP -> listOf(16)
+        recipe == Recipe.BREAKDOWN_SWAP -> listOf(8)
+        // Different tempos can only overlap briefly.
+        !beatmatched -> listOf(4)
+        recipe in GENRE_LENGTH_BLENDS || recipe == Recipe.LOOP_MIX -> lengths.options
+        quietBars(b, entry) >= 16 -> listOf(12)
+        else -> listOf(8)
     }
+
+    /** Blends whose length follows the genre ([BlendLength]). */
+    private val GENRE_LENGTH_BLENDS = setOf(Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.FILTER_FADE, Recipe.LOFI_FADE)
+
+    /** The genre's own blend length scores best; each halving or doubling away from it costs [LENGTH_WEIGHT]. */
+    private fun lengthScore(recipe: Recipe, mix: Int, lengths: BlendLength): Double =
+        if (recipe in GENRE_LENGTH_BLENDS && mix > 0) -LENGTH_WEIGHT * abs(ln(mix.toDouble() / lengths.target) / ln(2.0)) else 0.0
+
+    private const val LENGTH_WEIGHT = 0.6
+
+    /** Blends that deal with the two voices themselves. */
+    private val VOICE_HANDLING = setOf(Recipe.VOCAL_SWAP, Recipe.ACAPELLA_MASHUP)
+
+    /** Mean vocalness over an overlap that counts as singing through it. */
+    private const val SINGING = 0.45
+
+    /** Two voices over each other, even in tune, muddy the mix. */
+    private const val BOTH_SINGING_COST = 0.8
 
     /** Bars from [from] before the track gets loud. */
     private fun quietBars(t: TrackInfo, from: Int): Int {
@@ -529,13 +566,16 @@ object TransitionPlanner {
 
     /** [skipped]: the listener asked to leave, so how long A has played no longer counts. */
     private fun exitScore(a: TrackInfo, aEntryBar: Int, exit: Int, recipe: Recipe, mix: Int, skipped: Boolean = false): Double {
-        // When B takes over: the cut itself, or halfway through a blend.
+        // When B takes over: the cut itself, or halfway through a blend. A long genre blend (32 or
+        // 64 bars of house or techno) is the mix, not more of A: its overlap past 8 bars isn't
+        // counted as A playing on.
         val handover = when {
             recipe.cut -> exit
             recipe == Recipe.VOCAL_SWAP -> exit + 6
+            recipe == Recipe.ACAPELLA_MASHUP -> exit + 8
             recipe == Recipe.BASS_DROP -> exit + mix - 1
             recipe == Recipe.BREAKDOWN_SWAP -> exit + 2
-            else -> exit + mix / 2
+            else -> exit + min(mix / 2, 8)
         }
         val played = a.barTime(handover) - a.barTime(aEntryBar)
         val available = a.musicEndSec - a.barTime(aEntryBar)
@@ -582,12 +622,12 @@ object TransitionPlanner {
                 else -> Double.NEGATIVE_INFINITY
             }
         }
-        if (recipe == Recipe.VOCAL_SWAP) {
+        if (recipe == Recipe.VOCAL_SWAP || recipe == Recipe.ACAPELLA_MASHUP) {
             // A sung phrase landing on the other track's beat is the showpiece move when it's available.
             return if (b.vocalIn(entry, entry + 8) >= VOCAL) 1.8 - 0.2 * skipped else Double.NEGATIVE_INFINITY
         }
-        if (recipe == Recipe.DROP_SWAP) {
-            // B must come in at full swing: its drop replaces A's.
+        if (recipe == Recipe.DROP_SWAP || recipe == Recipe.POWER_CUT) {
+            // B must come in at full swing: its drop replaces A's (or breaks the silence).
             return if (b.energyIn(entry, entry + 4) >= 0.8) 1.0 - 0.3 * skipped else Double.NEGATIVE_INFINITY
         }
         if (recipe == Recipe.BREAKDOWN_SWAP) {
@@ -616,5 +656,10 @@ object TransitionPlanner {
     /** Cuts that hit hardest when B comes in at full energy. */
     private val DROP_RECIPES = setOf(
         Recipe.BACKSPIN_DROP, Recipe.LOOP_RAMP, Recipe.GATE_BUILD, Recipe.ECHO_OUT, Recipe.BRAKE_STOP, Recipe.DRUM_FILL_CUT,
+        Recipe.REVERB_WASH,
     )
+
+    /** A loop mix's loop must be full bars, and what it covers must be thinning out. */
+    private const val LOOP_SOURCE_ENERGY = 0.8
+    private const val LOOP_TAIL_ENERGY = 0.5
 }
