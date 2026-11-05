@@ -160,6 +160,12 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private val played = mutableListOf<TrackInfo>()
     private val remaining = mutableListOf<TrackInfo>()
     private var setSize = 0
+
+    /** The set's energy arc (calm opening, build, peak, release, finale); null for a set too short for one. */
+    private var shape: SetShape? = null
+
+    /** Songs skipped one after another, most recent last: three in a row change the set's course. */
+    private val skippedRun = mutableListOf<TrackInfo>()
     private var next: TrackInfo? = null
     /** Played + now + the order the rest would play in; recomputed only when the queue moves. */
     private var queue: List<TrackInfo> = emptyList()
@@ -243,8 +249,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val level = fx.spectrum.frameAt(pos, bands)
         val beats = (pos - t.downbeatSec) / t.beatSec
         val bar = floor(beats / 4).toInt()
-        // The a cappella marker only steers stems; the visualizers have nothing to show for it.
-        val active = plan.events.filter { it.isActive(pos) && it.type != FxType.STEM_ACAPELLA }.map {
+        // The a cappella marker only steers stems; the visualizers have nothing to show for it. A gap
+        // that fades the music (an Afro echo) isn't a blackout: the music plays on under its echo.
+        val active = plan.events.filter { it.isActive(pos) && it.type != FxType.STEM_ACAPELLA && !(it.type == FxType.MUTE && it.from < 1f) }.map {
             ActiveFx(it.type, it.amount(pos), ((pos - it.start) / (it.end - it.start)).toFloat().coerceIn(0f, 1f), it.p1)
         }
         return DeckVisual(
@@ -272,7 +279,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         styleFamily = crate.substringAfterLast(" · ").takeIf { it in Genres.families }
         this.mode = mode
         setSize = tracks.size
-        val opener = SetPlanner.opener(tracks)
+        shape = SetShape.forSet(tracks)
+        skippedRun.clear()
+        val opener = SetPlanner.opener(tracks, shape = shape)
         remaining.addAll(tracks - opener)
         main = 0
         mainEntryBar = opener.musicStartBar
@@ -435,7 +444,14 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         // 0. Decide what plays next as soon as a track starts, so the listener can see it; the
         //    transition itself is planned once the track's own tricks (a hook replay) are done.
         if (next == null && remaining.isNotEmpty()) {
-            next = SetPlanner.pickNext(ta, remaining, Random.Default, wordPlayLyrics)
+            // The next track plays this far through the set (the opener is the first of setSize).
+            val progress = (played.size + 1).toDouble() / maxOf(1, setSize - 1)
+            val avoid = skippedRun.takeIf { it.size >= SetPlanner.SKIPS_TO_CHANGE }.orEmpty().toList()
+            next = SetPlanner.pickNext(ta, remaining, Random.Default, wordPlayLyrics, shape, progress, java.time.LocalTime.now().hour, avoid)
+            if (avoid.isNotEmpty()) {
+                Log.i(TAG, "${avoid.size} skips in a row: changing course to \"${next?.title}\"")
+                skippedRun.clear()
+            }
             next?.let { nx ->
                 if (BuildConfig.FLAVOR == "phone") {
                     val mine = wordPlayLyrics(ta)
@@ -797,6 +813,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         lastLoggedBeat = -1
         Log.i(TAG, "done ${p.recipe.label}: \"${decks[main].track?.title}\" → \"${decks[1 - main].track?.title}\"")
         decks[main].track?.let { played += it }
+        // A song the listener skipped extends the run of skips; one played out ends it.
+        decks[main].track?.let { if (skipAsked > 0) skippedRun += it else skippedRun.clear() }
         decks[main].fadeOutThenUnload(scope)
         main = 1 - main
         next?.let { remaining.remove(it) }
@@ -831,13 +849,20 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         if (fresh.isEmpty()) return
         remaining.addAll(fresh)
         setSize += fresh.size
+        // The newcomers' energies are ranked against the rest of the set.
+        shape = SetShape.forSet(played + remaining + listOfNotNull(decks[main].track))
         decks[main].track?.let(::refreshQueue)
         publish()
     }
 
     private fun refreshQueue(current: TrackInfo) {
         val n = next
-        val ahead = if (n != null) listOf(n) + SetPlanner.upcoming(n, remaining - n) else SetPlanner.upcoming(current, remaining)
+        val hour = java.time.LocalTime.now().hour
+        val ahead = if (n != null) {
+            listOf(n) + SetPlanner.upcoming(n, remaining - n, shape, played.size + 1, setSize, hour)
+        } else {
+            SetPlanner.upcoming(current, remaining, shape, played.size, setSize, hour)
+        }
         queue = played + current + ahead
     }
 

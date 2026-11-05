@@ -47,6 +47,18 @@ class FxChainTest {
         ((fromSec * sr).toInt() until (toSec * sr).toInt()).maxOf { abs(x[it]) }
 
     @Test
+    fun aGapCanFadeTheMusicOut() {
+        // A gap ramping from 0 (full sound) to 1 (silence) over one second, as an Afro echo does.
+        val out = run(plan(listOf(FxEvent(FxType.MUTE, 1.0, 2.0, 0f, 1f))), sine(220.0, 3.0))
+        val full = rms(out, 0.5, 0.9)
+        assertEquals(1.0, rms(out, 1.0, 1.05) / full, 0.1)
+        assertEquals(0.5, rms(out, 1.47, 1.53) / full, 0.1)
+        assertTrue(rms(out, 1.95, 2.0) / full < 0.1)
+        // Back in full once the gap ends.
+        assertEquals(1.0, rms(out, 2.5, 2.9) / full, 0.05)
+    }
+
+    @Test
     fun constantPowerCrossfadeKeepsPower() {
         val out = Ramp(0.0, 1.0, 1f, 0f, Law.CONSTANT_POWER)
         val inn = Ramp(0.0, 1.0, 0f, 1f, Law.CONSTANT_POWER)

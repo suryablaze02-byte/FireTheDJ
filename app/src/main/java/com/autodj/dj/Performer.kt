@@ -106,6 +106,20 @@ object Performer {
         CLAPS("Claps", true),
         DARBUKA("Darbuka roll", true),
         MIZMAR("Mizmar", true),
+
+        // Effect combos: several effects at once, each one a recognisable DJ move.
+
+        /** Riser, phaser and reverb swelling together into the phrase: the classic build. */
+        RISER_SWELL("Riser swell", false),
+
+        /** Delay, phaser and a bit-crush piling up over a bar: a psychedelic breakdown. */
+        CHAOS("Chaos", false),
+
+        /** A roll tightening under a rising filter into a reverb wash. */
+        SWIRL("Swirl", false),
+
+        /** The track fades out under its own echo for a bar, then comes back on the one. */
+        AFRO_ECHO("Afro echo", false),
     }
 
     private val SOUTH_FILLS = listOf(
@@ -141,13 +155,16 @@ object Performer {
         Genres.HIPHOP to listOf(
             Fill.SCRATCH, Fill.ECHO_THROW, Fill.HORN, Fill.HALF_TIME, Fill.BRAKE, Fill.SCRATCH, Fill.GUNSHOT, Fill.SPINBACK, Fill.WHOOSH, Fill.ECHO_THROW, Fill.LASER,
         ),
-        Genres.HOUSE to listOf(Fill.ROLL, Fill.ECHO_THROW, Fill.MID_KILL, Fill.WHOOSH, Fill.HALF_TIME, Fill.CRASH, Fill.GATE, Fill.MUFFLE, Fill.ROLL, Fill.ECHO_THROW),
-        Genres.TECHNO to listOf(Fill.GATE, Fill.MID_KILL, Fill.ROLL, Fill.ECHO_THROW, Fill.MUFFLE, Fill.ROLL, Fill.GATE),
-        Genres.TRANCE to listOf(Fill.ROLL, Fill.WHOOSH, Fill.MUFFLE, Fill.CRASH, Fill.ECHO_THROW, Fill.GATE),
-        Genres.DNB to listOf(Fill.ROLL, Fill.HALF_TIME, Fill.ECHO_THROW, Fill.HORN, Fill.SPINBACK, Fill.LASER),
-        Genres.BASS to listOf(Fill.LASER, Fill.HALF_TIME, Fill.ROLL, Fill.GUNSHOT, Fill.SPINBACK, Fill.ECHO_THROW, Fill.HORN),
-        Genres.LATIN to listOf(Fill.HORN, Fill.ECHO_THROW, Fill.ROLL, Fill.MUFFLE, Fill.WHOOSH, Fill.SPINBACK),
-        Genres.POP to listOf(Fill.ROLL, Fill.ECHO_THROW, Fill.MUFFLE, Fill.WHOOSH, Fill.CRASH, Fill.GATE),
+        Genres.HOUSE to listOf(
+            Fill.ROLL, Fill.ECHO_THROW, Fill.MID_KILL, Fill.SWIRL, Fill.WHOOSH, Fill.HALF_TIME, Fill.CRASH, Fill.RISER_SWELL, Fill.GATE, Fill.MUFFLE,
+            Fill.ROLL, Fill.ECHO_THROW,
+        ),
+        Genres.TECHNO to listOf(Fill.GATE, Fill.MID_KILL, Fill.ROLL, Fill.CHAOS, Fill.ECHO_THROW, Fill.MUFFLE, Fill.SWIRL, Fill.ROLL, Fill.GATE),
+        Genres.TRANCE to listOf(Fill.ROLL, Fill.RISER_SWELL, Fill.WHOOSH, Fill.MUFFLE, Fill.SWIRL, Fill.CRASH, Fill.ECHO_THROW, Fill.GATE),
+        Genres.DNB to listOf(Fill.ROLL, Fill.HALF_TIME, Fill.CHAOS, Fill.ECHO_THROW, Fill.HORN, Fill.SPINBACK, Fill.LASER),
+        Genres.BASS to listOf(Fill.LASER, Fill.HALF_TIME, Fill.CHAOS, Fill.ROLL, Fill.GUNSHOT, Fill.SPINBACK, Fill.ECHO_THROW, Fill.HORN),
+        Genres.LATIN to listOf(Fill.HORN, Fill.AFRO_ECHO, Fill.ECHO_THROW, Fill.ROLL, Fill.RISER_SWELL, Fill.MUFFLE, Fill.WHOOSH, Fill.SPINBACK),
+        Genres.POP to listOf(Fill.ROLL, Fill.ECHO_THROW, Fill.MUFFLE, Fill.RISER_SWELL, Fill.WHOOSH, Fill.CRASH, Fill.GATE),
         Genres.CHILL to listOf(Fill.ECHO_THROW),
         Genres.ROCK to listOf(Fill.ECHO_THROW, Fill.CRASH, Fill.BRAKE),
     )
@@ -198,8 +215,15 @@ object Performer {
             tricks += Trick("Tempo push +${"%.1f".format((pushed / target - 1) * 100)}%", t.barTime(pushStart), t.barTime(pushStart + 32))
         }
 
-        // Smooth mode stops here: glide and tempo push only, nothing that interrupts the track.
-        if (!trickster) return Performance(events, Lane(speedRamps, startSpeed.toFloat()), null, tricks, target)
+        // Smooth mode: glide and tempo push, and one gentle swell into the song's main drop.
+        // Nothing that interrupts the track: no rolls, gaps or bass kills.
+        if (!trickster) {
+            smoothSwell(t, entryBar)?.let { (events1, trick) ->
+                events += events1
+                tricks += trick
+            }
+            return Performance(events, Lane(speedRamps, startSpeed.toFloat()), null, tricks, target)
+        }
 
         // Roll builds into drops: quiet run-up, then the energy lands on a phrase start, with a
         // siren or riser over the build and a horn and impact on the drop.
@@ -356,7 +380,7 @@ object Performer {
                 Fill.HORN, Fill.CRASH, Fill.REED, Fill.MIZMAR -> pe to pe + bar
                 Fill.GUNSHOT -> pe to pe + 2 * beat
                 Fill.WHOOSH -> pe - 2 * beat to pe
-                Fill.LASER -> pe - 2 * bar to pe
+                Fill.LASER, Fill.RISER_SWELL -> pe - 2 * bar to pe
                 Fill.DAPPU, Fill.MARFA, Fill.DHOL, Fill.TIMBALES, Fill.DARBUKA, Fill.CLAPS, Fill.WHISTLE -> pe - bar to pe + 3 * beat
                 else -> pe - bar to pe
             }
@@ -364,6 +388,35 @@ object Performer {
         }
         return Performance(events, Lane(speedRamps, startSpeed.toFloat()), replay, tricks.sortedBy { it.startSec }, target, keyLiftSec)
     }
+
+    /**
+     * Smooth's one flourish per song: two bars swelling into its main drop, either a soft riser
+     * with a little reverb or the filter opening onto the drop, never over singing. The playbook's
+     * effect combos, kept to what doesn't break a smooth set's flow.
+     */
+    private fun smoothSwell(t: TrackInfo, entryBar: Int): Pair<List<FxEvent>, Trick>? {
+        // After the intro (which plays during the mix in) has had its 8 bars of main section.
+        val d = (maxOf(entryBar + 16, t.introEndBar + 8) until t.outroStartBar - 8)
+            .firstOrNull { t.isPhraseStart(it) && t.energyIn(it - 4, it) < 0.65 && t.energyIn(it, it + 4) >= 0.85 && t.vocalIn(it - 2, it) < SWELL_VOICE }
+            ?: return null
+        val dSec = t.barTime(d)
+        val from = dSec - 2 * t.barSec
+        val level = SfxDressing.level(t, d, peak = 0.6f)
+        return if (Math.floorMod(t.uri.hashCode(), 2) == 0) {
+            listOf(
+                FxEvent(FxType.RISER, from, dSec, level * 0.3f, level * 0.7f),
+                FxEvent(FxType.REVERB, dSec - t.barSec, dSec, 0f, 0.35f, p1 = 2.0f),
+            ) to Trick("Riser swell", from, dSec)
+        } else {
+            listOf(
+                FxEvent(FxType.HIGH_PASS, from, dSec, 0f, 0.35f),
+                FxEvent(FxType.REVERB, dSec - t.barSec, dSec, 0f, 0.4f, p1 = 2.0f),
+            ) to Trick("Filter swell", from, dSec)
+        }
+    }
+
+    /** Singing over the run-up that leaves Smooth's swell out. */
+    private const val SWELL_VOICE = 0.45
 
     /**
      * The word to loop into the drop at [dSec]: sung in the two bars before it, at least a beat
@@ -453,5 +506,26 @@ object Performer {
         Fill.GUIRA -> listOf(FxEvent(FxType.GUIRA, pe - bar, pe, level * 0.6f, level * 0.8f, p1 = Drum.FILL))
         Fill.SHAKER -> listOf(FxEvent(FxType.SHAKER, pe - bar, pe, level * 0.6f, level * 0.8f, p1 = Drum.FILL))
         Fill.MIZMAR -> listOf(SfxDressing.mizmar(t, pe, pe + bar, level * 0.8f))
+        Fill.RISER_SWELL -> listOf(
+            FxEvent(FxType.RISER, pe - 2 * bar, pe, level * 0.4f, level * 0.9f),
+            FxEvent(FxType.PHASER, pe - 2 * bar, pe, 0f, 0.7f, p1 = 0.3f),
+            FxEvent(FxType.REVERB, pe - bar, pe, 0f, 0.6f, p1 = 2.5f),
+        )
+        Fill.CHAOS -> listOf(
+            FxEvent(FxType.ECHO, pe - bar, pe, 0.6f, 1f, p1 = 0.75f, p2 = 0.6f),
+            FxEvent(FxType.PHASER, pe - bar, pe, 0.4f, 0.9f, p1 = 0.5f),
+            FxEvent(FxType.LOFI, pe - bar, pe, 0f, 0.8f, p1 = 6f, p2 = 8f),
+        )
+        Fill.SWIRL -> listOf(
+            FxEvent(FxType.LOOP_ROLL, pe - bar, pe - bar / 2, p1 = 1f),
+            FxEvent(FxType.LOOP_ROLL, pe - bar / 2, pe, p1 = 0.5f),
+            FxEvent(FxType.HIGH_PASS, pe - bar, pe, 0f, 0.6f),
+            FxEvent(FxType.REVERB, pe - bar, pe, 0f, 0.7f, p1 = 3f),
+        )
+        // The echo is fed while the track fades away under it; on the one the track is back in full.
+        Fill.AFRO_ECHO -> listOf(
+            FxEvent(FxType.ECHO, pe - bar, pe, 0.7f, 1f, p1 = 0.75f, p2 = 0.6f),
+            FxEvent(FxType.MUTE, pe - bar, pe, 0f, 1f),
+        )
     }
 }

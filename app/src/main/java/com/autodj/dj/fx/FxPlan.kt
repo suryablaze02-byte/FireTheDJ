@@ -5,6 +5,9 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 
+/** How much audio a deck can capture for a loop: a loop mix's 4 bars at 104 BPM or faster. */
+const val LOOP_CAPTURE_SEC = 9.5
+
 /** Crossfade gain laws. */
 enum class Law {
     LINEAR,
@@ -68,7 +71,10 @@ enum class FxType(val label: String) {
     /** Turntable stop: the platter slows to a halt (pitch falls with it). */
     BRAKE("Brake"),
 
-    /** Silence: the music (and effects) drop out, the gap before a drop. Echo and reverb tails ring on. */
+    /**
+     * Silence: the music (and effects) drop out, the gap before a drop. Echo and reverb tails ring on.
+     * Its amount is how far down (1 = silent, the default), so a ramp fades the music out or back.
+     */
     MUTE("Gap"),
 
     /** More low end to lift a chorus or drop (amount × [FxEvent.p1] dB), the rest eased down to make room. */

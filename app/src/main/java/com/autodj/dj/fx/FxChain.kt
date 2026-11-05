@@ -63,7 +63,8 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
 
     // Loop roll / scratch capture.
     // A full bar even at 60 BPM, for Loop & ramp.
-    private val capFrames = (4.5 * sr).toInt()
+    // Long enough for a loop mix's 4 bars (and every shorter loop and scratch).
+    private val capFrames = (LOOP_CAPTURE_SEC * sr).toInt()
     private val capture = FloatArray(capFrames * channels)
     private var capMode: FxType? = null
     private var capPos = 0
@@ -387,7 +388,11 @@ class FxChain(val sampleRate: Int, private val channels: Int) {
             // Effects bus: ducked under each kick (sidechain) so they pump with the track instead of
             // sitting on top of it, and sent to a short reverb so they share the room with the music.
             if (mutes.isNotEmpty() || muteGain < 1f) {
-                val target = if (mutes.any { it.isActive(t) }) 0f else 1f
+                // A gap's amount: 1 (the default) is silence; a ramp fades the music down or back.
+                // (Per sample, in the audio thread: no new list.)
+                var down = 0f
+                for (m in mutes) if (m.isActive(t)) down = max(down, m.amount(t))
+                val target = 1f - down
                 muteGain += (target - muteGain) * muteCoef
             }
             val effect = if (sfxEvents.isEmpty()) 0f else {
