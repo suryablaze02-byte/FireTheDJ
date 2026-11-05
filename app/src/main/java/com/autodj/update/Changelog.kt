@@ -14,6 +14,26 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.8.0",
+            "FireTheDJ mixes like a club DJ: long blends by genre, a set that builds to a peak, new mixes and effects, and layouts for tablets.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Blends as long as the genre", "Techno blends over 64 bars, house and trance over 32 with the basslines swapping on the 16th, pop and Latin over 16, drum & bass, dubstep and hip-hop short and on the phrase. Trickster keeps them half as long."),
+                        Change("EQ in every blend", "Only one song's voice and melody lead at a time, and the old song's highs fade out once the basslines have swapped."),
+                        Change("A set with a shape", "It opens with one of your calmer songs, builds, peaks past the middle, gives the floor a breather, and ends on a big song kept back for the finale. Early evening gets a gentler peak; the small hours wind down."),
+                        Change("Skips change direction", "Skip three songs in a row and the set heads somewhere else: another genre or another energy."),
+                        Change("Four new mixes", "Reverb wash (the old song melts into a long reverb), loop mix (a song that fades out loops its last full bars so the blend still grooves), a cappella mashup (the new song's voice alone over the old one's music) and power cut (a dead stop, a beat of silence, then the drop)."),
+                        Change("Effect combos in Trickster", "Riser swell, Chaos, Swirl and Afro echo: several effects at once, each in the genres it belongs to, never over the singing."),
+                        Change("A swell in Smooth", "Each song gets one gentle riser or filter swell into its main drop, where nobody is singing. Nothing that stops the music."),
+                        Change("Voices in tune", "Two songs that are both singing are never blended in clashing keys."),
+                        Change("Landscape that adapts", "Sideways, the rail spreads Mix, Music and Now Playing evenly, and Settings sits at its foot on the Mix tab. On a tablet the layout grows: a wider Mix with a set summary and bigger crates, and Now Playing with bigger records, the mix plan, the songs coming up and how far into the set you are. The TV shows the same."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.7.1",
             "Apple Music playlists, and real covers on the Spotify and Apple Music cards.",
             listOf(
