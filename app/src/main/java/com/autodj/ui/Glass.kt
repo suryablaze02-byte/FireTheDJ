@@ -1,6 +1,17 @@
 package com.autodj.ui
 
 import androidx.compose.foundation.Canvas
+import android.content.Context
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,37 +62,119 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The frosted-glass look: translucent white panels with a bright top edge, floating over one
- * solid ground colour, with no gradients. Panels have no live backdrop blur, which keeps every
- * frame cheap, on phones and on TVs.
+ * The liquid-glass look: clear panels with a bright rim on their lit upper-left edge and a softer
+ * one opposite, floating over one solid ground: white in light mode, near-black in dark. Panels
+ * have no live backdrop blur, which keeps every frame cheap, on phones and on TVs.
+ *
+ * Colours follow [LocalGlassDark], so a screen in a song's deep colour (Now Playing, the decks)
+ * stays dark glass with white text even when the app is light.
  */
 object Glass {
-    /** The ground everything floats on: a deep plum. */
-    val Ground = Color(0xFF1B1030)
-    val Fill = Color.White.copy(alpha = 0.08f)
-    val FillStrong = Color.White.copy(alpha = 0.14f)
-    val FillSelected = Color.White.copy(alpha = 0.22f)
+    /** The ground everything floats on. */
+    val Ground: Color @Composable @ReadOnlyComposable get() = if (dark()) DarkGround else Color.White
+    val Fill: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.08f) else Ink.copy(alpha = 0.06f)
+    val FillStrong: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.14f) else Ink.copy(alpha = 0.09f)
+    val FillSelected: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.22f) else Color.White
     /** Over a busy visualizer: darker, so text on it stays readable. */
     val FillDark = Color(0xFF140E12).copy(alpha = 0.55f)
-    val Text = Color.White
-    val Muted = Color.White.copy(alpha = 0.78f)
+    val Text: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White else Ink
+    val Muted: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.78f) else Color(0xFF5E5E66)
     /** The one accent: flat orange. Text on it is [OnAccent]. */
     val Ember = Color(0xFFFF9F0A)
-    val EmberText = Color(0xFFFFB340)
+    /** Orange text: lighter on dark, a deeper burnt orange on white so it stays readable. */
+    val EmberText: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFFFFB340) else Color(0xFFB35C00)
     val OnAccent = Color.Black
+    /** Solid base for sheets and dialogs, so the screen behind never shows through the words. */
+    val Sheet: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF1C1C1F) else Color(0xFFF7F7FA)
     /** Main buttons: flat orange (black text on it reads at about 10:1). */
     val Fire: Brush = SolidColor(Ember)
     val FireSelected = Ember.copy(alpha = 0.18f)
 
-    /** The edge: light catching the top of the glass, fading down its sides. */
-    val Edge = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0.08f)))
+    /** The liquid rim: light catching the upper-left edge, faint along the sides, a softer glint bottom-right. */
+    val Edge: Brush @Composable @ReadOnlyComposable get() = if (dark()) DarkEdge else LightEdge
+
+    private val Ink = Color(0xFF1C1C1E)
+    private val DarkEdge = Brush.linearGradient(
+        0f to Color.White.copy(alpha = 0.50f), 0.35f to Color.White.copy(alpha = 0.10f),
+        0.7f to Color.White.copy(alpha = 0.06f), 1f to Color.White.copy(alpha = 0.24f),
+    )
+    private val LightEdge = Brush.linearGradient(
+        0f to Color.White, 0.4f to Ink.copy(alpha = 0.05f), 1f to Ink.copy(alpha = 0.10f),
+    )
+
+    @Composable @ReadOnlyComposable
+    private fun dark() = LocalGlassDark.current
 }
 
-/** A frosted panel: [fill] behind, a lit edge round [shape]. */
+/** The dark-mode ground, and the ground behind a song whose cover has no colour. */
+val DarkGround = Color(0xFF0B0B0D)
+
+/** True where the glass is dark: dark mode, or a screen in a song's deep colour. */
+val LocalGlassDark = staticCompositionLocalOf { true }
+
+/** Light or dark, as chosen in Settings and remembered across launches. Light unless changed. */
+object Appearance {
+    private const val PREFS = "appearance"
+    private const val KEY = "light"
+    var light by mutableStateOf(true)
+        private set
+
+    fun load(context: Context) {
+        light = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, true)
+    }
+
+    fun setLight(context: Context, on: Boolean) {
+        light = on
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply()
+    }
+}
+
+/** Shows [content] in the glass of [dark] (dark mode or a song's colour) or light. */
+@Composable
+fun GlassTheme(dark: Boolean, content: @Composable () -> Unit) {
+    CompositionLocalProvider(
+        LocalGlassDark provides dark,
+        LocalContentColor provides if (dark) Color.White else Color(0xFF1C1C1E),
+        content = content,
+    )
+}
+
+/** Shows [content] in dark glass whatever the setting: for screens in a song's colour or over a visualizer. */
+@Composable
+fun DarkGlass(content: @Composable () -> Unit) = GlassTheme(true, content)
+
+/** Matches the system bars' icons to the ground: dark icons over light, white ones over dark. */
+@Composable
+fun SystemBarIcons(darkGround: Boolean) {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    SideEffect {
+        val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+        // Clear bars, so the ground shows under them in either mode.
+        @Suppress("DEPRECATION")
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !darkGround
+            isAppearanceLightNavigationBars = !darkGround
+        }
+    }
+}
+
+/** A glass panel: [fill] behind, a liquid rim round [shape]. */
+@Composable
 fun Modifier.glass(shape: Shape, fill: Color = Glass.Fill, edge: Brush = Glass.Edge, edgeWidth: Dp = 1.dp): Modifier =
     this.clip(shape).background(fill, shape).border(edgeWidth, edge, shape)
 
-/** The ground behind the glass: one solid colour, plum unless a playing song lends its own. */
+/** Floating liquid glass (tab bar, rail, round buttons): a glass panel lifted off the ground by a soft shadow. */
+@Composable
+fun Modifier.floatingGlass(shape: Shape, fill: Color = Glass.Fill, elevation: Dp = 8.dp): Modifier {
+    val shadow = if (LocalGlassDark.current) Color.Black.copy(alpha = 0.5f) else Color(0xFF181428).copy(alpha = 0.22f)
+    return this.shadow(elevation, shape, clip = false, ambientColor = shadow, spotColor = shadow).glass(shape, fill)
+}
+
+/** The ground behind the glass: one solid colour, white or near-black unless a playing song lends its own. */
 @Composable
 fun AmbientLight(modifier: Modifier, color: Color = Glass.Ground) {
     Box(modifier.background(color))
@@ -126,7 +219,7 @@ fun GlassIconButton(
     icon: @Composable () -> Unit,
 ) {
     Box(
-        modifier.size(size).glass(CircleShape, fill)
+        modifier.size(size).floatingGlass(CircleShape, fill, elevation = 4.dp)
             .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { icon() }
@@ -158,7 +251,7 @@ fun <T> GlassSegmented(
             Box(
                 Modifier.weight(1f).height(height).clip(shape)
                     .background(if (on) selectedFill else Color.Transparent, shape)
-                    .border(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent, shape)
+                    .border(if (focused) 2.dp else 0.dp, if (focused) Glass.Text else Color.Transparent, shape)
                     .selectable(on, interactionSource = interaction, indication = null, role = Role.RadioButton) { onSelect(o) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -195,12 +288,13 @@ val LocalTabBarInset = compositionLocalOf { 0.dp }
 class GlassTab(val label: String, val tourKey: String? = null, val icon: @Composable (Color) -> Unit)
 
 /** Glass that content scrolls under: nearly solid, since nothing blurs what's behind it, so text under it never shows through. */
-val GlassOverContent = Color(0xFF2A1F3D).copy(alpha = 0.97f)
+val GlassOverContent: Color @Composable @ReadOnlyComposable get() =
+    if (LocalGlassDark.current) Color(0xFF1C1C1F).copy(alpha = 0.97f) else Color.White.copy(alpha = 0.96f)
 
 /** The floating glass tab bar along the bottom. */
 @Composable
 fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier, fill: Color = GlassOverContent) {
-    Row(modifier.fillMaxWidth().height(64.dp).glass(CircleShape, fill).padding(5.dp).selectableGroup()) {
+    Row(modifier.fillMaxWidth().height(64.dp).floatingGlass(CircleShape, fill).padding(5.dp).selectableGroup()) {
         tabs.forEachIndexed { i, t -> TabItem(t, i == selected) { onSelect(i) } }
     }
 }
@@ -230,10 +324,10 @@ fun GlassTabRail(
     roomy: Boolean = false,
     footer: (@Composable () -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxHeight().width(if (roomy) 96.dp else 76.dp).glass(RoundedCornerShape(if (roomy) 48.dp else 38.dp))) {
+    Column(modifier.fillMaxHeight().width(if (roomy) 96.dp else 76.dp).floatingGlass(RoundedCornerShape(if (roomy) 48.dp else 38.dp))) {
         Column(Modifier.weight(1f).fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.SpaceEvenly) { RailTabs(tabs, selected, onSelect) }
         if (footer != null) {
-            Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+            Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = 0.12f)))
             Column(
                 Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

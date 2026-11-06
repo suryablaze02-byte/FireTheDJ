@@ -169,7 +169,13 @@ object TourMemory {
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun TourOverlay(state: TourState, steps: List<TourStep>, tv: Boolean, onDone: () -> Unit) {
+fun TourOverlay(state: TourState, steps: List<TourStep>, tv: Boolean, onDone: () -> Unit) = DarkGlass {
+    TourOverlayBody(state, steps, tv, onDone)
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun TourOverlayBody(state: TourState, steps: List<TourStep>, tv: Boolean, onDone: () -> Unit) {
     var index by remember { mutableIntStateOf(0) }
     val step = steps[index]
     val last = index == steps.lastIndex

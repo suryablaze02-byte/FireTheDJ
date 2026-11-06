@@ -104,10 +104,13 @@ fun DjScreen(vm: DjViewModel) {
 
     if (fullscreen && state.running) {
         val style by vm.visualizerStyle.collectAsStateWithLifecycle()
-        FullscreenVisualizer(
-            state, artwork, vm.engine::visual, onToggle = vm::togglePause, onClose = { fullscreen = false },
-            style = style, onStyle = vm::setVisualizerStyle,
-        )
+        SystemBarIcons(darkGround = true)
+        DarkGlass {
+            FullscreenVisualizer(
+                state, artwork, vm.engine::visual, onToggle = vm::togglePause, onClose = { fullscreen = false },
+                style = style, onStyle = vm::setVisualizerStyle,
+            )
+        }
         return
     }
 
@@ -132,6 +135,7 @@ fun DjScreen(vm: DjViewModel) {
     var dismissed by remember { mutableStateOf(Updates.dismissed(context)) }
     LaunchedEffect(Unit) { Updates.autoCheck(context) }
     if (settings) {
+        SystemBarIcons(darkGround = LocalGlassDark.current)
         Box(Modifier.fillMaxSize()) {
             AmbientLight(Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().safeDrawingPadding()) { SettingsScreen(onBack = { settings = false }) }
@@ -139,10 +143,15 @@ fun DjScreen(vm: DjViewModel) {
         return
     }
 
+    // On Now Playing the ground is a deep shade of the playing song's cover, as Apple Music tints its
+    // player, so there the glass stays dark even in light mode.
+    val onSong = tab == Tab.NOW_PLAYING && state.running
+    val darkGround = onSong || LocalGlassDark.current
+    SystemBarIcons(darkGround)
+    GlassTheme(dark = darkGround) {
     Box(Modifier.fillMaxSize()) {
-        // The ground behind the glass: on Now Playing, a deep shade of the playing song's cover, as Apple Music tints its player.
         val songColour = songGround(state.current?.uri?.let { artwork[it] })
-        AmbientLight(Modifier.fillMaxSize(), if (tab == Tab.NOW_PLAYING && state.running) songColour else Glass.Ground)
+        AmbientLight(Modifier.fillMaxSize(), if (onSong) songColour else Glass.Ground)
         // Sideways, the tabs move to a rail down the left and Now Playing shows both decks.
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val tabs = Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) }
@@ -244,11 +253,12 @@ fun DjScreen(vm: DjViewModel) {
                     onSelect = { tab = Tab.entries[it] },
                     modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
                     // Nothing scrolls under it on Now Playing, so there it's clear glass over the song's colour.
-                    fill = if (tab == Tab.NOW_PLAYING) Glass.FillStrong else GlassOverContent,
+                    fill = if (onSong) Glass.FillStrong else GlassOverContent,
                 )
             }
         }
         }
+    }
     }
 }
 
