@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.9.2",
+            "Faster stem separation, with exactly the same stems.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Faster stem separation", "The stem model now stays loaded between songs instead of loading again for each one, so stems are ready 10–20% sooner and fewer mixes fall back to EQ. The stems are exactly the same as before. It lets the model go after 5 minutes without work."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.9.1",
             "Fixes for the TV's Settings.",
             listOf(
