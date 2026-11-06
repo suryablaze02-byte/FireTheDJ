@@ -14,6 +14,23 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.9.0",
+            "A light mode with liquid glass, a true dark mode, and FireTheDJ following your phone's light or dark setting.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Light mode", "A soft grey background with dark text, like Apple Music. Layouts, cards and the orange stay as they were."),
+                        Change("A true dark mode", "The dark background is now near-black instead of plum."),
+                        Change("Liquid glass", "Bars, buttons and the side rail are clear glass with a bright rim on the lit edge, and the floating ones lift off the background."),
+                        Change("Match phone", "Settings > Appearance follows your phone's light or dark setting by default. Turn Match phone off to pick Light mode yourself. The TV has the same switches."),
+                        Change("Now Playing keeps the song's colour", "In either mode, Now Playing and the decks stay in the playing song's colour, and the visualizers look exactly as before."),
+                        Change("A tidier side rail", "Sideways, the visualizer button shows on Now Playing only."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.8.0",
             "FireTheDJ mixes like a club DJ: long blends by genre, a set that builds to a peak, new mixes and effects, and layouts for tablets.",
             listOf(
