@@ -163,9 +163,9 @@ fun DjScreen(vm: DjViewModel) {
                     roomy = roomy,
                 ) {
                     val button = if (roomy) 52.dp else 44.dp
-                    // Cast, then the visualizer (while a set plays): from any tab.
+                    // Cast from any tab; the visualizer only on Now Playing, while a set plays.
                     CastButton(rememberCasting(), diameter = button, onClick = { castDialog = true })
-                    if (state.running) GlassIconButton("Open the full-screen visualizer", size = button, onClick = { fullscreen = true }) { ExpandGlyph(Glass.Text) }
+                    if (state.running && tab == Tab.NOW_PLAYING) GlassIconButton("Open the full-screen visualizer", size = button, onClick = { fullscreen = true }) { ExpandGlyph(Glass.Text) }
                     // Settings belongs with Mix: sideways it sits at the foot of the rail, on that tab only.
                     if (tab == Tab.MIX) Box(Modifier.tourTarget("settings")) {
                         GlassIconButton(if (update != null) "Settings, an update is available" else "Settings", size = button, onClick = { settings = true }) {

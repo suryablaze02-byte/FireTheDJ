@@ -1,5 +1,6 @@
 package com.autodj.tv
 
+import androidx.compose.ui.draw.alpha
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -143,13 +144,24 @@ fun TvSettingsDialog(
         ) { whatsNew = true }
         // Light or dark, a toggle: OK switches it, and the whole app changes straight away.
         val context = androidx.compose.ui.platform.LocalContext.current
+        val match = com.autodj.ui.Appearance.matchPhone
         val light = com.autodj.ui.Appearance.light
-        TvCard(
-            "Light mode: ${if (light) "on" else "off"}",
-            if (light) "A white background. Press OK for dark." else "A dark background. Press OK for white.",
-            Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth(),
-            selected = light,
-        ) { com.autodj.ui.Appearance.setLight(context, !light) }
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
+            TvCard(
+                "Match TV: ${if (match) "on" else "off"}",
+                if (match) "Light or dark, as the TV is set" else "Press OK to follow the TV",
+                Modifier.width(260.dp), selected = match,
+            ) { com.autodj.ui.Appearance.setMatchPhone(context, !match) }
+            TvCard(
+                "Light mode: ${if (light) "on" else "off"}",
+                when {
+                    match -> "Follows the TV now"
+                    light -> "Soft grey. Press OK for dark."
+                    else -> "Dark. Press OK for light."
+                },
+                Modifier.width(260.dp).alpha(if (match) 0.5f else 1f), selected = light && !match,
+            ) { if (!match) com.autodj.ui.Appearance.setLight(context, !light) }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
             TvCard("Support FireTheDJ", "Chip in on Ko-fi or UPI", Modifier.width(260.dp), onClick = onSupport)
             TvCard(

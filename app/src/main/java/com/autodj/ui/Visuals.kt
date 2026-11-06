@@ -65,7 +65,7 @@ private val FULL_SONG = Regex("""\s+full\s+songs?\b.*$|\s+song\s+with\s*$""", Re
 
 /** The club palette, on the same plum ground and orange accent as the glass. */
 object Dj {
-    val Bg: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) DarkGround else Color.White
+    val Bg: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) DarkGround else LightGround
     val Surface: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF1C1C1F) else Color(0xFFF2F2F6)
     val Border: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF2E2E33) else Color(0xFFE2E2E8)
     val Divider: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF1A1A1D) else Color(0xFFECECF0)

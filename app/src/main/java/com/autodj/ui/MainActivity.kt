@@ -41,12 +41,13 @@ class MainActivity : ComponentActivity() {
         Appearance.load(this)
         setContent {
             val accent = Color(0xFF7C5CFF)
-            val colors = if (!Appearance.light) {
+            val light = Appearance.isLight()
+            val colors = if (!light) {
                 darkColorScheme(primary = accent, secondary = Color(0xFF26D9C4))
             } else {
                 lightColorScheme(primary = accent, secondary = Color(0xFF0E9E8E))
             }
-            MaterialTheme(colorScheme = colors) { GlassTheme(dark = !Appearance.light) {
+            MaterialTheme(colorScheme = colors) { GlassTheme(dark = !light) {
                 // The splash shows once per launch, not again when the activity is recreated.
                 var splash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
                 // The guided tour, once ever, right after the first splash; after an update, a short
