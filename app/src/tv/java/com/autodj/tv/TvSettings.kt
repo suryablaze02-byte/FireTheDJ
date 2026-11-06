@@ -1,6 +1,7 @@
 package com.autodj.tv
 
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -133,20 +134,23 @@ fun TvSettingsDialog(
     onDismiss: () -> Unit,
 ) {
     var whatsNew by remember { mutableStateOf(false) }
+    // As on the phone: opening Settings checks, so the card never sits on "Checking…" with nothing running.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (state == UpdateState.Idle) Updates.check(context) }
     if (whatsNew) TvWhatsNewDialog(onDismiss = { whatsNew = false })
     TvGlassDialog(onDismiss = onDismiss, width = 640.dp) { first ->
         Text("Settings", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
-        TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 12.dp).fillMaxWidth().focusRequester(first))
+        TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 8.dp).fillMaxWidth().focusRequester(first))
         val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
         TvCard(
             "What's new in ${current.version}", current.summary,
-            Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth(),
+            Modifier.padding(horizontal = TV_EDGE, vertical = 4.dp).fillMaxWidth(), subtitleLines = 1,
         ) { whatsNew = true }
         // Light or dark, a toggle: OK switches it, and the whole app changes straight away.
-        val context = androidx.compose.ui.platform.LocalContext.current
         val match = com.autodj.ui.Appearance.matchPhone
-        val light = com.autodj.ui.Appearance.light
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
+        // What the screen shows now: while following the TV, the TV's setting, not the saved choice.
+        val light = com.autodj.ui.Appearance.isLight()
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 4.dp)) {
             TvCard(
                 "Match TV: ${if (match) "on" else "off"}",
                 if (match) "Light or dark, as the TV is set" else "Press OK to follow the TV",
@@ -159,10 +163,10 @@ fun TvSettingsDialog(
                     light -> "Soft grey. Press OK for dark."
                     else -> "Dark. Press OK for light."
                 },
-                Modifier.width(260.dp).alpha(if (match) 0.5f else 1f), selected = light && !match,
+                Modifier.width(260.dp).graphicsLayer(alpha = if (match) 0.5f else 1f, compositingStrategy = CompositingStrategy.ModulateAlpha), selected = light && !match,
             ) { if (!match) com.autodj.ui.Appearance.setLight(context, !light) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 4.dp)) {
             TvCard("Support FireTheDJ", "Chip in on Ko-fi or UPI", Modifier.width(260.dp), onClick = onSupport)
             TvCard(
                 "Clear library",
@@ -170,7 +174,7 @@ fun TvSettingsDialog(
                 Modifier.width(260.dp), titleColor = com.autodj.ui.Dj.Warn, onClick = onClear,
             )
         }
-        Row(Modifier.padding(start = TV_EDGE, top = 8.dp, end = TV_EDGE), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = TV_EDGE, top = 4.dp, end = TV_EDGE), verticalAlignment = Alignment.CenterVertically) {
             TvCard("Done", null, Modifier.width(140.dp), onClick = onDismiss)
             Text("FireTheDJ TV ${Updates.current}", color = Glass.Muted, fontSize = 14.sp, modifier = Modifier.padding(start = 20.dp))
         }

@@ -250,7 +250,9 @@ fun TvGlassDialog(onDismiss: () -> Unit, width: Dp = 620.dp, content: @Composabl
     val first = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.width(width).background(Glass.Sheet, RoundedCornerShape(30.dp)).glass(RoundedCornerShape(30.dp), Glass.Fill).padding(28.dp),
+            Modifier.width(width).background(Glass.Sheet, RoundedCornerShape(30.dp)).glass(RoundedCornerShape(30.dp), Glass.Fill)
+                // Scrolls rather than squashing the last row when a dialog is taller than the TV screen.
+                .verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 20.dp),
         ) { content(first) }
     }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }

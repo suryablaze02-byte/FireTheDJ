@@ -14,6 +14,20 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "1.9.1",
+            "Fixes for the TV's Settings.",
+            listOf(
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("TV Settings fits the screen", "The Settings window no longer runs off the top and bottom of the TV, and the Done button shows again."),
+                        Change("Light mode shows what's on screen", "While following the TV, the Light mode card now says on or off to match the TV's setting."),
+                        Change("TV update check", "Opening Settings on the TV checks for updates instead of staying on \"Checking for updates…\"."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.9.0",
             "A light mode with liquid glass, a true dark mode, and FireTheDJ following your phone's light or dark setting.",
             listOf(
