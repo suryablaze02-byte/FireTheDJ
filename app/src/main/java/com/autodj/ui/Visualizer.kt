@@ -153,12 +153,12 @@ internal fun GlassRecord(artworkPath: String?, seed: String, title: String) {
 @Composable
 private fun FxTag(label: String, color: Color) {
     Row(
-        Modifier.background(Dj.Bg.copy(alpha = 0.8f), RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
+        Modifier.background(VisInk.Bg.copy(alpha = 0.8f), RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box(Modifier.size(6.dp).background(color, CircleShape))
-        Text(label, color = Dj.Text, fontSize = 12.sp, maxLines = 1)
+        Text(label, color = VisInk.Text, fontSize = 12.sp, maxLines = 1)
     }
 }
 
@@ -393,7 +393,7 @@ private class Scene {
 
         // Beat and phrase ring.
         val ring = outer
-        drawCircle(Dj.Border, radius = ring, center = c, style = Stroke(1.5f.dp.toPx()))
+        drawCircle(VisInk.Border, radius = ring, center = c, style = Stroke(1.5f.dp.toPx()))
         val phrase = (barInPhrase + frac(beat / 4f)) / 8f
         drawArc(
             Dj.Accent.copy(alpha = 0.75f), startAngle = -90f, sweepAngle = 360f * phrase, useCenter = false,
@@ -406,7 +406,7 @@ private class Scene {
             val p = c + Offset(sin(a), -cos(a)) * ring
             val on = i == beatInBar
             val r = if (on) 5.dp.toPx() * (1.3f - 0.3f * beatFrac) else 3.dp.toPx()
-            drawCircle(if (on) Dj.Text else Dj.Muted.copy(alpha = 0.6f), radius = r, center = p)
+            drawCircle(if (on) VisInk.Text else VisInk.Muted.copy(alpha = 0.6f), radius = r, center = p)
         }
         // Loop roll: the looped slice of the bar lit on the ring.
         if (roll != null) {
@@ -473,4 +473,13 @@ private class Scene {
         private val PHASE_A = Color(0xFFFF4FD8)
         private val PHASE_B = Color(0xFF4FFFD2)
     }
+}
+
+/** The visualizer keeps its own colours (its original palette), whatever the app's light or dark mode. */
+private object VisInk {
+    val Bg = Color(0xFF1B1030)
+    val Surface = Color(0xFF2A1F3D)
+    val Border = Color(0xFF3D3152)
+    val Text = Color(0xFFF2F2F5)
+    val Muted = Color(0xFFC4C0CC)
 }

@@ -229,7 +229,7 @@ internal fun PlaylistCard(card: YtPlaylistCard, isAdded: Boolean, busy: Boolean,
             }
             when {
                 busy -> Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                    CircularProgressIndicator(color = Glass.Text, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
                 }
                 isAdded -> Text(
                     "Added", color = Dj.Bg, fontSize = 12.sp, fontWeight = FontWeight.Bold,

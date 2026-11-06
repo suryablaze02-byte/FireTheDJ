@@ -40,8 +40,11 @@ class TvActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.autodj.ui.Appearance.load(this)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = Dj.Accent, background = Dj.Bg, surface = Dj.Surface)) {
+            val dark = !com.autodj.ui.Appearance.light
+            com.autodj.ui.GlassTheme(dark = dark) {
+            MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Dj.Accent, background = Dj.Bg, surface = Dj.Surface) else androidx.compose.material3.lightColorScheme(primary = Dj.Accent, background = Dj.Bg, surface = Dj.Surface)) {
                 // Splash on every launch (not on recreation), then the tour once ever; after an
                 // update, a short tour of what's new since the last one this TV saw.
                 var splash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
@@ -70,6 +73,7 @@ class TvActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -115,8 +119,9 @@ private fun TvApp(vm: DjViewModel) {
     when (page) {
         Page.HOME -> TvHome(vm, onWatch = { page = Page.DECKS }, onYtMusic = { page = Page.YT_MUSIC })
         // Back walks home one step at a time: visualizer → decks → home.
-        Page.DECKS -> TvDecks(vm, onHome = { page = Page.HOME }, onVisualizer = { page = Page.PLAYER })
-        Page.PLAYER -> TvPlayer(vm, onHome = { page = Page.HOME }, onBack = { page = Page.DECKS })
+        // The decks sit in the song's colour and the player over the visualizer: dark glass in either mode.
+        Page.DECKS -> com.autodj.ui.DarkGlass { TvDecks(vm, onHome = { page = Page.HOME }, onVisualizer = { page = Page.PLAYER }) }
+        Page.PLAYER -> com.autodj.ui.DarkGlass { TvPlayer(vm, onHome = { page = Page.HOME }, onBack = { page = Page.DECKS }) }
         Page.YT_MUSIC -> {
             val folders by vm.folders.collectAsStateWithLifecycle()
             val importState by vm.importState.collectAsStateWithLifecycle()

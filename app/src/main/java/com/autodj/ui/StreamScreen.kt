@@ -405,7 +405,7 @@ private fun PickTile(card: PickCard, isAdded: Boolean, busy: Boolean, showSectio
             }
             when {
                 busy -> Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                    CircularProgressIndicator(color = Glass.Text, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
                 }
                 isAdded -> Text(
                     "Added", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold,

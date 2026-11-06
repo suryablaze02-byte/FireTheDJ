@@ -250,7 +250,7 @@ fun TvGlassDialog(onDismiss: () -> Unit, width: Dp = 620.dp, content: @Composabl
     val first = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.width(width).background(Color(0xFF2A1F3D), RoundedCornerShape(30.dp)).glass(RoundedCornerShape(30.dp), Glass.Fill).padding(28.dp),
+            Modifier.width(width).background(Glass.Sheet, RoundedCornerShape(30.dp)).glass(RoundedCornerShape(30.dp), Glass.Fill).padding(28.dp),
         ) { content(first) }
     }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }

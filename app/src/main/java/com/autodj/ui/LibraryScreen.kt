@@ -348,7 +348,7 @@ private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boo
                 if (selected) androidx.compose.ui.graphics.SolidColor(Glass.Ember) else Glass.Edge,
                 if (selected || focused) 1.5.dp else 1.dp,
             )
-            .border(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent, shape)
+            .border(if (focused) 2.dp else 0.dp, if (focused) Glass.Text else Color.Transparent, shape)
             .selectable(selected, interactionSource = interaction, indication = null, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -360,7 +360,7 @@ private fun CrateCard(name: String, sub: String, selected: Boolean, enabled: Boo
                 Icon(Icons.Filled.Check, null, tint = Glass.OnAccent, modifier = Modifier.size(15.dp))
             }
         }
-        Text(sub, color = if (selected) Color.White.copy(alpha = 0.9f) else Glass.Muted, fontSize = if (roomy) 15.sp else 13.sp, modifier = Modifier.padding(top = 4.dp))
+        Text(sub, color = if (selected) Glass.Text.copy(alpha = 0.9f) else Glass.Muted, fontSize = if (roomy) 15.sp else 13.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -547,7 +547,7 @@ internal fun CrateChip(label: String, selected: Boolean, onClick: () -> Unit) {
         Modifier
             .height(44.dp)
             .glass(shape, if (selected) Glass.FillSelected else Glass.Fill)
-            .border(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent, shape)
+            .border(if (focused) 2.dp else 0.dp, if (focused) Glass.Text else Color.Transparent, shape)
             .selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
@@ -613,7 +613,7 @@ private fun TrackRow(item: LibraryItem, art: String?, shape: Shape, onRemove: (S
                 onRemove(item.uri)
             })
         }
-        Box(Modifier.align(Alignment.BottomStart).padding(start = 70.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+        Box(Modifier.align(Alignment.BottomStart).padding(start = 70.dp).fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = 0.08f)))
     }
 }
 

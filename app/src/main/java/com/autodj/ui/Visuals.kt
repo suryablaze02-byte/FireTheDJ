@@ -1,5 +1,7 @@
 package com.autodj.ui
 
+import androidx.compose.runtime.ReadOnlyComposable
+
 import com.autodj.lyrics.LyricsSources
 import android.graphics.BitmapFactory
 import androidx.compose.animation.animateColorAsState
@@ -63,12 +65,12 @@ private val FULL_SONG = Regex("""\s+full\s+songs?\b.*$|\s+song\s+with\s*$""", Re
 
 /** The club palette, on the same plum ground and orange accent as the glass. */
 object Dj {
-    val Bg = Color(0xFF1B1030)
-    val Surface = Color(0xFF2A1F3D)
-    val Border = Color(0xFF3D3152)
-    val Divider = Color(0xFF241A36)
-    val Text = Color(0xFFF2F2F5)
-    val Muted = Color(0xFFC4C0CC)
+    val Bg: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) DarkGround else Color.White
+    val Surface: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF1C1C1F) else Color(0xFFF2F2F6)
+    val Border: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF2E2E33) else Color(0xFFE2E2E8)
+    val Divider: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF1A1A1D) else Color(0xFFECECF0)
+    val Text: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFF2F2F5) else Color(0xFF1C1C1E)
+    val Muted: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFC4C0CC) else Color(0xFF5E5E66)
     val Accent = Color(0xFFFF9F0A)
     val AccentBg = Color(0xFF3A2414)
     val Blue = Color(0xFF64B5FF)
@@ -106,8 +108,8 @@ private fun decode(path: String, maxPx: Int): ImageBitmap? {
  */
 @Composable
 fun songGround(path: String?): Color {
-    val target by produceState(Glass.Ground, path) {
-        value = path?.let { withContext(Dispatchers.Default) { runCatching { deepCoverColour(it) }.getOrNull() } } ?: Glass.Ground
+    val target by produceState(DarkGround, path) {
+        value = path?.let { withContext(Dispatchers.Default) { runCatching { deepCoverColour(it) }.getOrNull() } } ?: DarkGround
     }
     return animateColorAsState(target, tween(900), label = "ground").value
 }
@@ -177,7 +179,7 @@ private fun GeneratedArt(seed: String, modifier: Modifier) {
                 x += step
             }
         }
-        drawPath(wave, Dj.Text, style = Stroke(width = size.minDimension * 0.03f))
+        drawPath(wave, Color(0xFFF2F2F5), style = Stroke(width = size.minDimension * 0.03f))
     }
 }
 
@@ -229,13 +231,15 @@ fun Vinyl(
 
 @Composable
 fun Tonearm(modifier: Modifier) {
+    val border = Dj.Border
+    val muted = Dj.Muted
     Canvas(modifier.size(110.dp, 230.dp)) {
         val s = size.width / 110f
-        drawCircle(Dj.Border, radius = 18 * s, center = Offset(86 * s, 26 * s))
+        drawCircle(border, radius = 18 * s, center = Offset(86 * s, 26 * s))
         drawCircle(Color(0xFF5C5C66), radius = 7 * s, center = Offset(86 * s, 26 * s))
-        drawLine(Dj.Muted, Offset(86 * s, 26 * s), Offset(44 * s, 190 * s), strokeWidth = 5 * s, cap = StrokeCap.Round)
+        drawLine(muted, Offset(86 * s, 26 * s), Offset(44 * s, 190 * s), strokeWidth = 5 * s, cap = StrokeCap.Round)
         rotate(14f, pivot = Offset(42 * s, 200 * s)) {
-            drawRoundRect(Dj.Muted, topLeft = Offset(30 * s, 186 * s), size = Size(24 * s, 30 * s), cornerRadius = CornerRadius(4 * s))
+            drawRoundRect(muted, topLeft = Offset(30 * s, 186 * s), size = Size(24 * s, 30 * s), cornerRadius = CornerRadius(4 * s))
         }
     }
 }

@@ -9,7 +9,6 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -39,14 +38,15 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 28) {
             window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
         }
+        Appearance.load(this)
         setContent {
             val accent = Color(0xFF7C5CFF)
-            val colors = if (isSystemInDarkTheme()) {
+            val colors = if (!Appearance.light) {
                 darkColorScheme(primary = accent, secondary = Color(0xFF26D9C4))
             } else {
                 lightColorScheme(primary = accent, secondary = Color(0xFF0E9E8E))
             }
-            MaterialTheme(colorScheme = colors) {
+            MaterialTheme(colorScheme = colors) { GlassTheme(dark = !Appearance.light) {
                 // The splash shows once per launch, not again when the activity is recreated.
                 var splash by rememberSaveable { mutableStateOf(savedInstanceState == null) }
                 // The guided tour, once ever, right after the first splash; after an update, a short
@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-            }
+            } }
         }
     }
 

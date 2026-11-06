@@ -80,7 +80,8 @@ fun ClearTile(enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.size(16.dp)) { binGlyph(Dj.Muted) }
+            val glyph = Dj.Muted
+            Canvas(Modifier.size(16.dp)) { binGlyph(glyph) }
         }
         Text("Clear", color = Dj.Muted, fontSize = 13.sp, maxLines = 1)
     }

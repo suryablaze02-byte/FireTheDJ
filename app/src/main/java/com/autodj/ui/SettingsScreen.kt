@@ -1,5 +1,6 @@
 package com.autodj.ui
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -114,7 +115,25 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             Text("Settings", color = Glass.Text, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp,
                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 16.dp))
-            GlassHeading("Updates", Modifier.padding(start = 4.dp, bottom = 8.dp))
+            GlassHeading("Appearance", Modifier.padding(start = 4.dp, bottom = 8.dp))
+            Row(
+                Modifier.fillMaxWidth().height(60.dp).glass(RoundedCornerShape(18.dp))
+                    .toggleable(Appearance.light, role = Role.Switch) { Appearance.setLight(context, it) }
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Light mode", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = Appearance.light,
+                    onCheckedChange = null,
+                    colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
+                )
+            }
+            Text("On: a white background. Off: a dark one. Now Playing keeps the song's colour either way.", color = Glass.Muted, fontSize = 13.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp))
+
+            GlassHeading("Updates", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
             UpdateCard(state, checked)
             Row(
                 Modifier.padding(top = 10.dp).fillMaxWidth().height(60.dp).glass(RoundedCornerShape(18.dp)).padding(horizontal = 16.dp),
@@ -228,8 +247,8 @@ fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, mo
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).background(Color.White.copy(alpha = .16f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-            DownloadGlyph(Color.White)
+        Box(Modifier.size(40.dp).background(Glass.Text.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            DownloadGlyph(Glass.Text)
         }
         Column(Modifier.weight(1f)) {
             Text("FireTheDJ ${release.version} is out", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -267,7 +286,7 @@ fun SupportSheet(onClose: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF2A1F3D),
+        containerColor = Glass.Sheet,
         contentColor = Glass.Text,
         scrimColor = Color.Black.copy(alpha = 0.5f),
         shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp),

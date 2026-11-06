@@ -49,7 +49,7 @@ fun TvRoundButton(
     val scale by animateFloatAsState(if (focused) 1.1f else 1f, label = "focus")
     Box(
         modifier.size(diameter + 20.dp).scale(scale)
-            .border(3.dp, if (focused) Color.White else Color.Transparent, CircleShape)
+            .border(3.dp, if (focused) Glass.Text else Color.Transparent, CircleShape)
             .padding(10.dp)
             .glass(CircleShape, fill)
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = description, onClick = onClick),
@@ -78,7 +78,7 @@ fun TvCard(
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "focus")
     val shape = RoundedCornerShape(24.dp)
     val edge = when {
-        focused -> SolidColor(Color.White)
+        focused -> SolidColor(Glass.Text)
         selected -> SolidColor(Glass.Ember)
         accent != null -> SolidColor(accent.copy(alpha = .45f))
         else -> Glass.Edge

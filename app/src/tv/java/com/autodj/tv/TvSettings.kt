@@ -141,6 +141,15 @@ fun TvSettingsDialog(
             "What's new in ${current.version}", current.summary,
             Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth(),
         ) { whatsNew = true }
+        // Light or dark, a toggle: OK switches it, and the whole app changes straight away.
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val light = com.autodj.ui.Appearance.light
+        TvCard(
+            "Light mode: ${if (light) "on" else "off"}",
+            if (light) "A white background. Press OK for dark." else "A dark background. Press OK for white.",
+            Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth(),
+            selected = light,
+        ) { com.autodj.ui.Appearance.setLight(context, !light) }
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp)) {
             TvCard("Support FireTheDJ", "Chip in on Ko-fi or UPI", Modifier.width(260.dp), onClick = onSupport)
             TvCard(
