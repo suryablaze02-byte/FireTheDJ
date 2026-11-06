@@ -45,6 +45,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -116,6 +124,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
         }
     }
 
+    val artwork by vm.artwork.collectAsStateWithLifecycle()
     val ready = library.mapNotNull { it.info }.filter { it.genreFamily != Genres.UNCLASSIFIED }
     val analysing = library.count { it.status == AnalysisStatus.QUEUED || it.status == AnalysisStatus.ANALYZING }
     val crates = buildList {
@@ -145,7 +154,8 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
 
     // The remote starts on the first thing worth pressing.
     val first = remember { FocusRequester() }
-    LaunchedEffect(crates.isNotEmpty(), state.running) { runCatching { first.requestFocus() } }
+    val touring = com.autodj.ui.LocalTour.current?.active == true
+    LaunchedEffect(crates.isNotEmpty(), state.running, touring) { if (!touring) runCatching { first.requestFocus() } }
 
     Box(Modifier.fillMaxSize()) {
         AmbientLight(Modifier.fillMaxSize())
@@ -180,14 +190,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
             }
 
             if (state.running) {
-                val deck = state.current
-                TvCard(
-                    title = "Now playing · ${deck?.title.orEmpty()}",
-                    subtitle = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, state.crate, "Press OK for the decks").joinToString(" · "),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = EDGE, vertical = 8.dp).focusRequester(first),
-                    selected = true,
-                    onClick = onWatch,
-                )
+                NowPlayingBanner(state, artwork, Modifier.padding(horizontal = EDGE, vertical = 10.dp).focusRequester(first), onWatch)
             }
 
             Column(Modifier.tourTarget("tv_crates"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -205,10 +208,12 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(vertical = 16.dp, horizontal = EDGE)) {
                         items(crates, key = { it.first }) { (crate, count) ->
                             val focus = if (!state.running && crate == crates.first().first) Modifier.focusRequester(first) else Modifier
-                            TvCard(
-                                title = if (crate == ALL) "All genres" else crate,
-                                subtitle = if (crate == ALL) "${songs(count)} · across genres" else songs(count),
-                                modifier = Modifier.width(230.dp).height(116.dp).then(focus),
+                            val tracks = if (crate == ALL) ready else ready.filter { it.genreFamily == crate }
+                            CrateTile(
+                                if (crate == ALL) "All genres" else crate,
+                                if (crate == ALL) "${songs(count)} · across genres" else songs(count),
+                                com.autodj.ui.coversFor(tracks, artwork), artwork,
+                                Modifier.width(250.dp).height(180.dp).then(focus),
                             ) { vm.startSet(crate) }
                         }
                     }
@@ -225,6 +230,72 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                 }
                 scanNote?.let { Text(it, color = Glass.EmberText, fontSize = 15.sp, modifier = Modifier.padding(start = EDGE)) }
             }
+        }
+    }
+}
+
+/**
+ * The set that's playing, across the top of Home: its record, the song, what the AI does next and
+ * how far into the song it is, in the song's own colour. OK opens the decks.
+ */
+@Composable
+private fun NowPlayingBanner(state: com.autodj.dj.EngineState, artwork: Map<String, String>, modifier: Modifier, onOpen: () -> Unit) {
+    val deck = state.current ?: return
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(30.dp)
+    val ground = com.autodj.ui.songGround(artwork[deck.uri])
+    com.autodj.ui.DarkGlass {
+        Box(
+            modifier.fillMaxWidth().scale(if (focused) 1.02f else 1f).clip(shape).background(ground)
+                .border(if (focused) 3.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.16f), shape)
+                .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Open the decks", onClick = onOpen),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 28.dp, top = 16.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                com.autodj.ui.Artwork(artwork[deck.uri], deck.uri, deck.title, Modifier.size(96.dp).border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape), CircleShape)
+                Column(Modifier.weight(1f)) {
+                    Text("NOW PLAYING" + state.crate?.let { " · ${it.uppercase()}" }.orEmpty(), color = Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1)
+                    Text(com.autodj.ui.displayTitle(deck.title), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val next = when {
+                        state.mixing -> "mixing into ${state.next?.title?.let { com.autodj.ui.displayTitle(it) } ?: "the next song"}"
+                        state.recipe != null && state.secondsToMix != null -> "next: ${state.recipe} in ${com.autodj.ui.formatTime(state.secondsToMix)}"
+                        else -> null
+                    }
+                    Text(listOfNotNull(deck.artist.ifBlank { null }, next).joinToString(" · "), color = Color.White.copy(alpha = 0.85f), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text("Open the decks ›", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            val progress = if (deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(progress).height(4.dp).background(Glass.Ember))
+        }
+    }
+}
+
+/** A crate for the remote: a fan of its covers, a glow in their colour, its name and songs. Grows and rings in white when focused. */
+@Composable
+private fun CrateTile(name: String, sub: String, covers: List<com.autodj.model.TrackInfo>, artwork: Map<String, String>, modifier: Modifier, onClick: () -> Unit) {
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(26.dp)
+    val glow = com.autodj.ui.coverGlow(covers.firstOrNull()?.let { artwork[it.uri] })
+    Box(
+        modifier.scale(if (focused) 1.08f else 1f)
+            .glass(shape, if (focused) Glass.FillSelected else Glass.Fill)
+            .drawBehind {
+                if (glow != null) {
+                    val c = androidx.compose.ui.geometry.Offset(size.width, 0f)
+                    drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glow.copy(alpha = 0.45f), Color.Transparent), c, size.minDimension), size.minDimension, c)
+                }
+            }
+            .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, shape)
+            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Start a mix from $name", onClick = onClick)
+            .padding(20.dp),
+    ) {
+        if (covers.isNotEmpty()) com.autodj.ui.CoverFan(covers, artwork, 58.dp, Modifier.align(Alignment.TopStart))
+        Column(Modifier.align(Alignment.BottomStart)) {
+            Text(name, color = Glass.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sub, color = Glass.Muted, fontSize = 16.sp, maxLines = 1)
         }
     }
 }

@@ -75,9 +75,11 @@ fun YtMusicScreen(
     onImport: (String, String?) -> Unit,
     onImportClosed: () -> Unit,
     onBack: () -> Unit,
+    /** Inside the Stream page, under its tabs: no header or back of its own. */
+    embedded: Boolean = false,
     vm: YtMusicViewModel = viewModel(),
 ) {
-    BackHandler(onBack = onBack)
+    if (!embedded) BackHandler(onBack = onBack)
     val categories by vm.categories.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val shelves by vm.shelves.collectAsStateWithLifecycle()
@@ -87,7 +89,7 @@ fun YtMusicScreen(
     val added = remember(folders) { folders.filter { it.remote }.map { it.uri }.toSet() }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
+        if (!embedded) Row(
             Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -108,8 +110,9 @@ fun YtMusicScreen(
             }
         }
         Text(
-            "Curated playlists from YouTube Music. Tap one to add it; its tracks are analysed, then mixed.",
-            color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp),
+            if (embedded) "Tap a playlist to add it. Every song streams from YouTube; nothing to sign in to."
+            else "Curated playlists from YouTube Music. Tap one to add it; its tracks are analysed, then mixed.",
+            color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         )
 
         when (val c = categories) {
@@ -145,7 +148,7 @@ fun YtMusicScreen(
                         items(s.value) { shelf ->
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    shelf.title, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                                    shelf.title, color = Glass.Text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold,
                                     modifier = Modifier.padding(horizontal = 20.dp),
                                 )
                                 // Vertical room too: the remote-focused card grows a little.

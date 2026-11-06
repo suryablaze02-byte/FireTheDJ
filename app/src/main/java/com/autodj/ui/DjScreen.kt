@@ -107,7 +107,7 @@ fun DjScreen(vm: DjViewModel) {
         SystemBarIcons(darkGround = true)
         DarkGlass {
             FullscreenVisualizer(
-                state, artwork, vm.engine::visual, onToggle = vm::togglePause, onClose = { fullscreen = false },
+                state, artwork, vm.engine::visual, onToggle = vm::togglePause, onClose = { fullscreen = false }, onStop = vm::stop, onSkip = vm::skip,
                 style = style, onStyle = vm::setVisualizerStyle,
             )
         }
@@ -177,10 +177,12 @@ fun DjScreen(vm: DjViewModel) {
             }
         // Upright, the tab bar floats over the bottom of the screen and the tab's content scrolls under it.
         Box(Modifier.weight(1f).fillMaxHeight()) {
-            CompositionLocalProvider(LocalTabBarInset provides if (landscape) 0.dp else TAB_BAR_SPACE) {
+            // Upright, while a set plays, Mix and Music get a mini player over the tab bar.
+            val mini = !landscape && state.running && tab != Tab.NOW_PLAYING
+            CompositionLocalProvider(LocalTabBarInset provides if (landscape) 0.dp else TAB_BAR_SPACE + if (mini) MINI_PLAYER_SPACE else 0.dp) {
                 when (tab) {
                     Tab.MIX -> MixScreen(
-                        library, folders,
+                        library, artwork, folders,
                         mode = mode,
                         onMode = vm::setMode,
                         pickedSource = pickedSource,
@@ -203,7 +205,7 @@ fun DjScreen(vm: DjViewModel) {
                     } else MusicScreen(
                         library, artwork,
                         folders = folders,
-                        onAddFolder = { folderPicker.launch(null) },
+                        onAddFolder = { folderPicker.launch(it) },
                         onOpenYtMusic = { ytMusic = true },
                         importState = importState,
                         onImport = { vm.importPlaylist(it) },
@@ -246,12 +248,18 @@ fun DjScreen(vm: DjViewModel) {
                     }
                 }
             }
+            if (mini) {
+                MiniPlayer(
+                    state, artwork, onOpen = { tab = Tab.NOW_PLAYING }, onToggle = vm::togglePause,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 10.dp + 64.dp + 8.dp),
+                )
+            }
             if (!landscape) {
                 GlassTabBar(
                     tabs,
                     tab.ordinal,
                     onSelect = { tab = Tab.entries[it] },
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 10.dp).tourTarget("tabbar"),
                     // Nothing scrolls under it on Now Playing, so there it's clear glass over the song's colour.
                     fill = if (onSong) Glass.FillStrong else GlassOverContent,
                 )

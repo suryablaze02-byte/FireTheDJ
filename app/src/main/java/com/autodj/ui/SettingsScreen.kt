@@ -81,6 +81,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -117,55 +123,50 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("Settings", color = Glass.Text, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp,
                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 16.dp))
             GlassHeading("Appearance", Modifier.padding(start = 4.dp, bottom = 8.dp))
-            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp))) {
-                AppearanceSwitch("Match phone", "Light or dark, as your phone is set", Appearance.matchPhone) { Appearance.setMatchPhone(context, it) }
-                Divider()
-                val following = Appearance.matchPhone
-                AppearanceSwitch(
-                    "Light mode",
-                    when {
-                        following -> "Follows your phone now"
-                        Appearance.light -> "A soft grey background"
-                        else -> "A dark background"
-                    },
-                    if (following) Appearance.isLight() else Appearance.light,
-                    enabled = !following,
-                ) { Appearance.setLight(context, it) }
-            }
-            Text("Now Playing keeps the song's colour either way.", color = Glass.Muted, fontSize = 13.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp))
+            ThemeChoice()
+            Text(
+                (if (Appearance.matchPhone) "Following your phone: ${if (Appearance.isLight()) "light" else "dark"} now. " else "") +
+                    "Now Playing keeps the song's colour either way.",
+                color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+            )
 
-            GlassHeading("Updates", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
-            UpdateCard(state, checked)
-            Row(
-                Modifier.padding(top = 10.dp).fillMaxWidth().height(60.dp).glass(RoundedCornerShape(18.dp)).padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Check for updates automatically", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = auto,
-                    onCheckedChange = { auto = it; Updates.setAutoCheck(context, it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
-                )
+            if (remember { Stems.supported(context) }) {
+                GlassHeading("Mixing & stems", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+                Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) { StemSettings() }
             }
 
             AnalysisSettings()
+
+            GlassHeading("Updates", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+            // Up to date: one quiet row. An update, a download or a problem: the full card.
+            if (state == UpdateState.UpToDate || state == UpdateState.Idle || state == UpdateState.Checking) {
+                Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
+                    SettingRow(
+                        if (state == UpdateState.UpToDate) "You're up to date" else "Checking for updates…",
+                        "FireTheDJ ${Updates.current} · ${checkedLabel(checked)}",
+                        Modifier.clickable(role = Role.Button, onClickLabel = "Check again") { Updates.check(context) },
+                        icon = { IconTile(Color(0xFF30D158)) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(18.dp)) } },
+                    ) { Text("Check again", color = Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                    Divider()
+                    AutoCheckRow(auto) { auto = it; Updates.setAutoCheck(context, it) }
+                }
+            } else {
+                UpdateCard(state, checked)
+                Column(Modifier.padding(top = 10.dp).fillMaxWidth().glass(RoundedCornerShape(20.dp))) { AutoCheckRow(auto) { auto = it; Updates.setAutoCheck(context, it) } }
+            }
             WhatsNew()
 
             GlassHeading("Support", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
-            Row(
-                Modifier.fillMaxWidth().height(64.dp).glass(RoundedCornerShape(20.dp))
-                    .clickable(role = Role.Button) { support = true }.padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(Icons.Filled.Favorite, null, tint = Color(0xFFFF6B8A))
-                Text("Support FireTheDJ", color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
+            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
+                SettingRow(
+                    "Support FireTheDJ", "Ko-fi or UPI; it keeps the app free",
+                    Modifier.clickable(role = Role.Button) { support = true },
+                    icon = { IconTile(Color(0xFFF43F5E)) { Icon(Icons.Filled.Favorite, null, tint = Color.White, modifier = Modifier.size(18.dp)) } },
+                ) { Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted) }
             }
 
             GlassHeading("About", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
-            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp))) {
+            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
                 AboutRow("Source code on GitHub", "›") { open(context, "https://github.com/suryablaze02-byte/FireTheDJ") }
                 AboutRow("License", "GPL-3.0", onClick = null)
                 // SponsorBlock's data is CC BY-NC-SA 4.0, which asks for this credit.
@@ -472,14 +473,10 @@ private fun AnalysisSettings() {
     val atOnce = settings.songsAtOnce
     val atOnceLabel = if (atOnce == 0) "Auto" else "$atOnce"
     val idle = if (atOnce == 0) auto else atOnce
-    val summary = listOf(
-        if (settings.background) "Background on" else "Background off",
-        atOnceLabel,
-        "lyrics for ${lyrics.first} of ${lyrics.second}",
-    ).joinToString(" · ")
-    val touring = LocalTour.current?.let { it.active && it.screen == TourScreen.SETTINGS } == true
-    Collapsible("Analysis", summary, Modifier.padding(top = 24.dp), forceOpen = touring) {
-        SettingRow("Analyse in the background", if (settings.background) "Keeps going with the screen off" else "Only while FireTheDJ is open") {
+    GlassHeading("Analysis", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
+        SettingRow("Analyse in the background", if (settings.background) "Keeps going with the screen off" else "Only while FireTheDJ is open",
+            icon = { IconTile(Color(0xFF0EA5E9)) { BarsGlyph(Color.White, 18.dp) } }) {
             Switch(
                 checked = settings.background,
                 onCheckedChange = { AnalysisJobs.setBackground(it) },
@@ -492,14 +489,15 @@ private fun AnalysisSettings() {
             "Songs at once",
             "$idle when idle · ${minOf(2, idle)} while a set plays",
             Modifier.clickable(role = Role.Button, onClickLabel = "Change") { AnalysisJobs.setSongsAtOnce((atOnce + 1) % (AnalysisJobs.MAX_AT_ONCE + 1)) },
+            icon = { IconTile(Color(0xFF14B8A6)) { Icon(Icons.Filled.Settings, null, tint = Color.White, modifier = Modifier.size(18.dp)) } },
         ) {
             Text(atOnceLabel, color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
         Divider()
-        SettingRow("Lyrics", "Fetched and lined up while each song is analysed") {
+        SettingRow("Lyrics", "Fetched and lined up while each song is analysed",
+            icon = { IconTile(Color(0xFFF59E0B)) { Icon(Icons.Filled.List, null, tint = Color.White, modifier = Modifier.size(18.dp)) } }) {
             Text("${lyrics.first} of ${lyrics.second}", color = Glass.Muted, fontSize = 15.sp)
         }
-        StemSettings()
     }
 }
 
@@ -522,15 +520,15 @@ private fun StemSettings() {
     val shown = remember { BringIntoViewRequester() }
     val touring = LocalTour.current?.let { it.active && it.screen == TourScreen.SETTINGS } == true
     LaunchedEffect(touring) { if (touring) { delay(350); shown.bringIntoView() } }
-    Divider()
     Column(Modifier.bringIntoViewRequester(shown).tourTarget("stems")) {
     when (val s = state) {
         StemModel.State.Absent, is StemModel.State.Failed -> SettingRow(
-            "Stem separation",
+            "Stem separation", icon = { IconTile(Color(0xFF7C3AED)) { BarsGlyph(Color.White, 18.dp) } },
+            detail =
             (s as? StemModel.State.Failed)?.let { "Download failed: ${it.reason}" }
                 ?: ("Real bass swaps and a cappella vocal swaps, from each song's drums, bass, vocals and the rest. " +
                     "Downloads a $size model once" + if (StemModel.metered(context)) " (you're on mobile data)." else "."),
-            Modifier.clickable(role = Role.Button, onClickLabel = "Download the stem model") { StemModel.download(context) },
+            modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Download the stem model") { StemModel.download(context) },
         ) {
             Text(if (s is StemModel.State.Failed) "Try again" else "Download", color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
@@ -550,8 +548,8 @@ private fun StemSettings() {
         }
         StemModel.State.Ready -> {
             SettingRow(
-                "Stem separation",
-                if (on) "Mixes play bass and vocal swaps from the songs' stems, separated in the background during a set"
+                "Stem separation", icon = { IconTile(Color(0xFF7C3AED)) { BarsGlyph(Color.White, 18.dp) } },
+                detail = if (on) "Mixes play bass and vocal swaps from the songs' stems, separated in the background during a set"
                 else "Off: mixes use EQ for bass and vocal swaps",
             ) {
                 Switch(
@@ -564,8 +562,8 @@ private fun StemSettings() {
                 var tricks by remember { mutableStateOf(Stems.tricksOn(context)) }
                 Divider()
                 SettingRow(
-                    "Stems for tricks",
-                    if (tricks) "Trickster's bass-kill drops and word loops use stems too, when there's time. Uses more battery"
+                    "Stems for tricks", icon = { IconTile(Color(0xFFDB2777)) { FlameGlyph(Color.White, 18.dp) } },
+                    detail = if (tricks) "Trickster's bass-kill drops and word loops use stems too, when there's time. Uses more battery"
                     else "Off: only mixes use stems",
                 ) {
                     Switch(
@@ -579,48 +577,82 @@ private fun StemSettings() {
             SettingRow(
                 "Delete the stem model",
                 "Frees $size; download it again any time",
-                Modifier.clickable(role = Role.Button, onClickLabel = "Delete the stem model") { StemModel.delete(context); on = false },
+                icon = { IconTile(Glass.FillSelected) { Icon(Icons.Filled.Delete, null, tint = Glass.Text, modifier = Modifier.size(18.dp)) } },
+                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Delete the stem model") { StemModel.delete(context); on = false },
             ) {
-                Text("Delete", color = Glass.Muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Delete", color = Color(0xFFFF6B5E), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
     }
 }
 
-/** One switch row in Appearance; dimmed and inert when not [enabled]. */
+/** Phone, Light or Dark, each with a little picture of itself; Phone follows the phone's own setting. */
 @Composable
-private fun AppearanceSwitch(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
-            .alpha(if (enabled) 1f else 0.45f).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(detail, color = Glass.Muted, fontSize = 13.sp)
+private fun ThemeChoice() {
+    val context = LocalContext.current
+    val picked = when {
+        Appearance.matchPhone -> 0
+        Appearance.light -> 1
+        else -> 2
+    }
+    Row(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp)).padding(10.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("Phone", "Light", "Dark").forEachIndexed { i, label ->
+            val on = i == picked
+            val shape = RoundedCornerShape(16.dp)
+            Column(
+                Modifier.weight(1f).clip(shape)
+                    .background(if (on) Glass.FireSelected else Color.Transparent, shape)
+                    .border(if (on) 2.dp else 1.dp, if (on) Glass.Ember else Glass.Text.copy(alpha = 0.12f), shape)
+                    .selectable(on, role = Role.RadioButton) {
+                        when (i) {
+                            0 -> Appearance.setMatchPhone(context, true)
+                            1 -> { Appearance.setMatchPhone(context, false); Appearance.setLight(context, true) }
+                            else -> { Appearance.setMatchPhone(context, false); Appearance.setLight(context, false) }
+                        }
+                    }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                val preview = Modifier.size(54.dp, 38.dp).clip(RoundedCornerShape(8.dp)).border(1.dp, Glass.Text.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                when (i) {
+                    0 -> Row(preview) { Box(Modifier.weight(1f).fillMaxHeight().background(LightGround)); Box(Modifier.weight(1f).fillMaxHeight().background(DarkGround)) }
+                    1 -> Box(preview.background(LightGround))
+                    else -> Box(preview.background(DarkGround))
+                }
+                Text(label, color = if (on) Glass.Text else Glass.Muted, fontSize = 14.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.SemiBold)
+            }
         }
-        Switch(
-            checked = checked, onCheckedChange = null, enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White,
-                disabledCheckedTrackColor = Glass.Ember, disabledCheckedThumbColor = Color.White,
-            ),
-        )
     }
 }
 
+/** The switch for looking for updates by itself, once a day. */
 @Composable
-private fun SettingRow(title: String, detail: String, modifier: Modifier = Modifier, end: @Composable () -> Unit) {
+private fun AutoCheckRow(on: Boolean, onChange: (Boolean) -> Unit) {
+    SettingRow("Check automatically", "Once a day, when FireTheDJ opens",
+        icon = { IconTile(Color(0xFF22C55E)) { Icon(Icons.Filled.Refresh, null, tint = Color.White, modifier = Modifier.size(18.dp)) } }) {
+        Switch(checked = on, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White))
+    }
+}
+
+/** A row's small coloured tile with its icon. */
+@Composable
+private fun IconTile(color: Color, icon: @Composable () -> Unit) {
+    Box(Modifier.size(34.dp).background(color, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { icon() }
+}
+
+@Composable
+private fun SettingRow(title: String, detail: String, modifier: Modifier = Modifier, icon: (@Composable () -> Unit)? = null, end: @Composable () -> Unit) {
     Row(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        icon?.invoke()
         Column(Modifier.weight(1f)) {
-            Text(title, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(detail, color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(title, color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = Glass.Muted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp))
         }
         end()
     }

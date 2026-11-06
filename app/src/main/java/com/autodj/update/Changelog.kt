@@ -14,6 +14,28 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.0.0",
+            "A redesign: crates with covers, a set card with Start, a mini player, live effects, looks you pick by picture, and real tablet layouts.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Your set", "Mix opens on a card for the crate you pick: its songs, hours and tempo range, Smooth or Trickster with a line on what it does, and Start."),
+                        Change("Crates with covers", "Each crate shows a fan of covers from its songs and glows in their colour, on phone, tablet and TV."),
+                        Change("Slide between tabs", "Press and slide along the tab bar, or up and down the side rail: the glass follows your finger and opens the tab you let go on."),
+                        Change("Mini player", "While a set plays, Mix and Music show it above the tab bar: the song, what's next, and pause. Tap it for Now Playing."),
+                        Change("Effects, live", "Sideways and on TV, the Effects box shows the effect playing now with the beats it has left, what's next, and every effect in the mix. Tap it for all of them."),
+                        Change("Pick a look by its picture", "The visualizer's looks are tiles with a picture of each; on TV they're a shelf in the player bar. Stop and Skip are there too."),
+                        Change("Tablets", "Upright: three columns of crates, a wide set card, the record big on Now Playing with what's coming up. Sideways: Music in two panes."),
+                        Change("Adding music", "This phone opens the picker right in Music or Download. Paste a link is a sheet that adds a copied link in one tap. Stream shows YT Music, Spotify and Apple Music as tabs."),
+                        Change("Settings", "Grouped with icons, Phone / Light / Dark in one choice, and stem separation in its own group. On TV, Settings is a side panel."),
+                        Change("TV Home", "The set that's playing sits across the top, with what's next; OK opens the decks."),
+                        Change("A new tour", "Back as well as Next, a step count, a ring that glides to each part, and pictures for the welcome and the looks."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "1.9.2",
             "Faster stem separation, with exactly the same stems.",
             listOf(

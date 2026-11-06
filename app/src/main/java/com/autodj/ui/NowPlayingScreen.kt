@@ -31,6 +31,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autodj.dj.EngineState
@@ -81,91 +85,131 @@ fun NowPlayingScreen(
         }
         return
     }
+    // A tablet upright: the record beside the song, and the next mix and what's coming up below.
+    val tablet = LocalConfiguration.current.screenWidthDp >= 600
+    // The set label is "Source · Genre" for a folder or playlist set, else just the genre.
+    val label = state.crate.orEmpty()
+    val source = label.substringBeforeLast(" · ", "")
+    val genre = label.substringAfterLast(" · ")
+    val header: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.height(if (tablet) 40.dp else 32.dp).glass(RoundedCornerShape(20.dp)).padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(Modifier.size(7.dp).background(Glass.Ember, CircleShape))
+                Text(listOfNotNull(genre, state.mode.label, setLanguage).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Text,
+                    fontSize = if (tablet) 15.sp else 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+            Spacer(Modifier.weight(1f))
+            GlassIconButton("Open the full-screen visualizer", size = if (tablet) 48.dp else 44.dp, onClick = onFullscreen) { ExpandGlyph(Glass.Text) }
+            CastButton(rememberCasting(), diameter = if (tablet) 48.dp else 44.dp, onClick = onCast)
+        }
+        if (source.isNotBlank()) {
+            Text("Playing from $source", color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+    // The title (up to two lines), the artist and the song's details as chips.
+    val info: @Composable () -> Unit = {
+        Text(displayTitle(deck.title), color = Glass.Text, fontSize = if (tablet) 38.sp else 24.sp, lineHeight = if (tablet) 43.sp else 29.sp,
+            fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (deck.artist.isNotBlank()) Text(deck.artist, color = Glass.Text.copy(alpha = 0.9f), fontSize = if (tablet) 20.sp else 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val key = if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOfNotNull("${"%.0f".format(deck.bpm)} BPM", "Key $key", languageOf(deck.uri)).forEach {
+                Text(it, color = Glass.Text, fontSize = if (tablet) 15.sp else 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    modifier = Modifier.clip(CircleShape).background(Glass.FillStrong).padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+        }
+    }
+    // Where the set is in this song, with the point it mixes out marked in orange.
+    val progress: @Composable () -> Unit = {
+        val at = if (deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
+        val out = state.exitSec?.takeIf { deck.durationSec > 0 }?.let { (it / deck.durationSec).toFloat().coerceIn(0f, 1f) }
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(top = 14.dp).fillMaxWidth().height(16.dp)) {
+            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(6.dp).clip(CircleShape).background(Glass.FillSelected)) {
+                Box(Modifier.fillMaxWidth(at).height(6.dp).background(Color.White, CircleShape))
+            }
+            if (out != null) Box(Modifier.offset(x = maxWidth * out - 1.5.dp).width(3.dp).fillMaxHeight().background(Glass.Ember, RoundedCornerShape(2.dp))
+                .semantics { contentDescription = "Mixes out at ${formatTime(state.exitSec)}" })
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Text(formatTime(deck.positionSec), color = Glass.Muted, fontSize = 12.sp)
+            val trick = when {
+                state.skipping > 0 && state.secondsToMix != null -> "Skipping at the next ${if (state.skipping >= 2) "bar" else "phrase"}"
+                state.trickNow != null -> "Now: ${state.trickNow}"
+                state.trickNext != null -> "${state.trickNext} in ${formatTime(state.secondsToTrick ?: 0.0)}"
+                state.exitSec != null && !state.mixing -> "Mix out at ${formatTime(state.exitSec)}"
+                else -> ""
+            }
+            Text(trick, color = if (state.trickNow != null) Glass.Ember else Glass.EmberText, fontSize = 12.sp,
+                fontWeight = if (state.trickNow != null) FontWeight.Bold else FontWeight.SemiBold,
+                textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(formatTime(deck.durationSec), color = Glass.Muted, fontSize = 12.sp)
+        }
+    }
+    val controls: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(56.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onStop).semantics { contentDescription = "Stop the set" },
+                contentAlignment = Alignment.Center,
+            ) { StopIcon(Glass.Text, Modifier.size(26.dp)) }
+            Box(
+                Modifier.size(if (tablet) 86.dp else 76.dp).background(Color.White, CircleShape).clip(CircleShape)
+                    .clickable(role = Role.Button, onClick = onToggle)
+                    .semantics { contentDescription = if (state.paused) "Resume the set" else "Pause the set" },
+                contentAlignment = Alignment.Center,
+            ) { if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(32.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(32.dp)) }
+            // Skip: out at the next phrase, tapped again at the next bar; ringed while skipping.
+            val skipping = state.skipping > 0
+            Box(
+                Modifier.size(56.dp).clip(CircleShape)
+                    .then(if (skipping) Modifier.border(2.dp, Glass.EmberText, CircleShape) else Modifier)
+                    .clickable(enabled = state.canSkip, role = Role.Button, onClick = onSkip)
+                    .semantics {
+                        contentDescription = when {
+                            state.skipping == 1 -> "Skip sooner, at the next bar"
+                            skipping -> "Skipping at the next bar"
+                            else -> "Skip to the next song"
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) { SkipIcon(if (state.canSkip || skipping) Glass.Text else Glass.Muted, Modifier.size(26.dp)) }
+        }
+        // Under play/pause, as on the sideways screen.
+        Text("AI in control", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
+    }
+
+    if (tablet) {
+        Column(Modifier.fillMaxSize().padding(start = 36.dp, end = 36.dp, top = 16.dp, bottom = 12.dp + LocalTabBarInset.current)) {
+            header()
+            // The record big across the top; the song and its controls beside what's next underneath.
+            DjVisualizer(visual, artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxWidth().weight(1f).padding(vertical = 12.dp), glass = true)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(Modifier.weight(1f)) {
+                    info()
+                    progress()
+                    controls()
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    UpNext(state, artwork, onOpenMix, Modifier)
+                    ComingUp(state, artwork, 3)
+                    SetProgress(state, compact = true)
+                }
+            }
+        }
+        return
+    }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp + LocalTabBarInset.current)) {
-            // The set label is "Source · Genre" for a folder or playlist set, else just the genre.
-            val label = state.crate.orEmpty()
-            val source = label.substringBeforeLast(" · ", "")
-            val genre = label.substringAfterLast(" · ")
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    Modifier.height(32.dp).glass(RoundedCornerShape(16.dp)).padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(Modifier.size(7.dp).background(Glass.Ember, CircleShape))
-                    Text(listOfNotNull(genre, state.mode.label, setLanguage).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Text, fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
-                Spacer(Modifier.weight(1f))
-                GlassIconButton("Open the full-screen visualizer", onClick = onFullscreen) { ExpandGlyph(Glass.Text) }
-                CastButton(rememberCasting(), diameter = 44.dp, onClick = onCast)
-            }
-            if (source.isNotBlank()) {
-                Text("Playing from $source", color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp))
-            }
-
+            header()
             // The glass record with the live spectrum round it; it takes whatever height is left.
             DjVisualizer(visual, artwork[deck.uri], deck.uri, deck.title, Modifier.fillMaxWidth().weight(1f).padding(vertical = 6.dp), glass = true)
-
-            // The title gets the full width and up to two lines; the details sit under the artist.
-            Text(displayTitle(deck.title), color = Glass.Text, fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.ExtraBold,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (deck.artist.isNotBlank()) Text(deck.artist, color = Glass.Text.copy(alpha = 0.9f), fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val key = if (deck.pitchSemis != 0) "${deck.key} (${if (deck.pitchSemis > 0) "+" else ""}${deck.pitchSemis})" else deck.key
-            val lang = languageOf(deck.uri)?.let { " · $it" }.orEmpty()
-            Text("${"%.0f".format(deck.bpm)} BPM · Key $key$lang", color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-
-            // Where the set is in this track.
-            val progress = if (deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
-            Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(6.dp).clip(CircleShape).background(Glass.FillSelected)) {
-                Box(Modifier.fillMaxWidth(progress).height(6.dp).background(Color.White, CircleShape))
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Text(formatTime(deck.positionSec), color = Glass.Muted, fontSize = 12.sp)
-                val trick = when {
-                    state.skipping > 0 && state.secondsToMix != null -> "Skipping at the next ${if (state.skipping >= 2) "bar" else "phrase"}"
-                    state.trickNow != null -> "Now: ${state.trickNow}"
-                    state.trickNext != null -> "${state.trickNext} in ${formatTime(state.secondsToTrick ?: 0.0)}"
-                    else -> ""
-                }
-                Text(trick, color = if (state.trickNow != null) Glass.Ember else Glass.EmberText, fontSize = 12.sp,
-                    fontWeight = if (state.trickNow != null) FontWeight.Bold else FontWeight.Normal,
-                    textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.weight(1f))
-                Text(formatTime(deck.durationSec), color = Glass.Muted, fontSize = 12.sp)
-            }
-
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(56.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onStop).semantics { contentDescription = "Stop the set" },
-                    contentAlignment = Alignment.Center,
-                ) { StopIcon(Glass.Text, Modifier.size(26.dp)) }
-                Box(
-                    Modifier.size(76.dp).background(Color.White, CircleShape).clip(CircleShape)
-                        .clickable(role = Role.Button, onClick = onToggle)
-                        .semantics { contentDescription = if (state.paused) "Resume the set" else "Pause the set" },
-                    contentAlignment = Alignment.Center,
-                ) { if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(32.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(32.dp)) }
-                // Skip: out at the next phrase, tapped again at the next bar; ringed while skipping.
-                val skipping = state.skipping > 0
-                Box(
-                    Modifier.size(56.dp).clip(CircleShape)
-                        .then(if (skipping) Modifier.border(2.dp, Glass.EmberText, CircleShape) else Modifier)
-                        .clickable(enabled = state.canSkip, role = Role.Button, onClick = onSkip)
-                        .semantics {
-                            contentDescription = when {
-                                state.skipping == 1 -> "Skip sooner, at the next bar"
-                                skipping -> "Skipping at the next bar"
-                                else -> "Skip to the next song"
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) { SkipIcon(if (state.canSkip || skipping) Glass.Text else Glass.Muted, Modifier.size(26.dp)) }
-            }
-            // Under play/pause, as on the sideways screen.
-            Text("AI in control", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
-
+            info()
+            progress()
+            controls()
             UpNext(state, artwork, onOpenMix, Modifier.padding(top = 10.dp))
         }
     }
@@ -201,7 +245,20 @@ private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: 
                 // Chosen, but the mix itself is planned once this track's hook replay is done.
                 else -> "Next · mix planned after the hook replay"
             }
-            Text(line, color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The mix type as an orange chip, then when.
+            val recipe = state.recipe
+            if (recipe != null && (state.secondsToMix != null || state.mixing)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(recipe, color = Glass.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).clip(CircleShape).background(Glass.Ember).padding(horizontal = 8.dp, vertical = 2.dp))
+                    Text(
+                        if (state.mixing) "mixing now" else "in ${formatTime(state.secondsToMix ?: 0.0)}" + state.tempoChange?.let { " · $it" }.orEmpty(),
+                        color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    )
+                }
+            } else {
+                Text(line, color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Text(
                 listOf(displayTitle(next.title), next.artist).filter { it.isNotBlank() }.joinToString(" · "),
                 color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
