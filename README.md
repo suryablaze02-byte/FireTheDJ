@@ -109,7 +109,7 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
     <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing with the spinning record, skip button and AI in control"/><br/><sub>Now Playing</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings with the Light mode toggle and what's new"/><br/><sub>Settings &amp; what's new</sub></td>
+    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings with Match phone, Light mode and what's new"/><br/><sub>Settings &amp; what's new</sub></td>
     <td align="center"><img src="screenshots/07-cast.png" width="200" alt="Play on a TV sheet"/><br/><sub>Play on a TV</sub></td>
     <td align="center"><img src="screenshots/14-update.png" width="200" alt="Banner for a new version"/><br/><sub>A new version is out</sub></td>
   </tr>
