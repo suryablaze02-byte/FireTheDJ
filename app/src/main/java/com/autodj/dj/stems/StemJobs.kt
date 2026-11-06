@@ -36,6 +36,9 @@ object StemJobs {
     /** A mix with less slack than this before its window is due is done before anything else. */
     private const val MIX_FIRST_SLACK_MS = 60_000L
 
+    /** The model stays loaded this long after the last job: longer than a song, so a set keeps it warm. */
+    private const val IDLE_UNLOAD_MS = 5 * 60_000L
+
     private class Job(
         val key: String, val context: Context, val uri: String, val title: String,
         val from: Double, val to: Double, val deadline: Long, val mix: Boolean, val generation: Int,
@@ -97,7 +100,7 @@ object StemJobs {
     private fun take(): Job = synchronized(lock) {
         // A song's mix and trick windows are asked for together: let the burst arrive before choosing.
         if (queue.isEmpty()) {
-            while (queue.isEmpty()) lock.wait()
+            while (queue.isEmpty()) idleWait()
             // Each new request wakes the wait, so wait out the whole gathering time.
             val until = System.currentTimeMillis() + GATHER_MS
             while (true) {
@@ -122,9 +125,28 @@ object StemJobs {
                 queue -= job
                 return job
             }
-            lock.wait()
+            idleWait()
         }
         error("unreachable")
+    }
+
+    /**
+     * The loaded model, kept between jobs on the worker thread: loading it costs about 1.5 s and its
+     * first few chunks run slow, about 4 s on every window (measured on a Moto G64), for the same stems.
+     * Held, it costs about 170–300 MB, so it's let go after [IDLE_UNLOAD_MS] without work.
+     */
+    private var model: StemSession? = null
+
+    /** Waits for a request, letting the model go if none comes for a while. Called holding [lock]. */
+    private fun idleWait() {
+        if (model == null) return lock.wait()
+        lock.wait(IDLE_UNLOAD_MS)
+        if (queue.isEmpty()) unload()
+    }
+
+    private fun unload() {
+        model?.let { runCatching { it.close() } }
+        model = null
     }
 
     private fun run(job: Job) {
@@ -138,6 +160,7 @@ object StemJobs {
         } catch (e: Throwable) {
             // Out of memory, a decoder that can't seek, a model that won't load: this moment uses EQ.
             Log.w(TAG, "stems: \"${job.title}\" ${sec(job.from)}–${sec(job.to)} not separated: $e")
+            unload() // after running out of memory, the next job starts from a fresh model
         } finally {
             busy = false
             pending.remove(job.key)
@@ -159,9 +182,8 @@ object StemJobs {
         val l44 = Resampler.resample(pcm.left, rate, DemucsDsp.SAMPLE_RATE)
         val r44 = Resampler.resample(pcm.right, rate, DemucsDsp.SAMPLE_RATE)
         val t1 = System.currentTimeMillis()
-        val stems44 = engine.open(StemModel.file(context)).use { session ->
-            DemucsDsp.separate(l44, r44, l44.size, session::run) { _, _ -> if (stale()) throw Stale() }
-        }
+        val session = model ?: engine.open(StemModel.file(context)).also { model = it }
+        val stems44 = DemucsDsp.separate(l44, r44, l44.size, session::run) { _, _ -> if (stale()) throw Stale() }
         val tModel = System.currentTimeMillis() - t1
         // Back to the song's rate; "other" is whatever the other three leave, so the four add to the original exactly.
         val stems = Array(DemucsDsp.STEMS) { Array(2) { FloatArray(0) } }
