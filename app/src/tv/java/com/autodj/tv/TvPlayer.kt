@@ -165,7 +165,7 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
         }
 
         // The look on screen and how to change it: at the top while the track card or controls are up.
-        AnimatedVisibility(now < infoUntil || controls, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(now < infoUntil && !controls, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
             Text(
                 "Look · ${style.label}   ◀ ▶ to change",
                 color = Glass.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
@@ -181,6 +181,15 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
                 Modifier.onSizeChanged { controlsPx = it.height }.padding(horizontal = 40.dp, vertical = 30.dp).fillMaxWidth()
                     .glass(RoundedCornerShape(32.dp), Glass.FillDark).padding(horizontal = 32.dp, vertical = 22.dp),
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("LOOKS", color = Glass.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text("  ${style.label} · ${style.blurb.lowercase()}", color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                    styles.forEach { s ->
+                        com.autodj.ui.LookTile(s, s == style, { vm.setVisualizerStyle(s); touched++ }, width = 84.dp, height = 56.dp, fontSize = 14.sp)
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     if (deck != null) Artwork(art, deck.uri, deck.title, Modifier.size(76.dp).border(2.dp, Color.White.copy(alpha = .35f), CircleShape), CircleShape)
                     TrackLines(state, style.label, Modifier.weight(1f), showNext = false)
@@ -225,30 +234,10 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
                         }
                         Text("AI in control", color = Glass.Muted, fontSize = 14.sp)
                     }
-                    // While the controls are up ◀ ▶ move between buttons, so the look has its own button.
-                    Box(Modifier.align(Alignment.CenterEnd)) { LookButton(style.label) { changeLook(1); touched++ } }
+
                 }
             }
         }
-    }
-}
-
-/** "Look · Beat Pop": OK steps to the next look. Lifted and ringed in white when focused, like the other buttons. */
-@Composable
-private fun LookButton(look: String, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "focus")
-    Box(
-        Modifier.scale(scale)
-            .border(3.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(999.dp))
-            .padding(6.dp)
-            .glass(RoundedCornerShape(999.dp), Glass.FillStrong)
-            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = "Change the look", onClick = onClick)
-            .padding(horizontal = 26.dp, vertical = 18.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("Look · $look", color = Glass.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

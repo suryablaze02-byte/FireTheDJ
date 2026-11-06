@@ -57,6 +57,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -78,6 +81,8 @@ fun FullscreenVisualizer(
     visual: () -> VisualFrame?,
     onToggle: () -> Unit,
     onClose: () -> Unit,
+    onStop: () -> Unit = {},
+    onSkip: () -> Unit = {},
     style: VisualizerStyle = VisualizerStyle.CLUB,
     onStyle: (VisualizerStyle) -> Unit = {},
 ) {
@@ -113,17 +118,14 @@ fun FullscreenVisualizer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (deck != null) Artwork(artwork[deck.uri], deck.uri, deck.title, Modifier.size(44.dp), CircleShape)
                 Column(Modifier.weight(1f)) {
-                    Text(deck?.title.orEmpty(), color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(deck?.title?.let(::displayTitle).orEmpty(), color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val sub = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, deck?.let { "%.0f BPM".format(it.bpm) }, deck?.key, state.mode.label)
                     Text(sub.joinToString(" · "), color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Box(
-                    Modifier.height(44.dp).glass(RoundedCornerShape(22.dp), Glass.FillStrong)
-                        .clickable(role = Role.Button, onClickLabel = if (holdLandscape) "Turn with the phone" else "Hold landscape") { holdLandscape = !holdLandscape; touches++ }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text(if (holdLandscape) "Auto-rotate" else "Landscape", color = Glass.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                GlassIconButton(if (holdLandscape) "Turn with the phone" else "Hold landscape", fill = if (holdLandscape) Glass.FillSelected else Glass.FillStrong,
+                    onClick = { holdLandscape = !holdLandscape; touches++ }) { RotateGlyph(Glass.Text) }
                 GlassIconButton("Close full screen", fill = Glass.FillStrong, onClick = onClose) { CloseGlyph(Glass.Text) }
             }
         }
@@ -136,19 +138,27 @@ fun FullscreenVisualizer(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                // Pick a look; the choice is remembered. Four to a row, so the names fit on a phone.
-                for (row in VisualizerStyle.entries.chunked(4)) {
-                    GlassSegmented(
-                        row, style, { it.short }, { onStyle(it); touches++ },
-                        Modifier.fillMaxWidth(), height = 44.dp, fontSize = 12.sp,
-                        selectedFill = Color.White, selectedText = Color(0xFF120A10),
-                    )
+                // Pick a look by its picture; the choice is remembered. The strip scrolls when it's wider than the screen.
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("LOOK", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
+                    Text("${style.label} · ${style.blurb.lowercase()}", color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    VisualizerStyle.entries.forEach { s -> LookTile(s, s == style, { onStyle(s); touches++ }) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = 0.12f)))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    RoundButton(52.dp, Glass.FillStrong, "Stop the set", { touches++; onStop() }) { StopIcon(Glass.Text, Modifier.size(20.dp)) }
+                    RoundButton(72.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", { touches++; onToggle() }) {
+                        if (state.paused) PlayIcon(Color(0xFF120A10)) else PauseIcon(Color(0xFF120A10))
+                    }
+                    RoundButton(52.dp, Glass.FillStrong, "Skip to the next song", { touches++; onSkip() }) { SkipIcon(if (state.canSkip) Glass.Text else Glass.Muted, Modifier.size(22.dp)) }
                 }
                 val next = state.next
                 val status = when {
-                    state.mixing -> "Mixing into ${next?.title ?: "the next track"} · ${state.recipe.orEmpty()}"
+                    state.mixing -> "Mixing into ${next?.title?.let(::displayTitle) ?: "the next track"} · ${state.recipe.orEmpty()}"
                     state.trickNow != null -> "Now: ${state.trickNow}"
-                    next != null && state.secondsToMix != null -> "Next: ${next.title} in ${formatTime(state.secondsToMix)}"
+                    next != null && state.secondsToMix != null -> "Next: ${displayTitle(next.title)} in ${formatTime(state.secondsToMix)}"
                     else -> null
                 }
                 if (status != null) {
@@ -157,11 +167,20 @@ fun FullscreenVisualizer(
                         textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                RoundButton(68.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", onToggle) {
-                    if (state.paused) PlayIcon(Color(0xFF120A10)) else PauseIcon(Color(0xFF120A10))
-                }
             }
         }
+    }
+}
+
+/** A phone turning on its side: "hold landscape". */
+@Composable
+private fun RotateGlyph(color: Color) {
+    Canvas(Modifier.size(22.dp)) {
+        val w = size.width
+        val s = w * 0.09f
+        drawRoundRect(color, topLeft = Offset(w * 0.1f, w * 0.3f), size = androidx.compose.ui.geometry.Size(w * 0.8f, w * 0.44f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.08f), style = Stroke(s))
+        drawArc(color, 200f, 70f, false, topLeft = Offset(w * 0.05f, w * 0.0f), size = androidx.compose.ui.geometry.Size(w * 0.9f, w * 0.9f), style = Stroke(s * 0.8f, cap = StrokeCap.Round))
     }
 }
 

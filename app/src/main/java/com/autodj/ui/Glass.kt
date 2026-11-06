@@ -314,14 +314,6 @@ class GlassTab(val label: String, val tourKey: String? = null, val icon: @Compos
 val GlassOverContent: Color @Composable @ReadOnlyComposable get() =
     if (LocalGlassDark.current) Color(0xFF1C1C1F).copy(alpha = 0.97f) else Color.White.copy(alpha = 0.96f)
 
-/** The floating glass tab bar along the bottom. */
-@Composable
-fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier, fill: Color = GlassOverContent) {
-    Row(modifier.fillMaxWidth().height(64.dp).floatingGlass(CircleShape, fill).padding(5.dp).selectableGroup()) {
-        tabs.forEachIndexed { i, t -> TabItem(t, i == selected) { onSelect(i) } }
-    }
-}
-
 /**
  * A big screen held sideways, like a tablet: wide enough and tall enough for the roomy layouts
  * (a wider rail, bigger records, the mix plan and what's coming up). A phone on its side is
@@ -331,65 +323,4 @@ fun GlassTabBar(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, mo
 fun isRoomyLandscape(): Boolean {
     val c = LocalConfiguration.current
     return c.screenWidthDp >= 840 && c.screenHeightDp >= 600
-}
-
-/**
- * The same tabs as a column down the side, for landscape where height is short, spread evenly
- * down it, with [footer] (Cast and the like) under a divider at the bottom. [roomy] widens it for
- * a big screen.
- */
-@Composable
-fun GlassTabRail(
-    tabs: List<GlassTab>,
-    selected: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    roomy: Boolean = false,
-    footer: (@Composable () -> Unit)? = null,
-) {
-    Column(modifier.fillMaxHeight().width(if (roomy) 96.dp else 76.dp).floatingGlass(RoundedCornerShape(if (roomy) 48.dp else 38.dp))) {
-        Column(Modifier.weight(1f).fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.SpaceEvenly) { RailTabs(tabs, selected, onSelect) }
-        if (footer != null) {
-            Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = 0.12f)))
-            Column(
-                Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) { footer() }
-        }
-    }
-}
-
-@Composable
-private fun RailTabs(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit) {
-    tabs.forEachIndexed { i, t ->
-        val on = i == selected
-        val color = if (on) Glass.Ember else Glass.Muted
-        Column(
-            Modifier.padding(horizontal = 6.dp, vertical = 2.dp).fillMaxWidth().height(72.dp).then(t.tourKey?.let { Modifier.tourTarget(it) } ?: Modifier)
-                .clip(RoundedCornerShape(20.dp)).background(if (on) Glass.FillStrong else Color.Transparent)
-                .selectable(on, role = Role.Tab) { onSelect(i) },
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { t.icon(color) }
-            Text(t.label, color = color, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 2.dp))
-        }
-    }
-}
-
-@Composable
-private fun RowScope.TabItem(tab: GlassTab, on: Boolean, onClick: () -> Unit) {
-    val color = if (on) Glass.Ember else Glass.Muted
-    Column(
-        Modifier.weight(1f).fillMaxHeight().then(tab.tourKey?.let { Modifier.tourTarget(it) } ?: Modifier)
-            .clip(CircleShape).background(if (on) Glass.FillStrong else Color.Transparent)
-            .selectable(on, role = Role.Tab, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { tab.icon(color) }
-        Text(tab.label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
-    }
 }

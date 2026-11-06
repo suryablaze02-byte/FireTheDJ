@@ -87,12 +87,13 @@ class TvActivity : ComponentActivity() {
 
 /** The TV app's first-launch tour, over the home screen, driven by the remote. */
 private val TV_TOUR = listOf(
-    TourStep(null, "Welcome to FireTheDJ TV", "Your AI DJ on the big screen. Use the remote: arrows to move, OK to choose. Here's a quick tour."),
+    TourStep(null, "Welcome to FireTheDJ TV", "Your AI DJ on the big screen. Use the remote: arrows to move, OK to choose. Here's a quick tour.", art = com.autodj.ui.TourArt.WELCOME),
     TourStep("tv_add", "Add music", "Scan this TV and any USB drive, or stream YT Music, Spotify and Apple Music playlists. Each song is analysed once, then sorted into crates."),
     TourStep("tv_crates", "Start a mix", "Press a crate to start: All genres, or one style. Songs still being analysed join the mix as soon as they're ready."),
     TourStep("tv_mode", "Smooth or Trickster", "Up here: Smooth blends long and clean. Trickster adds scratches, rolls, echo throws and air horns."),
     TourStep("tv_settings", "Settings", "Updates and what's new, supporting FireTheDJ, and clearing the library."),
-    TourStep(null, "During the mix", "Now Playing shows both decks, the mix between them and the effects as they play. The visualizer button takes the screen over with the look you pick (Chill Drive, Lo-fi Vibe, Acid Trip, or Beat Pop with the lyrics); ◀ ▶ change it, and Back returns to the decks."),
+    TourStep(null, "During the mix", "Home shows the set playing at the top. Now Playing shows both decks, the mix between them, the effects as they play and what's coming up. Back returns home; the music plays on."),
+    TourStep(null, "Pick a look", "The visualizer button fills the screen. Press OK while it plays, then Up to the looks, and pick one; ◀ ▶ also step through them.", art = com.autodj.ui.TourArt.LOOKS),
 )
 
 /** What's new on the TV since 1.3, oldest first: each step shows once, to TVs that had an earlier version. */
@@ -103,6 +104,8 @@ private val TV_WHATS_NEW = listOf(
     TourStep("tv_add", "Stream", "YT Music and Spotify playlists, with one search across both. Spotify songs play from YouTube, and talking intros and skits are skipped.", since = "1.5.1"),
     TourStep(null, "Two decks", "Now Playing shows both decks, the mix and the effects as they play. The visualizer button takes over the screen; Back returns to the decks.", since = "1.5.1"),
     TourStep(null, "Two new looks", "Chill Drive cruises a neon highway with fireworks on the beat, and Lo-fi Vibe's rooftop city bounces along: ◀ ▶ while the visualizer plays. Karaoke has gone; Beat Pop shows the lyrics.", since = "1.6.1"),
+    TourStep(null, "Now playing on Home", "Home shows the set that's playing, with what's next; OK opens the decks. Crates show a few of their covers.", since = "2.0.0"),
+    TourStep(null, "Effects and looks", "On the decks, the Effects box shows the effect playing now and every effect in the mix, with what's coming up. In the visualizer, press OK, then Up, and pick a look by its picture.", since = "2.0.0", art = com.autodj.ui.TourArt.LOOKS),
 )
 
 private enum class Page { HOME, DECKS, PLAYER, YT_MUSIC }

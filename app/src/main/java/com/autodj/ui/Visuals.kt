@@ -114,8 +114,22 @@ fun songGround(path: String?): Color {
     return animateColorAsState(target, tween(900), label = "ground").value
 }
 
+/** A soft, bright glow in the cover's strongest hue (a crate's corner light); null for a colourless or missing cover. */
+@Composable
+fun coverGlow(path: String?): Color? {
+    val glow by produceState<Color?>(null, path) {
+        value = path?.let { withContext(Dispatchers.Default) { runCatching { coverHue(it) }.getOrNull() } }
+            ?.let { Color(android.graphics.Color.HSVToColor(floatArrayOf(it, 0.7f, 0.95f))) }
+    }
+    return glow
+}
+
 /** The cover's strongest hue, as a shade deep enough for white text on it; null for a colourless cover. */
-private fun deepCoverColour(path: String): Color? {
+private fun deepCoverColour(path: String): Color? =
+    coverHue(path)?.let { Color(android.graphics.Color.HSVToColor(floatArrayOf(it, 0.72f, 0.24f))) }
+
+/** The cover's strongest hue in degrees, weighted by how vivid each pixel is; null for a colourless cover. */
+private fun coverHue(path: String): Float? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(path, bounds)
     var sample = 1
@@ -138,8 +152,7 @@ private fun deepCoverColour(path: String): Color? {
     val best = weight.indices.maxBy { weight[it] }
     // Too little colour (under about a tenth of the cover, vividly): keep plum.
     if (weight[best] < small.width * small.height * 0.06f) return null
-    val hue = ((Math.toDegrees(atan2(sinSum[best].toDouble(), cosSum[best].toDouble())) + 360) % 360).toFloat()
-    return Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.72f, 0.24f)))
+    return ((Math.toDegrees(atan2(sinSum[best].toDouble(), cosSum[best].toDouble())) + 360) % 360).toFloat()
 }
 
 /** Cover art, or a generated cover (stable per track) when there is none. */

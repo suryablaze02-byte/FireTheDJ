@@ -50,6 +50,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -93,25 +96,7 @@ fun StreamScreen(
     onImportClosed: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var page by rememberSaveable { mutableStateOf(StreamPage.CHOOSE) }
-    when (page) {
-        StreamPage.YT_MUSIC -> YtMusicScreen(folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE })
-        StreamPage.SPOTIFY -> CatalogueScreen(
-            "Spotify", SourceKind.SPOTIFY,
-            "Spotify's playlists, played from YouTube: each song is found on YouTube Music. Up to 100 songs a playlist; " +
-                "songs YouTube doesn't have are left out.",
-            SpotifyCatalogue.sections.map { s -> s.title to s.cards.map { it.pick() } },
-            folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE },
-        )
-        StreamPage.APPLE_MUSIC -> CatalogueScreen(
-            "Apple Music", SourceKind.APPLE_MUSIC,
-            "Apple Music's playlists, played from YouTube: each song is found on YouTube Music. Up to 100 songs a playlist; " +
-                "songs YouTube doesn't have are left out.",
-            AppleMusicCatalogue.sections.map { s -> s.title to s.cards.map { it.pick() } },
-            folders, importState, onImport, onImportClosed, onBack = { page = StreamPage.CHOOSE },
-        )
-        StreamPage.CHOOSE -> StreamHome(folders, importState, onImport, onImportClosed, onBack, onPick = { page = it })
-    }
+    StreamHome(folders, importState, onImport, onImportClosed, onBack)
 }
 
 /** The search box, then either the two services or what the search found in each. */
@@ -122,7 +107,6 @@ private fun StreamHome(
     onImport: (String, String?) -> Unit,
     onImportClosed: () -> Unit,
     onBack: () -> Unit,
-    onPick: (StreamPage) -> Unit,
     vm: StreamSearchViewModel = viewModel(),
 ) {
     BackHandler(onBack = onBack)
@@ -132,6 +116,7 @@ private fun StreamHome(
     var tapped by remember { mutableStateOf<String?>(null) }
     val added = remember(folders) { folders.filter { it.remote }.map { it.uri }.toSet() }
     val focus = LocalFocusManager.current
+    var service by rememberSaveable { mutableStateOf(StreamPage.YT_MUSIC) }
 
     Column(Modifier.fillMaxSize()) {
         Header("Stream", onBack) {
@@ -142,27 +127,42 @@ private fun StreamHome(
             value = query,
             onValueChange = vm::search,
             singleLine = true,
-            placeholder = { Text("Search playlists: telugu, party, edm…") },
-            trailingIcon = if (query.isNotEmpty()) ({ TextButton(onClick = { vm.search("") }) { Text("Clear", color = Dj.Muted) } }) else null,
+            placeholder = { Text("Search playlists on any service", color = Glass.Muted) },
+            leadingIcon = { Icon(Icons.Filled.Search, null, tint = Glass.Muted) },
+            trailingIcon = if (query.isNotEmpty()) ({ TextButton(onClick = { vm.search("") }) { Text("Clear", color = Glass.Muted) } }) else null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Dj.Text, unfocusedTextColor = Dj.Text, focusedBorderColor = Dj.Accent),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(26.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Glass.Text, unfocusedTextColor = Glass.Text, cursorColor = Glass.Ember,
+                focusedContainerColor = Glass.FillStrong, unfocusedContainerColor = Glass.FillStrong,
+                focusedBorderColor = Glass.Ember, unfocusedBorderColor = Glass.Text.copy(alpha = 0.12f),
+            ),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
         )
         if (query.isBlank()) {
-            // The tiles as tall as the tallest, which grows with large text.
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ServiceTile(SourceKind.YOUTUBE, "YT Music", "Curated, by mood and genre", Modifier.weight(1f)) { onPick(StreamPage.YT_MUSIC) }
-                ServiceTile(SourceKind.SPOTIFY, "Spotify", "Its own playlists, from YouTube", Modifier.weight(1f)) { onPick(StreamPage.SPOTIFY) }
-                ServiceTile(SourceKind.APPLE_MUSIC, "Apple Music", "Its own playlists, from YouTube", Modifier.weight(1f)) { onPick(StreamPage.APPLE_MUSIC) }
-            }
-            Text(
-                "Search finds Spotify and Apple Music playlists and any public YouTube Music playlist. Got a Spotify, Apple Music " +
-                    "or YouTube Music link? Paste it. Nothing plays from Spotify or Apple Music and there's nothing to sign in to: " +
-                    "every song streams from YouTube.",
-                color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            GlassSegmented(
+                listOf(StreamPage.YT_MUSIC, StreamPage.SPOTIFY, StreamPage.APPLE_MUSIC), service,
+                { when (it) { StreamPage.YT_MUSIC -> "YT Music"; StreamPage.SPOTIFY -> "Spotify"; else -> "Apple Music" } },
+                { service = it }, Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp), height = 42.dp, fontSize = 14.sp,
             )
-        } else {
+            Box(Modifier.weight(1f)) {
+                when (service) {
+                    StreamPage.SPOTIFY -> CatalogueScreen(
+                        "Spotify", SourceKind.SPOTIFY, "",
+                        SpotifyCatalogue.sections.map { s -> s.title to s.cards.map { it.pick() } },
+                        folders, importState, onImport, onImportClosed, onBack = onBack, embedded = true,
+                    )
+                    StreamPage.APPLE_MUSIC -> CatalogueScreen(
+                        "Apple Music", SourceKind.APPLE_MUSIC, "",
+                        AppleMusicCatalogue.sections.map { s -> s.title to s.cards.map { it.pick() } },
+                        folders, importState, onImport, onImportClosed, onBack = onBack, embedded = true,
+                    )
+                    else -> YtMusicScreen(folders, importState, onImport, onImportClosed, onBack = onBack, embedded = true)
+                }
+            }
+        }
+        if (query.isNotBlank()) {
             StatusLine(importState, tapped)
             val spotify = remember(query) { SpotifyCatalogue.search(query).map { it.pick() } }
             val appleMusic = remember(query) { AppleMusicCatalogue.search(query).map { it.pick() } }
@@ -244,17 +244,20 @@ private fun CatalogueScreen(
     onImport: (String, String?) -> Unit,
     onImportClosed: () -> Unit,
     onBack: () -> Unit,
+    embedded: Boolean = false,
 ) {
-    BackHandler(onBack = onBack)
+    if (!embedded) BackHandler(onBack = onBack)
     var pasting by remember { mutableStateOf(false) }
     var tapped by remember { mutableStateOf<String?>(null) }
     val added = remember(folders) { folders.filter { it.remote }.map { it.uri }.toSet() }
     Column(Modifier.fillMaxSize()) {
-        Header(title, onBack) {
-            if (importState != ImportState.Working) onImportClosed()
-            pasting = true
+        if (!embedded) {
+            Header(title, onBack) {
+                if (importState != ImportState.Working) onImportClosed()
+                pasting = true
+            }
         }
-        Text(blurb, color = Dj.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
+        if (blurb.isNotBlank()) Text(blurb, color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
         StatusLine(importState, tapped, kind.color)
         LazyColumn(
             Modifier.weight(1f),
@@ -263,7 +266,7 @@ private fun CatalogueScreen(
         ) {
             items(sections, key = { it.first }) { (section, cards) ->
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(section, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp))
+                    Text(section, color = Glass.Text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(horizontal = 20.dp))
                     CardRow(cards, key = { it.key }) { card ->
                         PickTile(card, card.link in added, busy = importState == ImportState.Working && tapped == card.title, showSection = false) {
                             if (importState != ImportState.Working && card.link !in added) {
@@ -287,48 +290,29 @@ private fun CatalogueScreen(
 @Composable
 private fun Header(title: String, onBack: () -> Unit, onPaste: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 18.dp, top = 12.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(
-            Modifier.size(44.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Back", onClick = onBack),
-            contentAlignment = Alignment.Center,
-        ) { BackGlyph(Dj.Text) }
-        Text(title, color = Dj.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        OutlinedButton(onClick = onPaste, contentPadding = PaddingValues(horizontal = 14.dp)) {
-            Text("Paste a link", color = Dj.Text, fontSize = 13.sp)
+        GlassIconButton("Back", onClick = onBack) { BackGlyph(Glass.Text) }
+        Text(title, color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+        Row(
+            Modifier.height(40.dp).glass(RoundedCornerShape(20.dp)).clickable(role = Role.Button, onClick = onPaste).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            SourceGlyph(SourceKind.LINK, 16.dp)
+            Text("Paste a link", color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
-/** A big tile for one service; grows and rings in its colour when the remote is on it. */
-@Composable
-private fun ServiceTile(kind: SourceKind, title: String, hint: String, modifier: Modifier, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(18.dp)
-    Column(
-        modifier.fillMaxHeight().heightIn(min = 132.dp).scale(if (focused) 1.04f else 1f).clip(shape)
-            .background(kind.color.copy(alpha = 0.16f), shape)
-            .border(if (focused) 3.dp else 1.dp, kind.color.copy(alpha = if (focused) 1f else 0.45f), shape)
-            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Open $title", onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(Modifier.size(40.dp).background(kind.color.copy(alpha = 0.2f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-            SourceGlyph(kind, 22.dp)
-        }
-        Text(title, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeight = 19.sp)
-        Text(hint, color = Dj.Muted, fontSize = 12.sp)
-    }
-}
-
+/** One service's search results: its mark and name over a row of cards. */
 @Composable
 private fun ResultRow(title: String, kind: SourceKind, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SourceGlyph(kind, 18.dp)
-            Text(title, color = Dj.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = Glass.Text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
         }
         content()
     }

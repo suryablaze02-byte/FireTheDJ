@@ -38,6 +38,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
+import com.autodj.ui.glass
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autodj.support.KoFi
@@ -138,47 +144,50 @@ fun TvSettingsDialog(
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(Unit) { if (state == UpdateState.Idle) Updates.check(context) }
     if (whatsNew) TvWhatsNewDialog(onDismiss = { whatsNew = false })
-    TvGlassDialog(onDismiss = onDismiss, width = 640.dp) { first ->
-        Text("Settings", color = Glass.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
-        TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 8.dp).fillMaxWidth().focusRequester(first))
-        val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
-        TvCard(
-            "What's new in ${current.version}", current.summary,
-            Modifier.padding(horizontal = TV_EDGE, vertical = 4.dp).fillMaxWidth(), subtitleLines = 1,
-        ) { whatsNew = true }
-        // Light or dark, a toggle: OK switches it, and the whole app changes straight away.
-        val match = com.autodj.ui.Appearance.matchPhone
-        // What the screen shows now: while following the TV, the TV's setting, not the saved choice.
-        val light = com.autodj.ui.Appearance.isLight()
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 4.dp)) {
-            TvCard(
-                "Match TV: ${if (match) "on" else "off"}",
-                if (match) "Light or dark, as the TV is set" else "Press OK to follow the TV",
-                Modifier.width(260.dp), selected = match,
-            ) { com.autodj.ui.Appearance.setMatchPhone(context, !match) }
-            TvCard(
-                "Light mode: ${if (light) "on" else "off"}",
-                when {
-                    match -> "Follows the TV now"
-                    light -> "Soft grey. Press OK for dark."
-                    else -> "Dark. Press OK for light."
-                },
-                Modifier.width(260.dp).graphicsLayer(alpha = if (match) 0.5f else 1f, compositingStrategy = CompositingStrategy.ModulateAlpha), selected = light && !match,
-            ) { if (!match) com.autodj.ui.Appearance.setLight(context, !light) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(horizontal = TV_EDGE, vertical = 4.dp)) {
-            TvCard("Support FireTheDJ", "Chip in on Ko-fi or UPI", Modifier.width(260.dp), onClick = onSupport)
-            TvCard(
-                "Clear library",
-                if (librarySize == 0) "The library is empty" else "Remove all ${songs(librarySize)}",
-                Modifier.width(260.dp), titleColor = com.autodj.ui.Dj.Warn, onClick = onClear,
-            )
-        }
-        Row(Modifier.padding(start = TV_EDGE, top = 4.dp, end = TV_EDGE), verticalAlignment = Alignment.CenterVertically) {
-            TvCard("Done", null, Modifier.width(140.dp), onClick = onDismiss)
-            Text("FireTheDJ TV ${Updates.current}", color = Glass.Muted, fontSize = 14.sp, modifier = Modifier.padding(start = 20.dp))
+    val first = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+            Column(
+                Modifier.padding(20.dp).fillMaxHeight().width(540.dp)
+                    .background(Glass.Sheet, RoundedCornerShape(32.dp)).glass(RoundedCornerShape(32.dp), Glass.Fill)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Settings", color = Glass.Text, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = TV_EDGE))
+                Text("APPEARANCE", color = Glass.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(start = TV_EDGE, top = 6.dp))
+                val match = com.autodj.ui.Appearance.matchPhone
+                val light = com.autodj.ui.Appearance.light
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(horizontal = TV_EDGE)) {
+                    TvCard("Match TV", null, Modifier.weight(1f).focusRequester(first), selected = match) { com.autodj.ui.Appearance.setMatchPhone(context, true) }
+                    TvCard("Light", null, Modifier.weight(1f), selected = !match && light) {
+                        com.autodj.ui.Appearance.setMatchPhone(context, false); com.autodj.ui.Appearance.setLight(context, true)
+                    }
+                    TvCard("Dark", null, Modifier.weight(1f), selected = !match && !light) {
+                        com.autodj.ui.Appearance.setMatchPhone(context, false); com.autodj.ui.Appearance.setLight(context, false)
+                    }
+                }
+                if (match) Text("Following the TV: ${if (com.autodj.ui.Appearance.isLight()) "light" else "dark"} now.", color = Glass.Muted, fontSize = 14.sp,
+                    modifier = Modifier.padding(start = TV_EDGE))
+                TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth())
+                val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
+                TvCard("What's new in ${current.version}", current.summary, Modifier.padding(horizontal = TV_EDGE).fillMaxWidth(), subtitleLines = 1) { whatsNew = true }
+                TvCard("Support FireTheDJ", "Ko-fi or UPI, scan with your phone", Modifier.padding(horizontal = TV_EDGE).fillMaxWidth(), onClick = onSupport)
+                TvCard(
+                    "Clear library",
+                    if (librarySize == 0) "The library is empty" else "Remove all ${songs(librarySize)}",
+                    Modifier.padding(horizontal = TV_EDGE).fillMaxWidth(),
+                    // Coral on dark glass, a deep red on light: readable either way.
+                    titleColor = if (androidx.compose.ui.graphics.Color.White == Glass.Text) androidx.compose.ui.graphics.Color(0xFFFF8A7E) else androidx.compose.ui.graphics.Color(0xFFC62828),
+                    onClick = onClear,
+                )
+                Row(Modifier.padding(start = TV_EDGE, end = TV_EDGE, top = 6.dp)) {
+                    Text("FireTheDJ TV ${Updates.current}", color = Glass.Muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text("Back closes", color = Glass.Muted, fontSize = 14.sp)
+                }
+            }
         }
     }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 }
 
 /**

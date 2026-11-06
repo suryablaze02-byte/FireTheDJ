@@ -89,12 +89,12 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="screenshots/15-sideways-decks.png" width="400" alt="Two decks mid-mix: a vocal swap at bar 6 of 12, beats locked, the Vocals effect playing"/><br/><sub>Turn the phone: both decks, mid-mix</sub></td>
+    <td align="center"><img src="screenshots/15-sideways-decks.png" width="400" alt="Two decks: the playing song with Tempo push on deck A, the next mix, and the Effects box shouting TEMPO PUSH"/><br/><sub>Turn the phone: both decks and the effects, live</sub></td>
     <td align="center"><img src="screenshots/16-sideways-effects.png" width="400" alt="Effects view: crossfade, rate, phase error, key, tempo, the mix's phases and every effect"/><br/><sub>Tap the effects panel for the full effects view</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/17-sideways-mix.png" width="400" alt="Mix tab sideways: source and mode on the left, genre crates on the right"/><br/><sub>Mix: pick a crate</sub></td>
-    <td align="center"><img src="screenshots/18-acid-trip.png" width="400" alt="Acid Trip visualizer with the look picker open"/><br/><sub>Full-screen visualizers: Acid Trip</sub></td>
+    <td align="center"><img src="screenshots/17-sideways-mix.png" width="400" alt="Mix tab sideways: your set with Start on the left, crates with their covers on the right"/><br/><sub>Mix: your set and the crates</sub></td>
+    <td align="center"><img src="screenshots/18-acid-trip.png" width="400" alt="Acid Trip visualizer with the eight looks as picture tiles, and Stop, Pause and Skip"/><br/><sub>Full-screen visualizers: pick a look by its picture</sub></td>
   </tr>
 </table>
 </div>
@@ -104,14 +104,14 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="screenshots/02-mix.png" width="200" alt="Mix tab: source, mode and genre crates"/><br/><sub>Mix: pick a crate</sub></td>
-    <td align="center"><img src="screenshots/03-music.png" width="200" alt="Music tab: sources and songs"/><br/><sub>Music: your sources</sub></td>
-    <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing with the spinning record, skip button and AI in control"/><br/><sub>Now Playing</sub></td>
+    <td align="center"><img src="screenshots/02-mix.png" width="200" alt="Mix tab: the Your set card with Start, and genre crates showing their covers"/><br/><sub>Mix: your set and the crates</sub></td>
+    <td align="center"><img src="screenshots/03-music.png" width="200" alt="Music tab: add music, sources as cover collages, and songs with their tempo"/><br/><sub>Music: your sources and songs</sub></td>
+    <td align="center"><img src="screenshots/04-now-playing.png" width="200" alt="Now Playing: the record with its spectrum, the song's tempo, key and language, the mix-out mark and the next mix"/><br/><sub>Now Playing</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings with Match phone, Light mode and what's new"/><br/><sub>Settings &amp; what's new</sub></td>
+    <td align="center"><img src="screenshots/08-settings.png" width="200" alt="Settings: Phone, Light or Dark, stem separation and analysis"/><br/><sub>Settings: light, dark or as your phone</sub></td>
     <td align="center"><img src="screenshots/07-cast.png" width="200" alt="Play on a TV sheet"/><br/><sub>Play on a TV</sub></td>
-    <td align="center"><img src="screenshots/14-update.png" width="200" alt="Banner for a new version"/><br/><sub>A new version is out</sub></td>
+    <td align="center"><img src="screenshots/19-mini-player.png" width="200" alt="Music tab with the mini player: the playing song, the trick now and pause"/><br/><sub>The set, from any tab</sub></td>
   </tr>
   <tr>
     <td align="center"><img src="screenshots/13-support.png" width="200" alt="Support FireTheDJ over UPI"/><br/><sub>Support over UPI</sub></td>
@@ -126,12 +126,12 @@ bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal sw
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="screenshots/09-tv-home.png" width="400" alt="FireTheDJ TV home screen"/><br/><sub>Home: mode, crates and music sources</sub></td>
-    <td align="center"><img src="screenshots/10-tv-player.png" width="400" alt="TV player with Home, Stop and Play/Pause"/><br/><sub>Home, Stop and Play/Pause on OK</sub></td>
+    <td align="center"><img src="screenshots/09-tv-home.png" width="400" alt="FireTheDJ TV home: mode, crates with their covers, and music sources"/><br/><sub>Home: crates with their covers</sub></td>
+    <td align="center"><img src="screenshots/10-tv-player.png" width="400" alt="TV decks: Loop roll glowing in the Effects box, the next mix and what's coming up"/><br/><sub>Now Playing: both decks and the effects, live</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/11-tv-visualizer.png" width="400" alt="Club visualizer on the TV with the track card"/><br/><sub>Full-screen visualizers, a new look every 30 s</sub></td>
-    <td align="center"><img src="screenshots/12-tv-settings.png" width="400" alt="TV Settings with an update ready"/><br/><sub>Settings: updates, support, clear library</sub></td>
+    <td align="center"><img src="screenshots/11-tv-visualizer.png" width="400" alt="Acid Trip on the TV with the looks as a shelf of pictures and the playback controls"/><br/><sub>Visualizers: pick a look from the shelf</sub></td>
+    <td align="center"><img src="screenshots/12-tv-settings.png" width="400" alt="TV Settings panel: Match TV, Light or Dark, updates and what's new"/><br/><sub>Settings: a panel down the side</sub></td>
   </tr>
 </table>
 </div>
