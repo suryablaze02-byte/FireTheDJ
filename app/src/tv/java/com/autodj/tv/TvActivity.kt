@@ -42,7 +42,7 @@ class TvActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.autodj.ui.Appearance.load(this)
         setContent {
-            val dark = !com.autodj.ui.Appearance.light
+            val dark = !com.autodj.ui.Appearance.isLight()
             com.autodj.ui.GlassTheme(dark = dark) {
             MaterialTheme(colorScheme = if (dark) darkColorScheme(primary = Dj.Accent, background = Dj.Bg, surface = Dj.Surface) else androidx.compose.material3.lightColorScheme(primary = Dj.Accent, background = Dj.Bg, surface = Dj.Surface)) {
                 // Splash on every launch (not on recreation), then the tour once ever; after an

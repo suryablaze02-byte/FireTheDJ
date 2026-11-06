@@ -1,5 +1,6 @@
 package com.autodj.ui
 
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import kotlinx.coroutines.delay
@@ -116,21 +117,22 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("Settings", color = Glass.Text, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp,
                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 16.dp))
             GlassHeading("Appearance", Modifier.padding(start = 4.dp, bottom = 8.dp))
-            Row(
-                Modifier.fillMaxWidth().height(60.dp).glass(RoundedCornerShape(18.dp))
-                    .toggleable(Appearance.light, role = Role.Switch) { Appearance.setLight(context, it) }
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("Light mode", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = Appearance.light,
-                    onCheckedChange = null,
-                    colors = SwitchDefaults.colors(checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White),
-                )
+            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp))) {
+                AppearanceSwitch("Match phone", "Light or dark, as your phone is set", Appearance.matchPhone) { Appearance.setMatchPhone(context, it) }
+                Divider()
+                val following = Appearance.matchPhone
+                AppearanceSwitch(
+                    "Light mode",
+                    when {
+                        following -> "Follows your phone now"
+                        Appearance.light -> "A soft grey background"
+                        else -> "A dark background"
+                    },
+                    if (following) Appearance.isLight() else Appearance.light,
+                    enabled = !following,
+                ) { Appearance.setLight(context, it) }
             }
-            Text("On: a white background. Off: a dark one. Now Playing keeps the song's colour either way.", color = Glass.Muted, fontSize = 13.sp,
+            Text("Now Playing keeps the song's colour either way.", color = Glass.Muted, fontSize = 13.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp))
 
             GlassHeading("Updates", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
@@ -583,6 +585,29 @@ private fun StemSettings() {
             }
         }
     }
+    }
+}
+
+/** One switch row in Appearance; dimmed and inert when not [enabled]. */
+@Composable
+private fun AppearanceSwitch(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+            .alpha(if (enabled) 1f else 0.45f).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = Glass.Muted, fontSize = 13.sp)
+        }
+        Switch(
+            checked = checked, onCheckedChange = null, enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Glass.Ember, checkedThumbColor = Color.White,
+                disabledCheckedTrackColor = Glass.Ember, disabledCheckedThumbColor = Color.White,
+            ),
+        )
     }
 }
 

@@ -2,6 +2,7 @@ package com.autodj.ui
 
 import androidx.compose.foundation.Canvas
 import android.content.Context
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
@@ -63,7 +64,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The liquid-glass look: clear panels with a bright rim on their lit upper-left edge and a softer
- * one opposite, floating over one solid ground: white in light mode, near-black in dark. Panels
+ * one opposite, floating over one solid ground: soft grey in light mode, near-black in dark. Panels
  * have no live backdrop blur, which keeps every frame cheap, on phones and on TVs.
  *
  * Colours follow [LocalGlassDark], so a screen in a song's deep colour (Now Playing, the decks)
@@ -71,7 +72,7 @@ import androidx.compose.ui.unit.sp
  */
 object Glass {
     /** The ground everything floats on. */
-    val Ground: Color @Composable @ReadOnlyComposable get() = if (dark()) DarkGround else Color.White
+    val Ground: Color @Composable @ReadOnlyComposable get() = if (dark()) DarkGround else LightGround
     val Fill: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.08f) else Ink.copy(alpha = 0.06f)
     val FillStrong: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.14f) else Ink.copy(alpha = 0.09f)
     val FillSelected: Color @Composable @ReadOnlyComposable get() = if (dark()) Color.White.copy(alpha = 0.22f) else Color.White
@@ -109,24 +110,44 @@ object Glass {
 /** The dark-mode ground, and the ground behind a song whose cover has no colour. */
 val DarkGround = Color(0xFF0B0B0D)
 
+/** The light-mode ground: a soft grey, gentler than pure white. */
+val LightGround = Color(0xFFF2F2F7)
+
 /** True where the glass is dark: dark mode, or a screen in a song's deep colour. */
 val LocalGlassDark = staticCompositionLocalOf { true }
 
-/** Light or dark, as chosen in Settings and remembered across launches. Light unless changed. */
+/**
+ * Light or dark, from Settings and remembered across launches. With [matchPhone] on (the default)
+ * the app follows the device's dark-theme setting; off, [light] decides.
+ */
 object Appearance {
     private const val PREFS = "appearance"
     private const val KEY = "light"
+    private const val KEY_MATCH = "match_phone"
     var light by mutableStateOf(true)
+        private set
+    var matchPhone by mutableStateOf(true)
         private set
 
     fun load(context: Context) {
-        light = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, true)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        light = prefs.getBoolean(KEY, true)
+        matchPhone = prefs.getBoolean(KEY_MATCH, true)
     }
 
     fun setLight(context: Context, on: Boolean) {
         light = on
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply()
     }
+
+    fun setMatchPhone(context: Context, on: Boolean) {
+        matchPhone = on
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_MATCH, on).apply()
+    }
+
+    /** Whether the app shows light right now: the device's setting when matching it, else the switch. */
+    @Composable
+    fun isLight(): Boolean = if (matchPhone) !isSystemInDarkTheme() else light
 }
 
 /** Shows [content] in the glass of [dark] (dark mode or a song's colour) or light. */
@@ -155,6 +176,8 @@ fun SystemBarIcons(darkGround: Boolean) {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         @Suppress("DEPRECATION")
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        // No whitish scrim behind the navigation bar: the ground runs to the bottom edge.
+        if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = !darkGround
             isAppearanceLightNavigationBars = !darkGround
