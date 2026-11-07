@@ -109,44 +109,46 @@ fun YtMusicScreen(
                 Text("Paste a link", color = Dj.Text, fontSize = 13.sp)
             }
         }
-        Text(
-            if (embedded) "Tap a playlist to add it. Every song streams from YouTube; nothing to sign in to."
-            else "Curated playlists from YouTube Music. Tap one to add it; its tracks are analysed, then mixed.",
-            color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-        )
-
-        when (val c = categories) {
-            Loadable.Loading -> Centered { CircularProgressIndicator(color = YT_RED) }
-            is Loadable.Failed -> Centered { Retry("Couldn't load YouTube Music: ${c.reason}", vm::loadCategories) }
-            is Loadable.Ready -> {
-                c.value.forEach { section ->
-                    Text(
-                        section.title, color = Dj.Muted, fontSize = 12.sp,
-                        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 6.dp),
-                    )
-                    // The picked category is scrolled into view, so it's clear what the shelves below are.
-                    val row = rememberLazyListState()
-                    LaunchedEffect(selected) {
-                        val at = section.categories.indexOf(selected)
-                        if (at >= 0) row.animateScrollToItem((at - 1).coerceAtLeast(0))
-                    }
-                    LazyRow(state = row, contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(section.categories) { cat ->
-                            CrateChip(cat.title, cat == selected) { vm.select(cat) }
+        // One list for everything below the header: the hint, the mood and language chips and the
+        // shelves scroll together, so on a short screen (a TV) the shelves get the whole height.
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 16.dp + LocalTabBarInset.current),
+        ) {
+            item {
+                Text(
+                    if (embedded) "Tap a playlist to add it. Every song streams from YouTube; nothing to sign in to."
+                    else "Curated playlists from YouTube Music. Tap one to add it; its tracks are analysed, then mixed.",
+                    color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+            }
+            when (val c = categories) {
+                Loadable.Loading -> item { Centered { CircularProgressIndicator(color = YT_RED) } }
+                is Loadable.Failed -> item { Centered { Retry("Couldn't load YouTube Music: ${c.reason}", vm::loadCategories) } }
+                is Loadable.Ready -> {
+                    items(c.value) { section ->
+                        Text(
+                            section.title, color = Dj.Muted, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 6.dp),
+                        )
+                        // The picked category is scrolled into view, so it's clear what the shelves below are.
+                        val row = rememberLazyListState()
+                        LaunchedEffect(selected) {
+                            val at = section.categories.indexOf(selected)
+                            if (at >= 0) row.animateScrollToItem((at - 1).coerceAtLeast(0))
+                        }
+                        LazyRow(state = row, contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(section.categories) { cat ->
+                                CrateChip(cat.title, cat == selected) { vm.select(cat) }
+                            }
                         }
                     }
-                }
-                StatusLine(importState, tapped?.title)
-                when (val s = shelves) {
-                    Loadable.Loading -> Centered { CircularProgressIndicator(color = YT_RED) }
-                    is Loadable.Failed -> Centered { Retry(s.reason) { selected?.let(vm::select) } }
-                    is Loadable.Ready -> LazyColumn(
-                        Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp + LocalTabBarInset.current),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
-                    ) {
-                        items(s.value) { shelf ->
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { StatusLine(importState, tapped?.title) }
+                    when (val s = shelves) {
+                        Loadable.Loading -> item { Centered { CircularProgressIndicator(color = YT_RED) } }
+                        is Loadable.Failed -> item { Centered { Retry(s.reason) { selected?.let(vm::select) } } }
+                        is Loadable.Ready -> items(s.value) { shelf ->
+                            Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
                                     shelf.title, color = Glass.Text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold,
                                     modifier = Modifier.padding(horizontal = 20.dp),

@@ -14,6 +14,27 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.1.1",
+            "TV fixes: a slim look switcher, smoother effects, and YT Music playlists that scroll.",
+            listOf(
+                Section(
+                    "Changes",
+                    listOf(
+                        Change("Look switcher on TV", "Press left or right on the remote to change looks; a small pill shows the look's name. OK or down opens a slim bar along the bottom instead of the big panel."),
+                        Change("Effects stay on Club's LED wall", "Mix effects like rises, crashes and sweeps now play only on the LED wall behind the DJ in Club. No more screen shakes or full-screen flashes on any look."),
+                        Change("Acid Trip and Rabbit Hole are phone-only", "TV graphics chips can't run them smoothly, so the TV app leaves them out. Phones and tablets keep both."),
+                    ),
+                ),
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("YT Music on TV", "Playlists scroll again, and their titles are no longer cut off under the mood and language filters."),
+                        Change("Effect names centred", "In Club, effect names sit in the middle of the screen again."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.1.0",
             "New looks: a moonlit Chill Drive, Acid Trip as a breathing fractal, and Rabbit Hole. Calmer effects on every look.",
             listOf(

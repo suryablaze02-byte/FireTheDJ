@@ -258,7 +258,7 @@ private fun TourOverlayBody(state: TourState, steps: List<TourStep>, tv: Boolean
             when (step.art) {
                 TourArt.WELCOME -> WelcomeArt(tv)
                 TourArt.LOOKS -> Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-                    com.autodj.ui.vis.VisualizerStyle.entries.take(if (tv) 8 else 4).forEach { LookArt(it, Modifier.size(if (tv) 56.dp else 64.dp, if (tv) 40.dp else 44.dp).clip(RoundedCornerShape(10.dp))) }
+                    com.autodj.ui.vis.VisualizerStyle.entries.filter { !tv || it.onTv }.take(if (tv) 8 else 4).forEach { LookArt(it, Modifier.size(if (tv) 56.dp else 64.dp, if (tv) 40.dp else 44.dp).clip(RoundedCornerShape(10.dp))) }
                 }
                 null -> Unit
             }

@@ -29,13 +29,14 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * Effects and tricks, drawn the same way over every [Scene]:
+ * Effects and tricks, in Club only:
  *
  * - **Callouts:** the effect's name fills the screen as it starts, moving like the effect
  *   (DROP slams in, ECHO repeats, SIREN flashes red and blue, SPINBACK spins…); a small tag
  *   stays up while a long effect runs.
- * - **Full-screen animation** per effect: shake, flashes, shockwaves, siren beacons, laser
- *   fans, build-up glow and strobe, filter tints, blackout gates, rewind spins and more.
+ * - **Animation** per effect, on the LED wall behind the DJ ([Scene.effectArea]): flashes,
+ *   shockwaves, siren beacons, laser fans, build-up glow and strobe, filter tints, blackout
+ *   gates and more. No other look shows them.
  */
 class EffectLayer {
     private val seen = HashSet<String>()
@@ -115,21 +116,7 @@ class EffectLayer {
         }
     }
 
-    /** Shake, scratch jitter and spinback, applied to the scene before it's drawn. */
-    fun motion(s: VisualState): Triple<Float, Float, Float> {
-        val t = s.time
-        var x = shake * 16f * sin(t * 90f)
-        val y = shake * 12f * cos(t * 70f)
-        if (s.active(FxType.SCRATCH) != null) x += w * 0.03f * sin(t * 40f)
-        val spin = s.active(FxType.BACKSPIN)?.first
-        val rot = if (spin != null) -400f * (1 - (1 - spin.progress).pow(3f)) * (1 - spin.progress) else 0f
-        return Triple(x, y, rot)
-    }
-
-    /** Echo: afterimages of the scene, scale and alpha, drawn behind the overlays. */
-    fun echoCopies(s: VisualState): List<Pair<Float, Float>> =
-        if (s.active(FxType.ECHO) != null) listOf(1.06f to 0.35f, 1.12f to 0.18f) else emptyList()
-
+    /** The effects' light animations, filling the area they're given (Club's LED wall). */
     fun drawOverlays(ds: DrawScope, s: VisualState) = with(ds) {
         w = size.width
         h = size.height
@@ -231,12 +218,14 @@ class EffectLayer {
         s.active(FxType.BRAKE)?.let { (a, _) -> drawRect(Color.Black.copy(alpha = 0.65f * a.progress)) }
         s.active(FxType.GATE)?.let { (a, _) -> if (s.frac(s.beat / max(a.p1, 0.0625f)) >= 0.5f) drawRect(Color.Black.copy(alpha = 0.85f * a.amount)) }
         s.active(FxType.TREMOLO)?.let { (a, _) -> drawRect(Color.Black.copy(alpha = 0.5f * a.amount * (0.5f - 0.5f * cos(2 * pi * s.beat / max(a.p1, 0.0625f))))) }
-        if (s.paused) drawRect(Color.Black.copy(alpha = 0.45f))
         if (flash > 0f) drawRect(Color.White.copy(alpha = 0.65f * flash.pow(1.5f)))
     }
 
     /** The big full-screen name of the effect that just started, or the small tag of a long one still running. */
     fun drawCallout(ds: DrawScope, s: VisualState, measurer: TextMeasurer) = with(ds) {
+        // Callouts fill the whole screen; the overlays last set w and h to the LED wall's size.
+        w = size.width
+        h = size.height
         val type = calloutType
         if (type == null || calloutAge > CALLOUT_SEC) {
             val long = s.fx.filter { it.first.progress < 0.95f }.maxByOrNull { it.first.amount }?.first ?: return

@@ -23,6 +23,9 @@ interface Scene {
 
     /** Drawn small and scaled up to fill the screen: for shader looks too heavy to draw at full resolution. No echo trails. */
     val lowRes: Boolean get() = false
+
+    /** Where on screen the mix's effect animations play, or null for nowhere (only Club has one: its LED wall). */
+    fun effectArea(size: androidx.compose.ui.geometry.Size): androidx.compose.ui.geometry.Rect? = null
 }
 
 /**

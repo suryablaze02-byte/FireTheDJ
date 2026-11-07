@@ -83,6 +83,21 @@ class ClubScene : Scene {
         }
     }
 
+    // The mix's effects (risers, crashes, sirens…) light up the LED wall only.
+    override fun effectArea(size: Size): androidx.compose.ui.geometry.Rect {
+        val (left, top, wallW, bottom) = wall(size.width, size.height)
+        return androidx.compose.ui.geometry.Rect(left, top, left + wallW, bottom)
+    }
+
+    /** The LED wall: left, top, width, bottom. */
+    private fun wall(w: Float, h: Float): FloatArray {
+        val wide = w > h
+        val top = h * (if (wide) 0.12f else 0.16f)
+        val bottom = h * (if (wide) 0.52f else 0.5f)
+        val wallW = min(w * (if (wide) 0.62f else 0.9f), (bottom - top) * 2.4f)
+        return floatArrayOf((w - wallW) / 2, top, wallW, bottom)
+    }
+
     override fun draw(ds: DrawScope, s: VisualState) = with(ds) {
         val w = size.width
         val h = size.height
@@ -104,10 +119,7 @@ class ClubScene : Scene {
         }
 
         // LED wall: the live spectrum as lit LED columns (lows in the middle), both decks.
-        val wallTop = h * (if (wide) 0.12f else 0.16f)
-        val wallBottom = h * (if (wide) 0.52f else 0.5f)
-        val wallW = min(w * (if (wide) 0.62f else 0.9f), (wallBottom - wallTop) * 2.4f)
-        val wallLeft = (w - wallW) / 2
+        val (wallLeft, wallTop, wallW, wallBottom) = wall(w, h)
         drawRoundRect(Color(0xFF0A0A10), Offset(wallLeft - 6f, wallTop - 6f), Size(wallW + 12f, wallBottom - wallTop + 12f), CornerRadius(10f))
         val cols = 24
         val rows = 14

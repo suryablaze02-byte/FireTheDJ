@@ -77,6 +77,8 @@ import kotlinx.coroutines.delay
 
 /** How long the track card stays up after a new track starts or the look changes. */
 private const val INFO_MS = 7_000L
+/** How long the look's name stays up after ◀ ▶. */
+private const val LOOK_MS = 2_500L
 /** Controls hide after this long without a key press. */
 private const val CONTROLS_MS = 6_000L
 
@@ -91,10 +93,14 @@ private const val CONTROLS_MS = 6_000L
 fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
     val state by vm.engine.state.collectAsStateWithLifecycle()
     val artwork by vm.artwork.collectAsStateWithLifecycle()
-    val styles = VisualizerStyle.entries
-    val style by vm.visualizerStyle.collectAsStateWithLifecycle()
+    // Only the looks a TV can run smoothly; one saved on another device that isn't shows Club instead.
+    val styles = VisualizerStyle.entries.filter { it.onTv }
+    val saved by vm.visualizerStyle.collectAsStateWithLifecycle()
+    val style = if (saved.onTv) saved else VisualizerStyle.CLUB
     var controls by remember { mutableStateOf(false) }
     var infoUntil by remember { mutableStateOf(0L) }
+    // The look pill after ◀ ▶: just the look's name, briefly.
+    var lookUntil by remember { mutableStateOf(0L) }
     // Bumped by any key while the controls are up; they hide after a few idle seconds.
     var touched by remember { mutableIntStateOf(0) }
     val rootFocus = remember { FocusRequester() }
@@ -108,11 +114,11 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
     KeepScreenOn()
     BackHandler { if (controls) controls = false else onBack() }
 
-    /** Steps to the next (or previous) look and keeps it, showing its name for a moment. */
+    /** Steps to the next (or previous) look and keeps it, naming it in the pill for a moment. */
     fun changeLook(step: Int) {
         val i = styles.indexOf(style).coerceAtLeast(0)
         vm.setVisualizerStyle(styles[Math.floorMod(i + step, styles.size)])
-        infoUntil = System.currentTimeMillis() + INFO_MS
+        lookUntil = System.currentTimeMillis() + LOOK_MS
     }
     LaunchedEffect(controls, touched) {
         if (!controls) return@LaunchedEffect
@@ -122,7 +128,10 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
     LaunchedEffect(state.current?.uri) { infoUntil = System.currentTimeMillis() + INFO_MS }
     // The card hides by itself; this just re-checks the clock while it's up.
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(infoUntil, controls) { while (controls || System.currentTimeMillis() < infoUntil) { now = System.currentTimeMillis(); delay(500) }; now = System.currentTimeMillis() }
+    LaunchedEffect(infoUntil, lookUntil, controls) {
+        while (controls || System.currentTimeMillis() < maxOf(infoUntil, lookUntil)) { now = System.currentTimeMillis(); delay(250) }
+        now = System.currentTimeMillis()
+    }
     LaunchedEffect(controls) { runCatching { if (controls) pauseFocus.requestFocus() else rootFocus.requestFocus() } }
 
     val cardUp = (now < infoUntil || state.paused) && !controls
@@ -164,77 +173,74 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
             }
         }
 
-        // The look on screen and how to change it: at the top while the track card or controls are up.
-        AnimatedVisibility(now < infoUntil && !controls, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
-            Text(
-                "Look · ${style.label}   ◀ ▶ to change",
-                color = Glass.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 28.dp, end = 40.dp)
-                    .glass(RoundedCornerShape(999.dp), Glass.FillDark)
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-            )
+        // ◀ ▶ while watching: the new look's name at the top, with a dot for where it sits among them all.
+        AnimatedVisibility(now < lookUntil && !controls, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
+            Row(
+                Modifier.padding(top = 28.dp, end = 40.dp).glass(RoundedCornerShape(999.dp), Glass.FillDark)
+                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text("◀", color = Glass.Muted, fontSize = 16.sp)
+                Text(style.label, color = Glass.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+                Text("▶", color = Glass.Muted, fontSize = 16.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    styles.forEach { s -> Box(Modifier.size(7.dp).clip(CircleShape).background(if (s == style) Color.White else Glass.FillSelected)) }
+                }
+            }
         }
 
-        // The controls: one glass bar along the bottom, as on Apple TV. Home, stop, then play/pause (focused first).
+        // The controls: one slim glass bar along the bottom. The track, then home, stop, play/pause (focused first) and skip.
         AnimatedVisibility(controls, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) {
-            Column(
-                Modifier.onSizeChanged { controlsPx = it.height }.padding(horizontal = 40.dp, vertical = 30.dp).fillMaxWidth()
-                    .glass(RoundedCornerShape(32.dp), Glass.FillDark).padding(horizontal = 32.dp, vertical = 22.dp),
+            Row(
+                Modifier.onSizeChanged { controlsPx = it.height }.padding(horizontal = 40.dp, vertical = 28.dp).fillMaxWidth()
+                    .glass(RoundedCornerShape(28.dp), Glass.FillDark).padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("LOOKS", color = Glass.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Text("  ${style.label} · ${style.blurb.lowercase()}", color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
-                    styles.forEach { s ->
-                        com.autodj.ui.LookTile(s, s == style, { vm.setVisualizerStyle(s); touched++ }, width = 84.dp, height = 56.dp, fontSize = 14.sp)
+                if (deck != null) Artwork(art, deck.uri, deck.title, Modifier.size(56.dp).border(2.dp, Color.White.copy(alpha = .35f), CircleShape), CircleShape)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        (if (state.paused) "Paused · " else "") + deck?.title.orEmpty(),
+                        color = Glass.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+                    )
+                    val bits = listOfNotNull(deck?.artist?.takeIf { it.isNotBlank() }, deck?.let { "%.0f BPM".format(it.bpm) }, style.label)
+                    Text(bits.joinToString(" · "), color = Glass.Muted, fontSize = 14.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                    // Where the set is in this track.
+                    val progress = if (deck != null && deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
+                    Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(4.dp).clip(CircleShape).background(Glass.FillSelected)) {
+                        Box(Modifier.fillMaxWidth(progress).height(4.dp).background(Color.White, CircleShape))
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    if (deck != null) Artwork(art, deck.uri, deck.title, Modifier.size(76.dp).border(2.dp, Color.White.copy(alpha = .35f), CircleShape), CircleShape)
-                    TrackLines(state, style.label, Modifier.weight(1f), showNext = false)
-                    state.next?.let { next ->
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                state.secondsToMix?.let { "UP NEXT · IN ${formatTime(it)}" } ?: "UP NEXT",
-                                color = Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-                            )
-                            Text(next.title, color = Glass.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                                softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 360.dp))
-                        }
+                state.next?.let { next ->
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            state.secondsToMix?.let { "UP NEXT · ${formatTime(it)}" } ?: "UP NEXT",
+                            color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
+                        )
+                        Text(next.title, color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
                     }
                 }
-                // Where the set is in this track.
-                val progress = if (deck != null && deck.durationSec > 0) (deck.positionSec / deck.durationSec).toFloat().coerceIn(0f, 1f) else 0f
-                Box(Modifier.padding(top = 18.dp).fillMaxWidth().height(6.dp).clip(CircleShape).background(Glass.FillSelected)) {
-                    Box(Modifier.fillMaxWidth(progress).height(6.dp).background(Color.White, CircleShape))
-                }
-                // The playback buttons centred with "AI in control" under them, the look on its own at the right.
-                Box(Modifier.padding(top = 10.dp).fillMaxWidth()) {
-                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TvRoundButton(60.dp, Glass.FillStrong, "Home, the music keeps playing", onClick = { controls = false; onHome() }) {
-                                HomeGlyph(Glass.Text, Modifier.size(28.dp))
-                            }
-                            TvRoundButton(60.dp, Glass.FillStrong, "Stop the mix", onClick = { controls = false; vm.engine.stop() }) {
-                                StopIcon(Glass.Text, Modifier.size(26.dp))
-                            }
-                            TvRoundButton(80.dp, Color.White, if (state.paused) "Play" else "Pause", Modifier.focusRequester(pauseFocus), onClick = { vm.engine.togglePause() }) {
-                                if (state.paused) PlayIcon(INK, Modifier.size(38.dp)) else PauseIcon(INK, Modifier.size(38.dp))
-                            }
-                            // Skip: out at the next phrase, pressed again at the next bar.
-                            val skipLabel = when (state.skipping) {
-                                0 -> "Skip to the next song"
-                                1 -> "Skipping at the next phrase · press again for the next bar"
-                                else -> "Skipping at the next bar"
-                            }
-                            TvRoundButton(60.dp, if (state.skipping > 0) Glass.FillSelected else Glass.FillStrong, skipLabel, onClick = { vm.skip() }) {
-                                SkipIcon(if (state.canSkip || state.skipping > 0) Glass.Text else Glass.Muted, Modifier.size(28.dp))
-                            }
-                        }
-                        Text("AI in control", color = Glass.Muted, fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TvRoundButton(48.dp, Glass.FillStrong, "Home, the music keeps playing", onClick = { controls = false; onHome() }) {
+                        HomeGlyph(Glass.Text, Modifier.size(22.dp))
                     }
-
+                    TvRoundButton(48.dp, Glass.FillStrong, "Stop the mix", onClick = { controls = false; vm.engine.stop() }) {
+                        StopIcon(Glass.Text, Modifier.size(20.dp))
+                    }
+                    TvRoundButton(60.dp, Color.White, if (state.paused) "Play" else "Pause", Modifier.focusRequester(pauseFocus), onClick = { vm.engine.togglePause() }) {
+                        if (state.paused) PlayIcon(INK, Modifier.size(28.dp)) else PauseIcon(INK, Modifier.size(28.dp))
+                    }
+                    // Skip: out at the next phrase, pressed again at the next bar.
+                    val skipLabel = when (state.skipping) {
+                        0 -> "Skip to the next song"
+                        1 -> "Skipping at the next phrase · press again for the next bar"
+                        else -> "Skipping at the next bar"
+                    }
+                    TvRoundButton(48.dp, if (state.skipping > 0) Glass.FillSelected else Glass.FillStrong, skipLabel, onClick = { vm.skip() }) {
+                        SkipIcon(if (state.canSkip || state.skipping > 0) Glass.Text else Glass.Muted, Modifier.size(22.dp))
+                    }
                 }
             }
         }
