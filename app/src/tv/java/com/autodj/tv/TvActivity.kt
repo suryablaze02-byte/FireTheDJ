@@ -123,7 +123,7 @@ private fun TvApp(vm: DjViewModel) {
         Page.HOME -> TvHome(vm, onWatch = { page = Page.DECKS }, onYtMusic = { page = Page.YT_MUSIC })
         // Back walks home one step at a time: visualizer → decks → home.
         // The decks sit in the song's colour and the player over the visualizer: dark glass in either mode.
-        Page.DECKS -> com.autodj.ui.DarkGlass { TvDecks(vm, onHome = { page = Page.HOME }, onVisualizer = { page = Page.PLAYER }) }
+        Page.DECKS -> TvDecks(vm, onHome = { page = Page.HOME }, onVisualizer = { page = Page.PLAYER })
         Page.PLAYER -> com.autodj.ui.DarkGlass { TvPlayer(vm, onHome = { page = Page.HOME }, onBack = { page = Page.DECKS }) }
         Page.YT_MUSIC -> {
             val folders by vm.folders.collectAsStateWithLifecycle()

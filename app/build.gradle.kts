@@ -22,8 +22,8 @@ android {
         buildConfigField("String", "CAST_APP_ID", "\"${localProps.getProperty("cast.appId", "")}\"")
         minSdk = 26
         targetSdk = 34
-        versionCode = 21
-        versionName = "2.0.0"
+        versionCode = 22
+        versionName = "2.0.1"
     }
 
     // Release key from keystore.properties (kept out of git; see docs/RELEASE_SIGNING.md).

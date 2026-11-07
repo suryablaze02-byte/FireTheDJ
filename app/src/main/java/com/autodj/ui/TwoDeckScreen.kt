@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autodj.analysis.Camelot
@@ -75,9 +76,13 @@ import kotlin.math.roundToInt
 /** Deck colours: the playing deck orange, the incoming one blue (told apart by lightness too). */
 private val DeckA = Color(0xFFFF9F0A)
 private val DeckB = Color(0xFF64B5FF)
-private val DeckBText = Color(0xFF8FC2FF)
-private val AText = Color(0xFFFFD9B8)
-private val BText = Color(0xFFCFE4FF)
+private val DeckBText: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF8FC2FF) else Color(0xFF1F6FC2)
+private val AText: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFFFD9B8) else Color(0xFF8A4600)
+private val BText: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFCFE4FF) else Color(0xFF1F4F8A)
+
+/** A deck or card's glass: faint white on dark, frosted white on a light song tint. */
+private val CardFill: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.55f)
+private val CardEdge: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color.White.copy(alpha = 0.16f) else Color(0xFF1C1C1E).copy(alpha = 0.1f)
 
 /**
  * Now Playing as two decks, for the phone held sideways: the playing song on the left, the
@@ -187,7 +192,7 @@ private fun DeckPanel(
     roomy: Boolean = false,
 ) {
     Column(
-        modifier.fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = if (live) 0.07f else 0.04f))
+        modifier.fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(if (LocalGlassDark.current) Color.White.copy(alpha = if (live) 0.07f else 0.04f) else Color.White.copy(alpha = if (live) 0.6f else 0.42f))
             .border(1.dp, color.copy(alpha = if (live) 0.55f else 0.3f), RoundedCornerShape(20.dp)).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -240,6 +245,9 @@ private fun DeckPanel(
 @Composable
 private fun Overview(t: TrackInfo, positionSec: Double, markSec: Double?, color: Color, live: Boolean, height: Dp = 50.dp) {
     val energy = t.barEnergy
+    // Read outside the drawing: the unplayed bars and the playhead in the text colour, light or dark.
+    val ink = Glass.Text
+    val markColour = DeckB
     Canvas(Modifier.fillMaxWidth().height(height).semantics { contentDescription = "Waveform of ${t.title}, ${formatTime(positionSec)} of ${formatTime(t.durationSec)}" }) {
         if (energy.isEmpty() || t.durationSec <= 0) return@Canvas
         val n = energy.size
@@ -250,7 +258,7 @@ private fun Overview(t: TrackInfo, positionSec: Double, markSec: Double?, color:
             val h = (0.15f + 0.85f * energy[i].coerceIn(0f, 1f)) * size.height
             val played = x < head && live
             drawRect(
-                if (played) color else Color.White.copy(alpha = 0.3f),
+                if (played) color else ink.copy(alpha = 0.28f),
                 topLeft = Offset(x, (size.height - h) / 2), size = Size(maxOf(1f, step - 1f), h),
             )
         }
@@ -258,7 +266,7 @@ private fun Overview(t: TrackInfo, positionSec: Double, markSec: Double?, color:
             val mx = (m / t.durationSec).toFloat().coerceIn(0f, 1f) * size.width
             drawRect(DeckB, topLeft = Offset(mx, 0f), size = Size(2.dp.toPx(), size.height))
         }
-        drawRect(Color.White, topLeft = Offset(head - 1.dp.toPx(), 0f), size = Size(2.dp.toPx(), size.height))
+        drawRect(ink, topLeft = Offset(head - 1.dp.toPx(), 0f), size = Size(2.dp.toPx(), size.height))
     }
 }
 
@@ -311,7 +319,7 @@ private fun MixerPanel(
                     for (b in 1..state.mixBars.coerceAtMost(16)) {
                         val c = when {
                             b < state.mixBar -> DeckA
-                            b == state.mixBar -> Color.White
+                            b == state.mixBar -> Glass.Text
                             else -> Glass.FillSelected
                         }
                         Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(2.dp)).background(c))
@@ -346,7 +354,7 @@ private fun MixerPanel(
  */
 @Composable
 private fun PhaseStrip(phases: List<PhaseUi>, progress: Float?, modifier: Modifier) {
-    val colours = listOf(DeckB, DeckA, Color.White.copy(alpha = 0.4f), DeckBText, Glass.EmberText)
+    val colours = listOf(DeckB, DeckA, Glass.Text.copy(alpha = 0.4f), DeckBText, Glass.EmberText)
     Box(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             phases.forEachIndexed { i, ph ->
@@ -357,7 +365,7 @@ private fun PhaseStrip(phases: List<PhaseUi>, progress: Float?, modifier: Modifi
             }
         }
         if (progress != null) BoxWithConstraints(Modifier.fillMaxWidth().height(7.dp)) {
-            Box(Modifier.offset(x = maxWidth * progress.coerceIn(0f, 1f) - 1.dp).width(2.dp).fillMaxHeight().background(Color.White))
+            Box(Modifier.offset(x = maxWidth * progress.coerceIn(0f, 1f) - 1.dp).width(2.dp).fillMaxHeight().background(Glass.Text))
         }
     }
 }
@@ -407,7 +415,7 @@ internal fun SetProgress(state: EngineState, compact: Boolean = false) {
             Text("Song ${state.index + 1} of $total", color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("${minutes(played)} in", color = Glass.Muted, fontSize = 12.sp)
         }
-        Bar((played / (played + left).coerceAtLeast(1.0)).toFloat(), Color.White, Modifier.padding(top = 7.dp), 5.dp)
+        Bar((played / (played + left).coerceAtLeast(1.0)).toFloat(), Glass.Text, Modifier.padding(top = 7.dp), 5.dp)
         Text("About ${minutes(left)} left", color = Glass.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
     }
 }
@@ -456,8 +464,8 @@ private fun EffectsPanel(state: EngineState, visual: () -> VisualFrame?, onOpen:
         modifier.fillMaxWidth().clip(shape)
             .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen)
             .semantics { contentDescription = playing?.let { "Effect now: " + EffectLayer.label(it) } ?: "Effects" }
-            .background(if (focused) Color.White.copy(alpha = 0.14f) else if (hot) Color(0x1AFF8A3D) else Color.White.copy(alpha = 0.06f))
-            .border(if (focused) 3.dp else 1.dp, if (focused) Color.White else if (hot) DeckA.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.16f), shape)
+            .background(if (focused) Glass.FillSelected else if (hot) Color(0x1AFF8A3D) else CardFill)
+            .border(if (focused) 3.dp else 1.dp, if (focused) Glass.Text else if (hot) DeckA.copy(alpha = 0.45f) else CardEdge, shape)
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
@@ -526,8 +534,8 @@ private fun Bar(progress: Float, color: Color, modifier: Modifier, height: Dp) {
 private fun Card(modifier: Modifier = Modifier, highlight: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(if (highlight) Color(0x1AFF8A3D) else Color.White.copy(alpha = 0.06f))
-            .border(1.dp, if (highlight) DeckA.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.16f), RoundedCornerShape(18.dp))
+            .background(if (highlight) Color(0x1AFF8A3D) else CardFill)
+            .border(1.dp, if (highlight) DeckA.copy(alpha = 0.55f) else CardEdge, RoundedCornerShape(18.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         content = content,
     )
@@ -549,9 +557,10 @@ private fun Crossfader(gainA: Float, gainB: Float, locked: Boolean, lock: String
     }
     Box(Modifier.fillMaxWidth().height(22.dp).padding(top = 4.dp).semantics { contentDescription = "Crossfader ${(pos * 100).roundToInt()}% towards deck B" }) {
         Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Glass.FillSelected))
+        val thumb = Glass.Text
         Canvas(Modifier.fillMaxSize()) {
             val x = pos * (size.width - 14.dp.toPx())
-            drawRoundRect(Color.White, topLeft = Offset(x, 0f), size = Size(14.dp.toPx(), size.height), cornerRadius = CornerRadius(4.dp.toPx()))
+            drawRoundRect(thumb, topLeft = Offset(x, 0f), size = Size(14.dp.toPx(), size.height), cornerRadius = CornerRadius(4.dp.toPx()))
         }
     }
 }
@@ -563,8 +572,8 @@ private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Uni
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (tv != null) 10.dp else 14.dp)) {
             if (tv != null) RoundButton(44.dp, Glass.FillStrong, "Home, the music keeps playing", tv.onHome) { HomeGlyph(Glass.Text) }
             RoundButton(44.dp, if (tv != null) Glass.FillStrong else null, "Stop the set", onStop) { StopIcon(Glass.Text, Modifier.size(22.dp)) }
-            RoundButton(56.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", onToggle) {
-                if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(28.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(28.dp))
+            RoundButton(56.dp, PlayFill, if (state.paused) "Resume the set" else "Pause the set", onToggle) {
+                if (state.paused) PlayIcon(PlayInk, Modifier.size(28.dp)) else PauseIcon(PlayInk, Modifier.size(28.dp))
             }
             val skipping = state.skipping > 0
             RoundButton(
@@ -611,7 +620,7 @@ private fun RoundButton(
             .then(if (fill != null) Modifier.background(fill) else if (fillTv) Modifier.background(Glass.FillStrong) else Modifier)
             .then(
                 when {
-                    focused -> Modifier.border(3.dp, Color.White, CircleShape)
+                    focused -> Modifier.border(3.dp, Glass.Text, CircleShape)
                     ring -> Modifier.border(2.dp, Glass.EmberText, CircleShape)
                     else -> Modifier
                 },

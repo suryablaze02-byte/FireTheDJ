@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** The floating glass tab bar along the bottom. Drag along it and the highlight follows the finger. */
@@ -95,27 +99,35 @@ private val RAIL_ITEM = 84.dp
 /**
  * Tabs in equal slots with one glass lens behind the picked one. A tap glides the lens over; a
  * press-and-drag lifts it (a touch bigger and brighter) and it follows the finger, ticking at each
- * tab it crosses, then settles on the nearest tab with a spring and selects it.
+ * tab it crosses, then springs on to the next tab in the direction of the swipe and selects it.
  */
 @Composable
 private fun LiquidTabs(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> Unit, vertical: Boolean, lensShape: Shape) {
     val n = tabs.size
     val position = remember { Animatable(selected.toFloat()) }
     var dragging by remember { mutableStateOf(false) }
+    // Where a drag was let go: the lens stays there while the app catches up and opens that tab.
+    var released by remember { mutableStateOf<Int?>(null) }
+    // The drag handler outlives recompositions, so it reads the current tab and callback through these.
+    val currentSelected by rememberUpdatedState(selected)
+    val currentOnSelect by rememberUpdatedState(onSelect)
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    LaunchedEffect(selected, dragging) {
-        if (!dragging) position.animateTo(selected.toFloat(), spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow))
+    LaunchedEffect(selected) { released = null }
+    LaunchedEffect(selected, dragging, released) {
+        if (!dragging) position.animateTo((released ?: selected).toFloat(), spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow))
     }
     val lift by animateFloatAsState(if (dragging) 1f else 0f, spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium), label = "lift")
     // While dragging, the tab under the finger lights up; otherwise the picked one.
-    val lit = if (dragging) position.value.roundToInt().coerceIn(0, n - 1) else selected
+    val lit = if (dragging) position.value.roundToInt().coerceIn(0, n - 1) else released ?: selected
 
     BoxWithConstraints(
         Modifier.fillMaxSize().selectableGroup().pointerInput(n, vertical) {
             val slot = (if (vertical) size.height else size.width) / n.toFloat()
             fun at(px: Float) = (px / slot - 0.5f).coerceIn(0f, n - 1f)
             var last = -1
+            // Which way the finger was last heading: +1 towards later tabs, -1 towards earlier ones.
+            var heading = 0
             detectDragGestures(
                 onDragStart = { o ->
                     dragging = true
@@ -123,8 +135,10 @@ private fun LiquidTabs(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> U
                     last = p.roundToInt()
                     scope.launch { position.animateTo(p, spring(stiffness = Spring.StiffnessHigh)) }
                 },
-                onDrag = { change, _ ->
+                onDrag = { change, amount ->
                     change.consume()
+                    val d = if (vertical) amount.y else amount.x
+                    if (abs(d) > 0.5f) heading = if (d > 0) 1 else -1
                     val p = at(if (vertical) change.position.y else change.position.x)
                     scope.launch { position.snapTo(p) }
                     val i = p.roundToInt()
@@ -134,9 +148,18 @@ private fun LiquidTabs(tabs: List<GlassTab>, selected: Int, onSelect: (Int) -> U
                     }
                 },
                 onDragEnd = {
-                    val i = position.value.roundToInt().coerceIn(0, n - 1)
+                    // Snap on in the direction of the swipe, unless the lens already sits on a tab.
+                    val p = position.value
+                    val near = p.roundToInt()
+                    val i = when {
+                        abs(p - near) < 0.15f -> near
+                        heading > 0 -> ceil(p).toInt()
+                        heading < 0 -> floor(p).toInt()
+                        else -> near
+                    }.coerceIn(0, n - 1)
+                    released = i
                     dragging = false
-                    if (i != selected) onSelect(i)
+                    if (i != currentSelected) currentOnSelect(i) else released = null
                 },
                 onDragCancel = { dragging = false },
             )

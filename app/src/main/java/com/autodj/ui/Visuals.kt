@@ -42,6 +42,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import com.autodj.model.TrackInfo
 import kotlinx.coroutines.Dispatchers
@@ -72,14 +73,14 @@ object Dj {
     val Text: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFF2F2F5) else Color(0xFF1C1C1E)
     val Muted: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFC4C0CC) else Color(0xFF5E5E66)
     val Accent = Color(0xFFFF9F0A)
-    val AccentBg = Color(0xFF3A2414)
+    val AccentBg: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF3A2414) else Color(0xFFFFE8C7)
     val Blue = Color(0xFF64B5FF)
-    val BlueText = Color(0xFF8EC5FF)
+    val BlueText: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF8EC5FF) else Color(0xFF1F6FC2)
     val BlueDim = Color(0xFF2F5E8F)
-    val PhaseIdle = Color(0xFF1F2A3A)
+    val PhaseIdle: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF1F2A3A) else Color(0x141C1C1E)
     val BarIdle = Color(0xFF34343C)
-    val LightIdle = Color(0xFF3A3A42)
-    val Warn = Color(0xFFFFB08F)
+    val LightIdle: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF3A3A42) else Color(0xFFC7C7CC)
+    val Warn: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFFFFB08F) else Color(0xFFC62828)
     val Groove = Color(0xFF1C1C21)
     val Platter = Color(0xFF111114)
 }
@@ -114,6 +115,48 @@ fun songGround(path: String?): Color {
     return animateColorAsState(target, tween(900), label = "ground").value
 }
 
+/** The cover's strongest hue in degrees, worked out off the main thread; null for no cover or a colourless one. */
+@Composable
+fun rememberCoverHue(path: String?): Float? {
+    val hue by produceState<Float?>(null, path) {
+        value = path?.let { withContext(Dispatchers.Default) { runCatching { coverHue(it) }.getOrNull() } }
+    }
+    return hue
+}
+
+/**
+ * The playing song's backdrop, in both modes: a deep shade of the cover's colour fading into
+ * near-black when dark, a pale tint of it fading into the soft grey when light. Top to bottom
+ * upright, from the top-left corner sideways ([diagonal]). Colours fade from song to song.
+ */
+@Composable
+fun SongBackdrop(path: String?, modifier: Modifier, diagonal: Boolean = false) {
+    val hue = rememberCoverHue(path)
+    val dark = LocalGlassDark.current
+    val ground = if (dark) DarkGround else LightGround
+    val fade = tween<Color>(900)
+    val top by animateColorAsState(
+        when {
+            hue == null -> ground
+            dark -> Color.hsl(hue, 0.55f, 0.22f)
+            else -> Color.hsl(hue, 0.70f, 0.88f)
+        }, fade, label = "top",
+    )
+    val middle by animateColorAsState(
+        when {
+            hue == null -> ground
+            dark -> Color.hsl(hue, 0.45f, 0.12f)
+            else -> Color.hsl(hue, 0.45f, 0.93f)
+        }, fade, label = "middle",
+    )
+    val stops = arrayOf(0f to top, 0.45f to middle, 0.9f to ground)
+    Box(
+        modifier.background(
+            if (diagonal) Brush.linearGradient(*stops, start = Offset.Zero, end = Offset.Infinite) else Brush.verticalGradient(*stops),
+        ),
+    )
+}
+
 /** A soft, bright glow in the cover's strongest hue (a crate's corner light); null for a colourless or missing cover. */
 @Composable
 fun coverGlow(path: String?): Color? {
@@ -143,7 +186,8 @@ private fun coverHue(path: String): Float? {
     val hsv = FloatArray(3)
     for (y in 0 until small.height) for (x in 0 until small.width) {
         android.graphics.Color.colorToHSV(small.getPixel(x, y), hsv)
-        if (hsv[1] < 0.25f || hsv[2] < 0.2f) continue
+        // Soft, muted colours count too (a pastel cover still has a colour); only grey, black and white are skipped.
+        if (hsv[1] < 0.15f || hsv[2] < 0.15f) continue
         val w = hsv[1] * hsv[2]
         val b = (hsv[0] / 30f).toInt().coerceIn(0, 11)
         val rad = Math.toRadians(hsv[0].toDouble())
@@ -151,7 +195,7 @@ private fun coverHue(path: String): Float? {
     }
     val best = weight.indices.maxBy { weight[it] }
     // Too little colour (under about a tenth of the cover, vividly): keep plum.
-    if (weight[best] < small.width * small.height * 0.06f) return null
+    if (weight[best] < small.width * small.height * 0.03f) return null
     return ((Math.toDegrees(atan2(sinSum[best].toDouble(), cosSum[best].toDouble())) + 360) % 360).toFloat()
 }
 

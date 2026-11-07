@@ -130,7 +130,7 @@ fun NowPlayingScreen(
         val out = state.exitSec?.takeIf { deck.durationSec > 0 }?.let { (it / deck.durationSec).toFloat().coerceIn(0f, 1f) }
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(top = 14.dp).fillMaxWidth().height(16.dp)) {
             Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(6.dp).clip(CircleShape).background(Glass.FillSelected)) {
-                Box(Modifier.fillMaxWidth(at).height(6.dp).background(Color.White, CircleShape))
+                Box(Modifier.fillMaxWidth(at).height(6.dp).background(Glass.Text, CircleShape))
             }
             if (out != null) Box(Modifier.offset(x = maxWidth * out - 1.5.dp).width(3.dp).fillMaxHeight().background(Glass.Ember, RoundedCornerShape(2.dp))
                 .semantics { contentDescription = "Mixes out at ${formatTime(state.exitSec)}" })
@@ -157,11 +157,11 @@ fun NowPlayingScreen(
                 contentAlignment = Alignment.Center,
             ) { StopIcon(Glass.Text, Modifier.size(26.dp)) }
             Box(
-                Modifier.size(if (tablet) 86.dp else 76.dp).background(Color.White, CircleShape).clip(CircleShape)
+                Modifier.size(if (tablet) 86.dp else 76.dp).background(PlayFill, CircleShape).clip(CircleShape)
                     .clickable(role = Role.Button, onClick = onToggle)
                     .semantics { contentDescription = if (state.paused) "Resume the set" else "Pause the set" },
                 contentAlignment = Alignment.Center,
-            ) { if (state.paused) PlayIcon(Color(0xFF120A10), Modifier.size(32.dp)) else PauseIcon(Color(0xFF120A10), Modifier.size(32.dp)) }
+            ) { if (state.paused) PlayIcon(PlayInk, Modifier.size(32.dp)) else PauseIcon(PlayInk, Modifier.size(32.dp)) }
             // Skip: out at the next phrase, tapped again at the next bar; ringed while skipping.
             val skipping = state.skipping > 0
             Box(

@@ -14,6 +14,28 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.0.1",
+            "Light mode on the playing screens, the song's colour in both modes, real album covers, and a tab bar that snaps the way you swipe.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Light mode while playing", "Now Playing, the mixing screen and the sideways decks follow Phone / Light / Dark, on phone, tablet and TV."),
+                        Change("The song's colour", "Those screens take a soft gradient from the cover: a deep shade in dark mode, a pale tint in light mode."),
+                        Change("Real album covers", "Streamed songs show their album's cover instead of a frame from the music video. Covers already saved are looked up again once, a few a minute."),
+                        Change("Tabs snap the way you swipe", "Let go part-way along the tab bar or side rail and the glass carries on to the next tab in that direction."),
+                    ),
+                ),
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Tab glass bouncing back", "Sliding from Mix to Now Playing, or back, no longer springs the glass to the tab you started on."),
+                        Change("TV Home", "This TV & USB and Stream are the same size."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.0.0",
             "A redesign: crates with covers, a set card with Start, a mini player, live effects, looks you pick by picture, and real tablet layouts.",
             listOf(
