@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.1.2",
+            "Crates are sorted by size, biggest first.",
+            listOf(
+                Section(
+                    "Changes",
+                    listOf(
+                        Change("Biggest crates first", "On the Mix tab, crates are listed by how many songs they hold, most first, with All genres still on top. The TV already did this."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.1.1",
             "TV fixes: a slim look switcher, smoother effects, and YT Music playlists that scroll.",
             listOf(

@@ -128,7 +128,8 @@ fun MixScreen(
     val inSource = if (folder == null) library else library.filter { it.uri in folder.tracks }
     val ready = inSource.mapNotNull { it.info }
     val counts = ready.groupingBy { it.genreFamily }.eachCount()
-    val crates = Genres.families.filter { (counts[it] ?: 0) > 0 }
+    // Biggest crates first, as on TV and Android Auto; ties keep the genre order.
+    val crates = Genres.families.filter { (counts[it] ?: 0) > 0 }.sortedByDescending { counts[it] ?: 0 }
     val largest = counts.filterKeys { it != Genres.UNCLASSIFIED }.maxByOrNull { it.value }?.key ?: ALL
     val crate = pickedCrate?.takeIf { it == ALL || it in crates } ?: largest
     val allCount = ready.count { it.genreFamily != Genres.UNCLASSIFIED }
