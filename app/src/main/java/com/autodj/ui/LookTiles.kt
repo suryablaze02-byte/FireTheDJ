@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -97,7 +98,16 @@ fun LookArt(style: VisualizerStyle, modifier: Modifier) {
                 drawCircle(Brush.radialGradient(listOf(Color(0xFFF472B6), Color.Transparent), Offset(w * 0.3f, h * 0.3f), w * 0.6f), w * 0.6f, Offset(w * 0.3f, h * 0.3f))
                 drawCircle(Brush.radialGradient(listOf(Color(0xFF6366F1), Color.Transparent), Offset(w * 0.72f, h * 0.7f), w * 0.6f), w * 0.6f, Offset(w * 0.72f, h * 0.7f))
             }
-            VisualizerStyle.ACID -> drawRect(Brush.sweepGradient(listOf(Color(0xFF22C55E), Color(0xFFD946EF), Color(0xFFFACC15), Color(0xFF22C55E))))
+            VisualizerStyle.ACID -> {
+                // Eight glowing petals round a jewel: the breathing fractal.
+                drawRect(Color(0xFF120A1C))
+                val c = Offset(w / 2, h / 2)
+                for (i in 0 until 8) rotate(i * 45f, c) {
+                    drawOval(Brush.verticalGradient(listOf(Color(0xFFE9A86B), Color(0xFF9C3D7A)), startY = c.y - h * 0.46f, endY = c.y), Offset(c.x - w * 0.06f, c.y - h * 0.46f), Size(w * 0.12f, h * 0.36f))
+                }
+                drawCircle(Color(0xFF3FA7A0), w * 0.09f, c)
+                drawCircle(Color(0xFF120A1C), w * 0.04f, c)
+            }
             VisualizerStyle.FIELD -> {
                 drawRect(Color(0xFF140A04))
                 val step = w / 8
@@ -113,10 +123,11 @@ fun LookArt(style: VisualizerStyle, modifier: Modifier) {
                 for (i in 0 until 5) drawCircle(Color(0xFF2A1840), w * 0.07f, Offset(w * (0.1f + i * 0.2f), h * 0.74f))
             }
             VisualizerStyle.DRIVE -> {
-                drawRect(Color(0xFF0B1B3F), size = Size(w, h * 0.6f))
-                drawRect(Color(0xFFF97316), topLeft = Offset(0f, h * 0.6f), size = Size(w, h * 0.03f))
-                drawRect(Color(0xFF111827), topLeft = Offset(0f, h * 0.63f), size = Size(w, h * 0.37f))
-                drawCircle(Color(0xFFFDE68A), w * 0.05f, Offset(w * 0.72f, h * 0.22f))
+                drawRect(Brush.verticalGradient(listOf(Color(0xFF070B1E), Color(0xFF3A3A66)), endY = h * 0.6f), size = Size(w, h * 0.6f))
+                drawCircle(Color(0xFFF2EEF8), w * 0.12f, Offset(w * 0.68f, h * 0.28f))
+                drawRect(Color(0xFF1A1B3C), topLeft = Offset(0f, h * 0.52f), size = Size(w, h * 0.08f))
+                drawRect(Color(0xFF07081A), topLeft = Offset(0f, h * 0.6f), size = Size(w, h * 0.4f))
+                drawRect(Color(0xFFFF2840), topLeft = Offset(w * 0.3f, h * 0.8f), size = Size(w * 0.4f, h * 0.035f))
             }
             VisualizerStyle.LOFI -> {
                 drawRect(Color(0xFFFDBA74), size = Size(w, h * 0.5f))
@@ -127,6 +138,16 @@ fun LookArt(style: VisualizerStyle, modifier: Modifier) {
                 drawRect(Brush.linearGradient(listOf(Color(0xFFEC4899), Color(0xFF8B5CF6))))
                 for (i in 0 until 3) drawRoundRect(Color.White.copy(alpha = 0.85f - i * 0.25f), topLeft = Offset(w * 0.18f, h * (0.3f + i * 0.16f)),
                     size = Size(w * (0.64f - i * 0.12f), h * 0.08f), cornerRadius = CornerRadius(h * 0.04f))
+            }
+            VisualizerStyle.RABBIT_HOLE -> {
+                // Rings of a lattice shrinking into a dark centre.
+                drawRect(Color(0xFF0E0815))
+                val c = Offset(w / 2, h / 2)
+                for (i in 0 until 6) {
+                    val r = w * 0.62f * (1 - i * 0.15f)
+                    drawCircle(if (i % 2 == 0) Color(0xFFE9A86B) else Color(0xFF9C3D7A), r, c, alpha = 0.35f + i * 0.1f, style = Stroke(r * 0.08f))
+                }
+                drawCircle(Color.Black, w * 0.08f, c)
             }
         }
     }

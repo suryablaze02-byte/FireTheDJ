@@ -14,6 +14,34 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.1.0",
+            "New looks: a moonlit Chill Drive, Acid Trip as a breathing fractal, and Rabbit Hole. Calmer effects on every look.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Chill Drive, redrawn", "A coast road at night under a big moon, behind a dark sports coupe. A street lamp passes on every beat, the tail-light strip moves with the music, and an aurora unrolls on the drop."),
+                        Change("Acid Trip, redrawn", "A mirrored fractal that keeps unfolding, breathing with the kick and leaving trails, in deep colours that drift slowly. Android 13 and later; older phones keep the previous Acid Trip."),
+                        Change("Rabbit Hole", "A new look: drift down a tunnel lined with a living lattice, its walls breathing; on the drop you surge forward. Android 13 and later; older phones show Neon Tunnel."),
+                    ),
+                ),
+                Section(
+                    "Changes",
+                    listOf(
+                        Change("Effect names only in Club", "LED Field no longer shows effect names; Club still does. The other looks show effects as light and motion."),
+                        Change("No more fire cannons", "The flame columns from the bottom of the screen are gone from every look."),
+                    ),
+                ),
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Go to Mix sideways", "With nothing playing, Now Playing held sideways (on a tablet especially) now shows Go to Mix, as it does upright."),
+                        Change("Look panel", "Upright, the LOOK label no longer squeezes into a column when a look's description is long."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.0.1",
             "Light mode on the playing screens, the song's colour in both modes, real album covers, and a tab bar that snaps the way you swipe.",
             listOf(

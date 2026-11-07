@@ -20,6 +20,9 @@ interface Scene {
 
     /** Draws the whole scene (opaque). May be called more than once a frame (echo trails), so it must not change state. */
     fun draw(ds: DrawScope, s: VisualState)
+
+    /** Drawn small and scaled up to fill the screen: for shader looks too heavy to draw at full resolution. No echo trails. */
+    val lowRes: Boolean get() = false
 }
 
 /**

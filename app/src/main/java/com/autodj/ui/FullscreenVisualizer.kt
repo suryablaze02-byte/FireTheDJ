@@ -139,9 +139,13 @@ fun FullscreenVisualizer(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // Pick a look by its picture; the choice is remembered. The strip scrolls when it's wider than the screen.
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("LOOK", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
-                    Text("${style.label} · ${style.blurb.lowercase()}", color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // The label keeps its width; a long description is the part that trims.
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("LOOK", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1, softWrap = false)
+                    Text(
+                        "${style.label} · ${style.blurb.lowercase()}", color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.weight(1f),
+                    )
                 }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     VisualizerStyle.entries.forEach { s -> LookTile(s, s == style, { onStyle(s); touches++ }) }

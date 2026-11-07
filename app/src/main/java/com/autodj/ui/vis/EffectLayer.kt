@@ -27,7 +27,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
-import kotlin.random.Random
 
 /**
  * Effects and tricks, drawn the same way over every [Scene]:
@@ -35,13 +34,10 @@ import kotlin.random.Random
  * - **Callouts:** the effect's name fills the screen as it starts, moving like the effect
  *   (DROP slams in, ECHO repeats, SIREN flashes red and blue, SPINBACK spins…); a small tag
  *   stays up while a long effect runs.
- * - **Fire cannons:** flame columns from the bottom edge on bass drops (impacts, sub drops, and
- *   the bass returning after a breakdown), and a left-to-right chase on crashes and horns.
  * - **Full-screen animation** per effect: shake, flashes, shockwaves, siren beacons, laser
  *   fans, build-up glow and strobe, filter tints, blackout gates, rewind spins and more.
  */
 class EffectLayer {
-    private val rnd = Random(29)
     private val seen = HashSet<String>()
 
     private var calloutType: FxType? = null
@@ -55,17 +51,12 @@ class EffectLayer {
     private var flash = 0f
     private var shake = 0f
     private var lastShotBeat = -1
-    private var lastDropAt = -99f
 
     private class Wave(val color: Color, val born: Float, val life: Float, val width: Float)
-    private class Cannon(val x: Float, val start: Float, val dur: Float)
-    private class Flame(var x: Float, var y: Float, var vx: Float, var vy: Float, var age: Float, val life: Float, val size: Float)
 
     private val waves = ArrayList<Wave>()
-    private val cannons = ArrayList<Cannon>()
-    private val flames = ArrayList<Flame>()
 
-    /** Screen size from the last draw, for spawning flames in pixels. */
+    /** Screen size from the last draw, for motion in pixels. */
     private var w = 1080f
     private var h = 2000f
 
@@ -88,42 +79,10 @@ class EffectLayer {
         seen.clear()
         seen += keys
 
-        // A drop the audio makes on its own: the low end slamming back after a quiet stretch. The
-        // slow average needs some music behind it first, or the opening kick would count.
-        if (!s.paused && t > 10f && s.bass > 0.55f && s.slowBass < 0.3f && t - lastDropAt > 20f) {
-            lastDropAt = t
-            fireCannons(t, chase = false)
-        }
-
         calloutAge += s.dt
         flash = max(0f, flash - s.dt * 2.5f)
         shake = max(0f, shake - s.dt * 2f)
         waves.removeAll { t - it.born > it.life }
-
-        // Cannons pour flame while they burn; flames rise, slow and fade.
-        for (c in cannons) {
-            val age = t - c.start
-            if (age < 0f || age > c.dur) continue
-            val count = (14 * (1 - age / c.dur)).toInt() + 4
-            repeat(count) {
-                flames += Flame(
-                    c.x * w + (rnd.nextFloat() - 0.5f) * w * 0.03f, h + 6f, (rnd.nextFloat() - 0.5f) * w * 0.15f,
-                    -(h * (1.5f + rnd.nextFloat() * 0.7f)), 0f, 0.55f + rnd.nextFloat() * 0.35f, min(w, h) * (0.035f + rnd.nextFloat() * 0.03f),
-                )
-            }
-        }
-        cannons.removeAll { t - it.start > it.dur + 0.5f }
-        val dt = if (s.paused) 0f else s.dt
-        val it = flames.iterator()
-        while (it.hasNext()) {
-            val f = it.next()
-            f.age += dt
-            if (f.age >= f.life) { it.remove(); continue }
-            f.x += f.vx * dt
-            f.y += f.vy * dt
-            f.vy += h * 1.2f * dt
-            f.vx *= 0.98f
-        }
     }
 
     private fun onStart(type: FxType, slot: Int, s: VisualState) {
@@ -135,36 +94,24 @@ class EffectLayer {
             FxType.IMPACT, FxType.SUB_DROP -> {
                 flash = 1f; shake = 1f
                 waves += Wave(Color.White, t, 0.9f, 12f)
-                fireCannons(t, chase = false)
-                lastDropAt = t
             }
             FxType.CRASH -> {
                 flash = max(flash, 0.8f)
                 waves += Wave(Color.White, t, 0.7f, 6f)
-                if (s.energy > 0.45f) fireCannons(t, chase = true)
             }
             FxType.HORN -> {
                 shake = max(shake, 0.5f)
                 waves += Wave(Color(0xFFFFC23D), t, 0.8f, 8f)
-                if (s.energy > 0.45f) fireCannons(t, chase = true)
             }
             FxType.BACKSPIN, FxType.BRAKE -> shake = max(shake, 0.3f)
             // The regional drums: a marigold shockwave and a shake on every fill.
             FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.TIMBALES, FxType.DARBUKA -> {
                 shake = max(shake, 0.6f)
                 waves += Wave(Color(0xFFFFB020), t, 0.8f, 9f)
-                if (s.energy > 0.45f) fireCannons(t, chase = true)
             }
             // The gap before a drop: everything blacks out for a moment.
             FxType.MUTE -> flash = 0f
             else -> Unit
-        }
-    }
-
-    private fun fireCannons(t: Float, chase: Boolean) {
-        val n = if (w > h) 6 else 4
-        for (i in 0 until n) {
-            cannons += Cannon((i + 0.5f) / n, t + if (chase) i * 0.12f else (i % 2) * 0.05f, 1.1f)
         }
     }
 
@@ -274,25 +221,6 @@ class EffectLayer {
                 y -= h / 6
                 if (y < 0) y += h
             }
-        }
-        // Fire cannons.
-        if (flames.isNotEmpty()) {
-            var heat = 0f
-            for (c in cannons) {
-                val age = t - c.start
-                if (age in 0f..c.dur) heat = max(heat, 1 - age / c.dur)
-            }
-            for (f in flames) {
-                val u = f.age / f.life
-                val r = f.size * (0.6f + u * 1.6f)
-                val col = when {
-                    u < 0.25f -> Color(0xFFFFF5C8)
-                    u < 0.55f -> Color(0xFFFFAA3C)
-                    else -> Color(0xFFFF501E)
-                }
-                drawCircle(Brush.radialGradient(listOf(col.copy(alpha = 0.55f * (1 - u)), Color.Transparent), Offset(f.x, f.y), r), r, Offset(f.x, f.y), blendMode = BlendMode.Plus)
-            }
-            if (heat > 0f) drawRect(Brush.verticalGradient(listOf(Color(0xFFFF7828).copy(alpha = 0.45f * heat), Color.Transparent), h, h * 0.4f))
         }
         // Shockwaves.
         for (wv in waves) {

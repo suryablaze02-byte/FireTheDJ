@@ -224,7 +224,8 @@ fun DjScreen(vm: DjViewModel) {
                         if (landscape && state.running && preview) {
                             // Sideways the decks are always on screen; the effects view opens only from its panel.
                             MixingScreenLandscape(state, onBack = { preview = false })
-                        } else if (landscape) {
+                        } else if (landscape && state.current != null && state.set.getOrNull(state.index) != null) {
+                            // With nothing playing, sideways shows the same "Go to Mix" screen as upright (below).
                             TwoDeckScreen(
                                 state, artwork, visual = vm.engine::visual, onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip,
                                 onOpenEffects = { preview = true },
