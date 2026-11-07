@@ -185,6 +185,10 @@ fun SystemBarIcons(darkGround: Boolean) {
     }
 }
 
+/** The big play/pause button's fill and icon: white with a dark icon on dark glass, ink with a white one on light. */
+val PlayFill: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color.White else Color(0xFF1C1C1E)
+val PlayInk: Color @Composable @ReadOnlyComposable get() = if (LocalGlassDark.current) Color(0xFF120A10) else Color.White
+
 /** A glass panel: [fill] behind, a liquid rim round [shape]. */
 @Composable
 fun Modifier.glass(shape: Shape, fill: Color = Glass.Fill, edge: Brush = Glass.Edge, edgeWidth: Dp = 1.dp): Modifier =

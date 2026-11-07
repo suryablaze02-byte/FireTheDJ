@@ -143,17 +143,16 @@ fun DjScreen(vm: DjViewModel) {
         return
     }
 
-    // On Now Playing the ground is a deep shade of the playing song's cover, as Apple Music tints its
-    // player, so there the glass stays dark even in light mode.
+    // On Now Playing the ground takes the playing song's cover colour, as a soft gradient, in light and dark.
     val onSong = tab == Tab.NOW_PLAYING && state.running
-    val darkGround = onSong || LocalGlassDark.current
+    val darkGround = LocalGlassDark.current
     SystemBarIcons(darkGround)
     GlassTheme(dark = darkGround) {
     Box(Modifier.fillMaxSize()) {
-        val songColour = songGround(state.current?.uri?.let { artwork[it] })
-        AmbientLight(Modifier.fillMaxSize(), if (onSong) songColour else Glass.Ground)
         // Sideways, the tabs move to a rail down the left and Now Playing shows both decks.
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (onSong) SongBackdrop(state.current?.uri?.let { artwork[it] }, Modifier.fillMaxSize(), diagonal = landscape)
+        else AmbientLight(Modifier.fillMaxSize(), Glass.Ground)
         val tabs = Tab.entries.map { GlassTab(it.label, it.tourKey, it.icon) }
         Row(Modifier.fillMaxSize().safeDrawingPadding()) {
             if (landscape) {

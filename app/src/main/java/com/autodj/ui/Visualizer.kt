@@ -261,7 +261,7 @@ private class Scene {
                     waves += Wave(Color.White, time, 0.7f, 5f)
                     flash = max(flash, 0.7f)
                 }
-                FxType.HORN -> if (fresh) waves += Wave(Dj.Warn, time, 0.8f, 7f)
+                FxType.HORN -> if (fresh) waves += Wave(VisInk.Warn, time, 0.8f, 7f)
                 FxType.GUNSHOT -> {
                     val shot = floor(beat).toInt()
                     if (shot != lastShotBeat) {
@@ -324,7 +324,7 @@ private class Scene {
         } ?: 0f
         if (build > 0f) {
             val flicker = if (active(FxType.SNARE_ROLL) != null) 0.75f + 0.25f * sin(time * 40f) else 1f
-            drawCircle(Dj.Warn.copy(alpha = 0.55f * build * flicker), radius = outer - 2.dp.toPx(), center = c, style = Stroke(2.dp.toPx() + 10.dp.toPx() * build))
+            drawCircle(VisInk.Warn.copy(alpha = 0.55f * build * flicker), radius = outer - 2.dp.toPx(), center = c, style = Stroke(2.dp.toPx() + 10.dp.toPx() * build))
         }
 
         // Echo ghosts: earlier copies of the ring drifting outwards.
@@ -482,4 +482,5 @@ private object VisInk {
     val Border = Color(0xFF3D3152)
     val Text = Color(0xFFF2F2F5)
     val Muted = Color(0xFFC4C0CC)
+    val Warn = Color(0xFFFFB08F)
 }

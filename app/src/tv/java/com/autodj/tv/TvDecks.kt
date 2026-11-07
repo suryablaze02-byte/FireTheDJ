@@ -37,7 +37,7 @@ fun TvDecks(vm: DjViewModel, onHome: () -> Unit, onVisualizer: () -> Unit) {
     KeepScreenOn()
 
     Box(Modifier.fillMaxSize()) {
-        AmbientLight(Modifier.fillMaxSize(), com.autodj.ui.songGround(state.current?.uri?.let { artwork[it] }))
+        com.autodj.ui.SongBackdrop(state.current?.uri?.let { artwork[it] }, Modifier.fillMaxSize(), diagonal = true)
         // Inside the TV's overscan margin.
         Box(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 18.dp)) {
             if (effects) {

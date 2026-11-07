@@ -223,9 +223,10 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
             Column(Modifier.tourTarget("tv_add"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Add music", color = Glass.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = EDGE))
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(horizontal = EDGE, vertical = 12.dp)) {
-                    TvCard("This TV & USB", "Scan for songs", Modifier.width(300.dp), accent = SourceKind.PHONE.color,
+                    // The two the same size, whatever their words.
+                    TvCard("This TV & USB", "Scan for songs", Modifier.width(320.dp).height(112.dp), accent = SourceKind.PHONE.color,
                         icon = { SourceGlyph(SourceKind.PHONE, 30.dp) }) { scanWithPermission() }
-                    TvCard("Stream", "YT Music, Spotify or Apple Music", Modifier.width(300.dp), accent = SourceKind.STREAM.color,
+                    TvCard("Stream", "YT Music, Spotify or Apple Music", Modifier.width(320.dp).height(112.dp), accent = SourceKind.STREAM.color,
                         icon = { SourceGlyph(SourceKind.STREAM, 30.dp) }, onClick = onYtMusic)
                 }
                 scanNote?.let { Text(it, color = Glass.EmberText, fontSize = 15.sp, modifier = Modifier.padding(start = EDGE)) }
