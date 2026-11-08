@@ -13,7 +13,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
-/** One full-screen look. Every scene shares the same [EffectLayer] for effects and callouts. */
+/** One full-screen look. Every scene shares the same [EffectLayer] for effects. */
 interface Scene {
     /** Once per frame: move particles, react to effects. */
     fun step(s: VisualState) {}

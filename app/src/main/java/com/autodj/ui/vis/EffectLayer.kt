@@ -7,17 +7,10 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import com.autodj.dj.fx.FxType
 import kotlin.math.PI
 import kotlin.math.abs
@@ -31,23 +24,12 @@ import kotlin.math.sin
 /**
  * Effects and tricks, in Club only:
  *
- * - **Callouts:** the effect's name fills the screen as it starts, moving like the effect
- *   (DROP slams in, ECHO repeats, SIREN flashes red and blue, SPINBACK spins…); a small tag
- *   stays up while a long effect runs.
  * - **Animation** per effect, on the LED wall behind the DJ ([Scene.effectArea]): flashes,
  *   shockwaves, siren beacons, laser fans, build-up glow and strobe, filter tints, blackout
  *   gates and more. No other look shows them.
  */
 class EffectLayer {
     private val seen = HashSet<String>()
-
-    private var calloutType: FxType? = null
-    private var calloutColor = Color.White
-    private var calloutAge = 9f
-    private var calloutLayout: TextLayoutResult? = null
-    private var calloutFor: String? = null
-    private var tagLayout: TextLayoutResult? = null
-    private var tagFor: String? = null
 
     private var flash = 0f
     private var shake = 0f
@@ -80,7 +62,6 @@ class EffectLayer {
         seen.clear()
         seen += keys
 
-        calloutAge += s.dt
         flash = max(0f, flash - s.dt * 2.5f)
         shake = max(0f, shake - s.dt * 2f)
         waves.removeAll { t - it.born > it.life }
@@ -88,9 +69,6 @@ class EffectLayer {
 
     private fun onStart(type: FxType, slot: Int, s: VisualState) {
         val t = s.time
-        calloutType = type
-        calloutColor = CALLOUT_COLOR[type] ?: lerp(s.deckColor(slot), Color.White, 0.5f)
-        calloutAge = 0f
         when (type) {
             FxType.IMPACT, FxType.SUB_DROP -> {
                 flash = 1f; shake = 1f
@@ -222,75 +200,11 @@ class EffectLayer {
     }
 
     /** The big full-screen name of the effect that just started, or the small tag of a long one still running. */
-    fun drawCallout(ds: DrawScope, s: VisualState, measurer: TextMeasurer) = with(ds) {
-        // Callouts fill the whole screen; the overlays last set w and h to the LED wall's size.
-        w = size.width
-        h = size.height
-        val type = calloutType
-        if (type == null || calloutAge > CALLOUT_SEC) {
-            val long = s.fx.filter { it.first.progress < 0.95f }.maxByOrNull { it.first.amount }?.first ?: return
-            val text = label(long.type)
-            if (tagFor != text) {
-                tagLayout = measurer.measure(text, TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = Color.White))
-                tagFor = text
-            }
-            val l = tagLayout!!
-            val pw = l.size.width + 36f
-            val ph = l.size.height + 16f
-            val top = h * 0.06f
-            drawRoundRect(Color.Black.copy(alpha = 0.55f), Offset((w - pw) / 2, top), Size(pw, ph), CornerRadius(ph / 2))
-            drawText(l, topLeft = Offset((w - l.size.width) / 2, top + 8f))
-            return
-        }
-        val text = label(type)
-        if (calloutFor != text) {
-            calloutLayout = measurer.measure(text, TextStyle(fontSize = 96.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp))
-            calloutFor = text
-        }
-        val layout = calloutLayout!!
-        val age = calloutAge
-        val inA = min(1f, age / 0.12f)
-        val outA = if (age > 1.2f) 1 - (age - 1.2f) / (CALLOUT_SEC - 1.2f) else 1f
-        val a = min(inA, outA).coerceIn(0f, 1f)
-        // Strobed effects flash the word on and off with the loop.
-        if ((type == FxType.LOOP_ROLL || type == FxType.GATE) && s.frac(s.beat * 4f) > 0.55f) return
-        drawRect(Color.Black.copy(alpha = 0.35f * a))
-        val fit = min(w * 0.88f / layout.size.width, h * (if (w > h) 0.45f else 0.3f) / layout.size.height)
-        var scale = fit
-        var rot = 0f
-        var dx = 0f
-        when (type) {
-            FxType.IMPACT, FxType.SUB_DROP -> scale *= 1f + 2.5f * (1 - inA).pow(3f)
-            FxType.RISER, FxType.SNARE_ROLL -> scale *= 0.85f + 0.2f * min(1f, age)
-            FxType.BACKSPIN -> rot = -360f * min(1f, age * 1.2f)
-            FxType.SCRATCH -> dx = sin(age * 60f) * w * 0.04f
-            FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.TIMBALES, FxType.DARBUKA -> scale *= 1f + 0.08f * abs(sin(age * 12f))
-            else -> Unit
-        }
-        val color = if (type == FxType.SIREN) (if ((age * 8).toInt() % 2 == 0) SIREN_RED else SIREN_BLUE) else calloutColor
-        val topLeft = Offset((w - layout.size.width) / 2f + dx, (h - layout.size.height) / 2f)
-        withTransform({
-            rotate(rot, center)
-            scale(scale, scale, center)
-        }) {
-            if (type == FxType.ECHO) {
-                for (i in 4 downTo 1) {
-                    drawText(layout, color = color, topLeft = topLeft - Offset(0f, i * layout.size.height * 0.42f * min(1f, age * 2f)), alpha = a * 0.18f * (5 - i) / 4f)
-                }
-            }
-            drawText(
-                layout, color = color, topLeft = topLeft, alpha = a,
-                shadow = Shadow(if (type in HOT) Color(0xFFFF6414) else Color.White.copy(alpha = 0.5f), blurRadius = 40f),
-            )
-        }
-    }
-
     private fun DrawScope.vignette(alpha: Float) {
         drawRect(Brush.radialGradient(listOf(Color.Transparent, Color.Black.copy(alpha = alpha)), center, max(size.width, size.height) * 0.75f))
     }
 
     companion object {
-        private const val CALLOUT_SEC = 1.7f
         private val BUILDS = setOf(FxType.RISER, FxType.SNARE_ROLL, FxType.REVERSE_CYMBAL)
         private val HOT = setOf(FxType.IMPACT, FxType.SUB_DROP, FxType.HORN, FxType.CRASH, FxType.GUNSHOT, FxType.DAPPU, FxType.MARFA, FxType.DHOL, FxType.THAVIL, FxType.TIMBALES, FxType.DARBUKA)
         private val SIREN_RED = Color(0xFFFF2D4A)

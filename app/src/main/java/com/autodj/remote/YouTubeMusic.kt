@@ -78,7 +78,7 @@ class YouTubeMusicProvider(private val browse: YtMusicBrowse = YtMusicBrowse()) 
             .take(MAX_TRACKS)
             .toList()
         val name = runCatching { extractor.name }.getOrNull()?.ifBlank { null } ?: "YouTube playlist"
-        return RemotePlaylist(ref.link, id, ref.playlistId, name, tracks)
+        return RemotePlaylist(ref.link, id, ref.playlistId, if (ref.playlistId.startsWith("OLAK")) albumName(name) else name, tracks)
     }
 
     private fun fromYtMusic(ref: PlaylistRef): RemotePlaylist {
@@ -384,12 +384,20 @@ private class NewPipeDownloader : Downloader() {
     }
 }
 
-/** YouTube Music's own search, for playlists: anything public there, people's own playlists too. */
+/** YouTube names an album's playlist "Album – 1989"; the source should just say "1989". */
+internal fun albumName(name: String) = name.replace(Regex("""^(?:Album|Single|EP)\s*[^\p{L}\p{N}\s]\s*"""), "").ifBlank { name }
+
+/** YouTube Music's own search: anything public there, people's own playlists too, and albums and singles. */
 object YtMusicSearch {
     /** Blocking; run off the main thread. Needs Android 13 (see [YouTubeStreams.requireSupported]). */
-    fun playlists(query: String, max: Int = 20): List<YtPlaylistCard> {
+    fun playlists(query: String, max: Int = 20) = cards(query, YoutubeSearchQueryHandlerFactory.MUSIC_PLAYLISTS, max)
+
+    /** Albums and singles together: the search doesn't say which is which. Same rules as [playlists]. */
+    fun albums(query: String, max: Int = 20) = cards(query, YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS, max)
+
+    private fun cards(query: String, filter: String, max: Int): List<YtPlaylistCard> {
         YouTubeStreams.requireSupported()
-        val search = ServiceList.YouTube.getSearchExtractor(query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_PLAYLISTS), "")
+        val search = ServiceList.YouTube.getSearchExtractor(query, listOf(filter), "")
             .apply { fetchPage() }
         return search.initialPage.items.filterIsInstance<PlaylistInfoItem>().mapNotNull { item ->
             val id = PlaylistUrlValidator.queryParams(runCatching { URI(item.url).rawQuery }.getOrNull())["list"] ?: return@mapNotNull null

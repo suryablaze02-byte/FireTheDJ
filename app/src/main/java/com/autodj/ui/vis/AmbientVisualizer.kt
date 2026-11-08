@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.autodj.dj.VisualFrame
@@ -50,9 +49,6 @@ enum class VisualizerStyle(val label: String, val blurb: String, /** For tight s
     /** Shows the song's words over the scene ([LyricOverlay]). */
     val lyrics get() = this == BEAT_POP
 
-    /** Shouts each effect's name on screen; the other looks let the picture do the talking. */
-    val callouts get() = this == CLUB
-
     fun scene(): Scene = when (this) {
         TUNNEL -> TunnelScene()
         LIQUID -> LiquidScene()
@@ -69,7 +65,7 @@ enum class VisualizerStyle(val label: String, val blurb: String, /** For tight s
 
 /**
  * The full-screen visualizer: the picked [style]'s scene, with the shared [EffectLayer] on top
- * (callouts and effect animations), all driven by the live mix each frame.
+ * (effect animations), all driven by the live mix each frame.
  */
 @Composable
 fun AmbientVisualizer(
@@ -82,7 +78,6 @@ fun AmbientVisualizer(
     val state = remember { VisualState() }
     val layer = remember { EffectLayer() }
     val scene = remember(style) { style.scene() }
-    val measurer = rememberTextMeasurer()
     var tick by remember { mutableLongStateOf(0L) }
     LaunchedEffect(scene) {
         while (true) withFrameNanos { now ->
@@ -110,8 +105,6 @@ fun AmbientVisualizer(
                 }
             }
             if (state.paused) drawRect(Color.Black.copy(alpha = 0.45f))
-            // Only Club shouts the effect names; the others show effects as light and motion.
-            if (style.callouts) layer.drawCallout(this, state, measurer)
         }
         if (style.lyrics) LyricOverlay(state, tick, Modifier.fillMaxSize(), lyricsClearBottom)
     }

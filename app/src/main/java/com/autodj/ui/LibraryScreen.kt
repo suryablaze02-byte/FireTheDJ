@@ -552,6 +552,7 @@ fun MusicScreen(
     folders: List<MusicFolder>,
     onAddFolder: (android.net.Uri?) -> Unit,
     onOpenYtMusic: () -> Unit,
+    onStats: () -> Unit,
     importState: ImportState,
     onImport: (String) -> Unit,
     onImportClosed: () -> Unit,
@@ -585,6 +586,16 @@ fun MusicScreen(
     }
     val status = library.associateBy { it.uri }
     val addTiles: @Composable () -> Unit = {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 10.dp).height(56.dp).glass(RoundedCornerShape(18.dp))
+                .clickable(role = Role.Button, onClick = onStats).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            StatsGlyph(Glass.EmberText)
+            Text("Your stats", color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AddTile(SourceKind.PHONE, "This phone", Modifier.weight(1f)) { fromPhone = true }
             AddTile(SourceKind.STREAM, "Stream", Modifier.weight(1f).tourTarget("stream"), onOpenYtMusic)

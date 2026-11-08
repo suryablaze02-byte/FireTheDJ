@@ -154,6 +154,10 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private enum class ReplayState { PENDING, LOADED, PLAYING, DONE }
 
     private val appContext = context.applicationContext
+    private val plays = PlayHistory(appContext)
+    private var setStartedAt = 0L
+    /** How long the song on the main deck has been heard, leaving out pauses. A mix's overlap counts once, for the outgoing song. */
+    private var heardMs = 0L
 
     private val decks = arrayOf(Deck(context), Deck(context))
     private var main = 0
@@ -275,6 +279,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         StemJobs.newSet()
         if (tracks.isEmpty()) return
         this.crate = crate
+        setStartedAt = System.currentTimeMillis()
         // A one-genre set is styled by its genre; "All genres" styles each mix by the incoming song.
         styleFamily = crate.substringAfterLast(" · ").takeIf { it in Genres.families }
         this.mode = mode
@@ -292,7 +297,11 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         // During a call the set is ready but waits, paused, instead of playing over it.
         if (focus.request()) decks[0].player.play() else paused = true
         loop = scope.launch {
+            var last = android.os.SystemClock.elapsedRealtime()
             while (isActive) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (!paused) heardMs += now - last
+                last = now
                 tick()
                 delay(TICK_MS)
             }
@@ -350,6 +359,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     }
 
     fun stop() {
+        logHeard(decks[main].track)
         loop?.cancel()
         loop = null
         decks.forEach { it.unload() }
@@ -378,6 +388,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
 
     /** Plans the tricks inside a track that has just become the main deck. */
     private fun beginTrack(deck: Deck, t: TrackInfo, entryBar: Int) {
+        heardMs = 0
         // A hook replay is a treat: never on two tracks in a row.
         val p = Performer.plan(t, entryBar, deck.speed, masterBpm, allowReplay = perf?.replay == null, mode = mode, lyrics = wordPlayLyrics(t))
         perf = p
@@ -665,6 +676,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
 
     /** The playing track can't be played: cut straight to the next one from its start. */
     private fun skipAhead(a: Deck, b: Deck, ta: TrackInfo) {
+        logHeard(ta)
         val t = next ?: remaining.firstOrNull()
         played += ta
         a.unload()
@@ -809,9 +821,22 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         Log.i(TAG, "xfade ${p.recipe.label} beat $beatNo: A ${(gainA * 100).roundToInt()}% · B ${(gainB * 100).roundToInt()}%")
     }
 
+    /** Saves the song that just stopped being the main one, for the listening stats. */
+    private fun logHeard(t: TrackInfo?) {
+        val sec = (heardMs / 1000).toInt()
+        heardMs = 0
+        if (t == null || sec < 1) return
+        val play = Play(
+            System.currentTimeMillis(), setStartedAt, t.uri, t.title, t.artist, t.genreFamily,
+            runCatching { SfxDressing.languageOf(t) }.getOrNull(), crate.orEmpty(), sec,
+        )
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { plays.add(play) }
+    }
+
     private fun finishTransition(p: Transition) {
         lastLoggedBeat = -1
         Log.i(TAG, "done ${p.recipe.label}: \"${decks[main].track?.title}\" → \"${decks[1 - main].track?.title}\"")
+        logHeard(decks[main].track)
         decks[main].track?.let { played += it }
         // A song the listener skipped extends the run of skips; one played out ends it.
         decks[main].track?.let { if (skipAsked > 0) skippedRun += it else skippedRun.clear() }

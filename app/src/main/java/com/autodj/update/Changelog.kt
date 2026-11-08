@@ -14,6 +14,27 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.3.0",
+            "Your listening stats and Wrapped cards, a new Club, and album search.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Your stats", "Hours mixed, sets played, your longest set, favourite crate, genre and language, top artists and most-played songs. Open it from the Music tab, or the bars button on TV. Your history stays on the device, and it starts from this version."),
+                        Change("Wrapped cards", "Swipe through cards of your month or all time, and share one or all of them."),
+                        Change("Albums and singles", "Search in Stream now finds YouTube Music albums and singles as well as playlists."),
+                        Change("Club, redrawn", "You're in the crowd now: an LED wall with side wings, beams through haze, a backlit DJ and a floor that reflects the wall. It goes dark in the breakdowns and lights up on the drops."),
+                    ),
+                ),
+                Section(
+                    "Changes",
+                    listOf(
+                        Change("No more effect names", "The visualizer no longer shows effect names on screen. Effects still play on Club's LED wall."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.2.0",
             "Mix from several crates at once, on your phone, TV and Android Auto.",
             listOf(

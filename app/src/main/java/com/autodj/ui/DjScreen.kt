@@ -121,6 +121,7 @@ fun DjScreen(vm: DjViewModel) {
 
     // Settings (updates, support) opens over the tabs. Updates are looked for once a day on launch.
     var settings by rememberSaveable { mutableStateOf(false) }
+    var stats by rememberSaveable { mutableStateOf(false) }
     // While a guided tour runs, the app shows the screen its step is about.
     val tour = LocalTour.current
     LaunchedEffect(tour?.active, tour?.screen) {
@@ -135,6 +136,15 @@ fun DjScreen(vm: DjViewModel) {
     val update = (updateState as? UpdateState.Available)?.release
     var dismissed by remember { mutableStateOf(Updates.dismissed(context)) }
     LaunchedEffect(Unit) { Updates.autoCheck(context) }
+    if (stats) {
+        SystemBarIcons(darkGround = LocalGlassDark.current)
+        Box(Modifier.fillMaxSize()) {
+            AmbientLight(Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().safeDrawingPadding()) { StatsScreen(artwork, onBack = { stats = false }) }
+        }
+        return
+    }
+
     if (settings) {
         SystemBarIcons(darkGround = LocalGlassDark.current)
         Box(Modifier.fillMaxSize()) {
@@ -209,6 +219,7 @@ fun DjScreen(vm: DjViewModel) {
                         folders = folders,
                         onAddFolder = { folderPicker.launch(it) },
                         onOpenYtMusic = { ytMusic = true },
+                        onStats = { stats = true },
                         importState = importState,
                         onImport = { vm.importPlaylist(it) },
                         onImportClosed = vm::resetImport,

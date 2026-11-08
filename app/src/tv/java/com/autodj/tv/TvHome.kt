@@ -92,6 +92,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
     val state by vm.engine.state.collectAsStateWithLifecycle()
     var scanNote by remember { mutableStateOf<String?>(null) }
     var settings by remember { mutableStateOf(false) }
+    var stats by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
 
     var support by remember { mutableStateOf(false) }
@@ -133,6 +134,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
         ready.groupingBy { it.genreFamily }.eachCount().entries.sortedByDescending { it.value }.forEach { add(it.key to it.value) }
     }
 
+    if (stats) TvStatsScreen(artwork, onDismiss = { stats = false })
     val families = crates.filter { it.first != ALL }
     var mixSeveral by remember { mutableStateOf(false) }
     var picks by remember { mutableStateOf(emptySet<String>()) }
@@ -195,6 +197,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                     },
                     color = Glass.Muted, fontSize = 15.sp,
                 )
+                TvRoundButton(40.dp, Glass.Fill, "Your stats", onClick = { stats = true }) { com.autodj.ui.StatsGlyph(Glass.Text) }
                 TvRoundButton(40.dp, Glass.Fill, "Settings", Modifier.tourTarget("tv_settings"), onClick = { settings = true }) {
                     Icon(Icons.Filled.Settings, null, tint = Glass.Text, modifier = Modifier.size(22.dp))
                 }

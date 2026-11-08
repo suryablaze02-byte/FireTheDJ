@@ -71,6 +71,7 @@ import androidx.compose.ui.platform.LocalContext
 import java.io.File
 import com.autodj.remote.SpotifyCatalogue
 import com.autodj.remote.YtMusicSearch
+import kotlinx.coroutines.async
 import com.autodj.remote.YtPlaylistCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -112,6 +113,7 @@ private fun StreamHome(
     BackHandler(onBack = onBack)
     val query by vm.query.collectAsStateWithLifecycle()
     val youTube by vm.youTube.collectAsStateWithLifecycle()
+    val albums by vm.albums.collectAsStateWithLifecycle()
     var pasting by remember { mutableStateOf(false) }
     var tapped by remember { mutableStateOf<String?>(null) }
     val added = remember(folders) { folders.filter { it.remote }.map { it.uri }.toSet() }
@@ -127,7 +129,7 @@ private fun StreamHome(
             value = query,
             onValueChange = vm::search,
             singleLine = true,
-            placeholder = { Text("Search playlists on any service", color = Glass.Muted) },
+            placeholder = { Text("Search albums and playlists", color = Glass.Muted) },
             leadingIcon = { Icon(Icons.Filled.Search, null, tint = Glass.Muted) },
             trailingIcon = if (query.isNotEmpty()) ({ TextButton(onClick = { vm.search("") }) { Text("Clear", color = Glass.Muted) } }) else null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -177,6 +179,28 @@ private fun StreamHome(
                 contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalTabBarInset.current),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                item {
+                    ResultRow("Albums & singles", SourceKind.YOUTUBE) {
+                        when (val r = albums) {
+                            Loadable.Loading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = YT_RED, modifier = Modifier.size(28.dp))
+                            }
+                            is Loadable.Failed -> Note("Couldn't search albums: ${r.reason}")
+                            is Loadable.Ready -> if (r.value.isEmpty()) {
+                                Note("No albums or singles match.")
+                            } else {
+                                CardRow(r.value, key = { it.playlistId }) { card ->
+                                    PlaylistCard(card, isAdded = card.link in added, busy = importState == ImportState.Working && tapped == card.title) {
+                                        if (importState != ImportState.Working && card.link !in added) {
+                                            tapped = card.title
+                                            onImport(card.link, null)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 item {
                     ResultRow("Spotify", SourceKind.SPOTIFY) {
                         if (spotify.isEmpty()) {
@@ -433,7 +457,10 @@ class StreamSearchViewModel : ViewModel() {
     private val _youTube = MutableStateFlow<Loadable<List<YtPlaylistCard>>>(Loadable.Ready(emptyList()))
     val youTube: StateFlow<Loadable<List<YtPlaylistCard>>> = _youTube
 
-    private val cache = HashMap<String, List<YtPlaylistCard>>()
+    private val _albums = MutableStateFlow<Loadable<List<YtPlaylistCard>>>(Loadable.Ready(emptyList()))
+    val albums: StateFlow<Loadable<List<YtPlaylistCard>>> = _albums
+
+    private val cache = HashMap<String, Pair<List<YtPlaylistCard>, List<YtPlaylistCard>>>()
     private var job: Job? = null
 
     fun search(text: String) {
@@ -442,21 +469,32 @@ class StreamSearchViewModel : ViewModel() {
         val q = text.trim().lowercase()
         if (q.length < 2) {
             _youTube.value = Loadable.Ready(emptyList())
+            _albums.value = Loadable.Ready(emptyList())
             return
         }
         cache[q]?.let {
-            _youTube.value = Loadable.Ready(it)
+            _albums.value = Loadable.Ready(it.first)
+            _youTube.value = Loadable.Ready(it.second)
             return
         }
         _youTube.value = Loadable.Loading
+        _albums.value = Loadable.Loading
         job = viewModelScope.launch {
             delay(450)
-            val result = runCatching { withContext(Dispatchers.IO) { YtMusicSearch.playlists(q) } }
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val found = async { YtMusicSearch.albums(q) }
+                    val lists = async { YtMusicSearch.playlists(q) }
+                    found.await() to lists.await()
+                }
+            }
             result.getOrNull()?.let { cache[q] = it }
             // A newer search replaced this one: its blocking call still ran to the end, but it
             // mustn't overwrite the newer answer (or show its cancellation as an error).
             ensureActive()
-            _youTube.value = result.fold({ Loadable.Ready(it) }, { Loadable.Failed(it.message ?: it.javaClass.simpleName) })
+            val failed = { e: Throwable -> Loadable.Failed(e.message ?: e.javaClass.simpleName) }
+            _albums.value = result.fold({ Loadable.Ready(it.first) }, failed)
+            _youTube.value = result.fold({ Loadable.Ready(it.second) }, failed)
         }
     }
 }
