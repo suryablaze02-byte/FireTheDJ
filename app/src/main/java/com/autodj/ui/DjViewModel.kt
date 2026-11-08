@@ -281,8 +281,10 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         // Media3 promotes the service to the foreground once the session reports playing.
         val app = getApplication<Application>()
         app.startService(Intent(app, MixService::class.java))
-        val crateLabel = if (crate == ALL) "All genres" else crate
-        val label = if (folder != null) "${folder.name} · $crateLabel" else crateLabel
+        val name = crateLabel(crate)
+        val label = if (folder != null) "${folder.name} · $name" else name
+        // Android Auto offers the crates last mixed together as one row.
+        if (com.autodj.dj.CRATE_SEP in crate) prefs.edit().putString(KEY_PICKS, crate).apply()
         // The language first: the engine's first plans pick their party sounds by it.
         val languages = _library.value.associate { it.uri to it.language }
         _setLanguage.value = Languages.ofSet(tracks.map { languages[it.uri] })
@@ -297,7 +299,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     private var playingSet: PlayingSet? = null
 
     private fun belongs(t: TrackInfo, crate: String, folder: MusicFolder?) =
-        t.genreFamily != Genres.UNCLASSIFIED && (crate == ALL || t.genreFamily == crate) &&
+        inCrate(t.genreFamily, crate) &&
             (folder == null || t.uri in folder.tracks)
 
     /**
@@ -367,6 +369,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     private companion object {
         const val KEY_URIS = "uris"
         const val KEY_MODE = "mode"
+        const val KEY_PICKS = "picks"
         const val KEY_VISUALIZER = "visualizer"
         const val KEY_FOLDERS = "folders"
     }

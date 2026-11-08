@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -132,6 +133,16 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
         ready.groupingBy { it.genreFamily }.eachCount().entries.sortedByDescending { it.value }.forEach { add(it.key to it.value) }
     }
 
+    val families = crates.filter { it.first != ALL }
+    var mixSeveral by remember { mutableStateOf(false) }
+    var picks by remember { mutableStateOf(emptySet<String>()) }
+    if (mixSeveral) TvMixSeveral(
+        families, picks,
+        onToggle = { c -> picks = if (c in picks) picks - c else picks + c },
+        onStart = { names -> mixSeveral = false; vm.startSet(names.joinToString(com.autodj.dj.CRATE_SEP)) },
+        onDismiss = { mixSeveral = false },
+    )
+
     val scan = {
         scope.launch {
             scanNote = "Looking for music on this TV…"
@@ -206,15 +217,23 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                     Text("Press a crate. FireTheDJ picks every song from there.", color = Glass.Muted, fontSize = 16.sp, modifier = Modifier.padding(start = EDGE))
                     // Room around every card for it to grow and ring when the remote lands on it.
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(vertical = 16.dp, horizontal = EDGE)) {
-                        items(crates, key = { it.first }) { (crate, count) ->
-                            val focus = if (!state.running && crate == crates.first().first) Modifier.focusRequester(first) else Modifier
-                            val tracks = if (crate == ALL) ready else ready.filter { it.genreFamily == crate }
-                            CrateTile(
-                                if (crate == ALL) "All genres" else crate,
-                                if (crate == ALL) "${songs(count)} · across genres" else songs(count),
-                                com.autodj.ui.coversFor(tracks, artwork), artwork,
-                                Modifier.width(250.dp).height(180.dp).then(focus),
-                            ) { vm.startSet(crate) }
+                        crates.forEachIndexed { i, (crate, count) ->
+                            item(key = crate) {
+                                val focus = if (!state.running && i == 0) Modifier.focusRequester(first) else Modifier
+                                val tracks = if (crate == ALL) ready else ready.filter { it.genreFamily == crate }
+                                CrateTile(
+                                    if (crate == ALL) "All genres" else crate,
+                                    if (crate == ALL) "${songs(count)} · across genres" else songs(count),
+                                    com.autodj.ui.coversFor(tracks, artwork), artwork,
+                                    Modifier.width(250.dp).height(180.dp).then(focus),
+                                ) { vm.startSet(crate) }
+                            }
+                            if (i == 0 && families.size > 1) item(key = "mix several") {
+                                CrateTile(
+                                    "Mix several", if (picks.isEmpty()) "Pick your crates" else "${picks.size} picked", emptyList(), artwork,
+                                    Modifier.width(250.dp).height(180.dp), plus = true,
+                                ) { mixSeveral = true }
+                            }
                         }
                     }
                 }
@@ -275,7 +294,7 @@ private fun NowPlayingBanner(state: com.autodj.dj.EngineState, artwork: Map<Stri
 
 /** A crate for the remote: a fan of its covers, a glow in their colour, its name and songs. Grows and rings in white when focused. */
 @Composable
-private fun CrateTile(name: String, sub: String, covers: List<com.autodj.model.TrackInfo>, artwork: Map<String, String>, modifier: Modifier, onClick: () -> Unit) {
+private fun CrateTile(name: String, sub: String, covers: List<com.autodj.model.TrackInfo>, artwork: Map<String, String>, modifier: Modifier, plus: Boolean = false, onClick: () -> Unit) {
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(26.dp)
@@ -290,10 +309,11 @@ private fun CrateTile(name: String, sub: String, covers: List<com.autodj.model.T
                 }
             }
             .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, shape)
-            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Start a mix from $name", onClick = onClick)
+            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = if (plus) "Choose crates to mix" else "Start a mix from $name", onClick = onClick)
             .padding(20.dp),
     ) {
         if (covers.isNotEmpty()) com.autodj.ui.CoverFan(covers, artwork, 58.dp, Modifier.align(Alignment.TopStart))
+        if (plus) Text("+", color = Glass.EmberText, fontSize = 48.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopStart))
         Column(Modifier.align(Alignment.BottomStart)) {
             Text(name, color = Glass.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(sub, color = Glass.Muted, fontSize = 16.sp, maxLines = 1)
@@ -333,3 +353,44 @@ fun TvGlassDialog(onDismiss: () -> Unit, width: Dp = 620.dp, content: @Composabl
 /** Space beside cards in a row, so a focused card can grow and ring without being clipped. */
 val TV_EDGE = 20.dp
 private val EDGE = TV_EDGE
+
+/** Slim list at the side: tick crates with the remote, then Start. [crates] is biggest first, with song counts. */
+@Composable
+private fun TvMixSeveral(crates: List<Pair<String, Int>>, picks: Set<String>, onToggle: (String) -> Unit, onStart: (List<String>) -> Unit, onDismiss: () -> Unit) {
+    val first = remember { androidx.compose.ui.focus.FocusRequester() }
+    val chosen = crates.filter { it.first in picks }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+            Column(
+                Modifier.padding(20.dp).fillMaxHeight().width(440.dp)
+                    .background(Glass.Sheet, RoundedCornerShape(32.dp)).glass(RoundedCornerShape(32.dp), Glass.Fill)
+                    .padding(horizontal = 14.dp, vertical = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Mix several", color = Glass.Text, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(start = 10.dp))
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    crates.forEachIndexed { i, (crate, count) ->
+                        TvCard(
+                            crate, songs(count), Modifier.fillMaxWidth().then(if (i == 0) Modifier.focusRequester(first) else Modifier),
+                            selected = crate in picks,
+                            icon = {
+                                Box(
+                                    Modifier.size(28.dp).then(if (crate in picks) Modifier.background(Glass.Ember, CircleShape) else Modifier.border(2.dp, Glass.Muted, CircleShape)),
+                                    contentAlignment = Alignment.Center,
+                                ) { if (crate in picks) Text("✓", color = Glass.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                            },
+                        ) { onToggle(crate) }
+                    }
+                }
+                if (chosen.isEmpty()) Text("Tick a crate to start", color = Glass.Muted, fontSize = 16.sp, modifier = Modifier.padding(10.dp))
+                else TvCard("Start · ${songs(chosen.sumOf { it.second })}", com.autodj.dj.cratesLabel(chosen.map { it.first }), Modifier.fillMaxWidth().padding(horizontal = 10.dp), accent = Glass.Ember, subtitleLines = 1) {
+                    onStart(chosen.map { it.first })
+                }
+            }
+        }
+    }
+}

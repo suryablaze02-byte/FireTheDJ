@@ -117,6 +117,7 @@ fun DjScreen(vm: DjViewModel) {
     // What the Mix tab has picked; kept here so it survives switching tabs.
     var pickedSource by rememberSaveable { mutableStateOf(ALL_SOURCES) }
     var pickedCrate by rememberSaveable { mutableStateOf<String?>(null) }
+    var pickSeveral by rememberSaveable { mutableStateOf(false) }
 
     // Settings (updates, support) opens over the tabs. Updates are looked for once a day on launch.
     var settings by rememberSaveable { mutableStateOf(false) }
@@ -188,6 +189,8 @@ fun DjScreen(vm: DjViewModel) {
                         onPickSource = { pickedSource = it },
                         pickedCrate = pickedCrate,
                         onPickCrate = { pickedCrate = it },
+                        pickSeveral = pickSeveral,
+                        onPickSeveral = { pickSeveral = it },
                         onCast = { castDialog = true },
                         onAddMusic = { tab = Tab.MUSIC },
                         onStart = start,

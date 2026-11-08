@@ -133,7 +133,7 @@ class MixService : MediaLibraryService() {
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(crate.label)
-                .setSubtitle("AI mix · ${crate.tracks.size} tracks")
+                .setSubtitle("AI mix · ${crate.tracks.size} tracks" + if (crate.family == CrateLibrary.YOUR_SET) " · your set" else "")
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)

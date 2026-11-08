@@ -101,6 +101,12 @@ import kotlin.math.roundToInt
 /** The cross-genre "crate": every classified track. */
 const val ALL = "All"
 
+/** Whether a song of [family] is in [crate]: one genre, [ALL], or several joined by CRATE_SEP. */
+fun inCrate(family: String, crate: String) =
+    family != Genres.UNCLASSIFIED && (crate == ALL || family in crate.split(com.autodj.dj.CRATE_SEP))
+
+fun crateLabel(crate: String) = if (crate == ALL) "All genres" else com.autodj.dj.cratesLabel(crate.split(com.autodj.dj.CRATE_SEP))
+
 /** The Mix tab: your set (what it would make, the mode and Start), then the crates to pick from. */
 @Composable
 fun MixScreen(
@@ -113,6 +119,8 @@ fun MixScreen(
     onPickSource: (String) -> Unit,
     pickedCrate: String?,
     onPickCrate: (String) -> Unit,
+    pickSeveral: Boolean,
+    onPickSeveral: (Boolean) -> Unit,
     onCast: () -> Unit,
     onAddMusic: () -> Unit,
     onStart: (crate: String, source: String) -> Unit,
@@ -131,13 +139,22 @@ fun MixScreen(
     // Biggest crates first, as on TV and Android Auto; ties keep the genre order.
     val crates = Genres.families.filter { (counts[it] ?: 0) > 0 }.sortedByDescending { counts[it] ?: 0 }
     val largest = counts.filterKeys { it != Genres.UNCLASSIFIED }.maxByOrNull { it.value }?.key ?: ALL
-    val crate = pickedCrate?.takeIf { it == ALL || it in crates } ?: largest
+    val picks = pickedCrate?.split(com.autodj.dj.CRATE_SEP).orEmpty()
+    val picked = if (ALL in picks) listOf(ALL) else crates.filter { it in picks }.ifEmpty { listOf(largest) }
+    val crate = picked.joinToString(com.autodj.dj.CRATE_SEP)
     val allCount = ready.count { it.genreFamily != Genres.UNCLASSIFIED }
-    val mixCount = if (crate == ALL) allCount else counts[crate] ?: 0
+    val mixCount = if (crate == ALL) allCount else picked.sumOf { counts[it] ?: 0 }
     val mixable = crate != Genres.UNCLASSIFIED && mixCount > 0
     val analysing = inSource.count { it.status == AnalysisStatus.QUEUED || it.status == AnalysisStatus.ANALYZING }
     val unclassified = counts[Genres.UNCLASSIFIED] ?: 0
-    fun tracksOf(c: String) = ready.filter { if (c == ALL) it.genreFamily != Genres.UNCLASSIFIED else it.genreFamily == c }
+    fun tracksOf(c: String) = ready.filter { inCrate(it.genreFamily, c) }
+    // With Pick several on, a tap adds or removes a crate; the last one stays, so Start has something to play.
+    fun tapCrate(c: String) {
+        if (!pickSeveral || c == ALL) return onPickCrate(c)
+        val others = picked - ALL
+        val next = if (c in others) others - c else others + c
+        if (next.isNotEmpty()) onPickCrate(next.joinToString(com.autodj.dj.CRATE_SEP))
+    }
 
     val config = LocalConfiguration.current
     val landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -173,7 +190,7 @@ fun MixScreen(
     val setCard: @Composable (Modifier) -> Unit = { modifier ->
         val tracks = if (mixable) tracksOf(crate) else emptyList()
         SetCard(
-            name = if (!mixable) null else if (crate == ALL) "All genres" else crate,
+            name = if (!mixable) null else crateLabel(crate),
             tracks = tracks,
             library = inSource,
             artwork = artwork,
@@ -187,9 +204,25 @@ fun MixScreen(
         )
     }
     val cratesHeading: @Composable (Modifier) -> Unit = { modifier ->
-        Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Crates", color = Glass.Text, fontSize = if (big) 26.sp else 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-            SourcePicker(library.size, folders, folder, onPickSource, Modifier.tourTarget("from"))
+        Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Crates", color = Glass.Text, fontSize = if (big) 26.sp else 20.sp, fontWeight = FontWeight.ExtraBold)
+            Row(Modifier.weight(1f, fill = false).padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (crates.size > 1) {
+                    val shape = RoundedCornerShape(20.dp)
+                    Box(
+                        Modifier.height(40.dp)
+                            .glass(shape, if (pickSeveral) Glass.FireSelected else Glass.Fill, if (pickSeveral) androidx.compose.ui.graphics.SolidColor(Glass.Ember) else Glass.Edge)
+                            .selectable(pickSeveral, role = Role.Switch) {
+                                // Back to one: the biggest of those picked.
+                                if (pickSeveral) onPickCrate(picked.first())
+                                onPickSeveral(!pickSeveral)
+                            }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("Pick several", color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+                }
+                SourcePicker(library.size, folders, folder, onPickSource, Modifier.weight(1f, fill = false).tourTarget("from"))
+            }
         }
     }
     val grid: @Composable () -> Unit = {
@@ -214,9 +247,10 @@ fun MixScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(if (big) 16.dp else 12.dp)) {
                     row.forEach { (c, sub) ->
                         CrateCard(
-                            if (c == ALL) "All genres" else c, sub, crate == c, if (c == ALL) allCount > 0 else true,
+                            if (c == ALL) "All genres" else c, sub, c in picked, if (c == ALL) allCount > 0 else true,
                             coversFor(tracksOf(c), artwork), artwork, cardHeight, big, Modifier.weight(1f),
-                        ) { onPickCrate(c) }
+                            checkbox = pickSeveral && c != ALL,
+                        ) { tapCrate(c) }
                     }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
@@ -427,6 +461,8 @@ private fun CrateCard(
     height: Dp,
     big: Boolean,
     modifier: Modifier,
+    /** Shows an empty ring while unpicked, so it reads as one of several choices. */
+    checkbox: Boolean = false,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(if (big) 26.dp else 22.dp)
@@ -449,13 +485,13 @@ private fun CrateCard(
                 }
             }
             .border(if (focused) 2.dp else 0.dp, if (focused) Glass.Text else Color.Transparent, shape)
-            .selectable(selected, interactionSource = interaction, indication = null, role = Role.RadioButton, onClick = onClick)
+            .selectable(selected, interactionSource = interaction, indication = null, role = if (checkbox) Role.Checkbox else Role.RadioButton, onClick = onClick)
             .padding(if (big) 18.dp else 14.dp),
     ) {
         if (covers.isNotEmpty()) CoverFan(covers, artwork, if (big) 56.dp else 40.dp, Modifier.align(Alignment.TopStart))
         if (selected) Box(Modifier.align(Alignment.TopEnd).size(26.dp).background(Glass.Ember, CircleShape), contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Check, null, tint = Glass.OnAccent, modifier = Modifier.size(16.dp))
-        }
+        } else if (checkbox) Box(Modifier.align(Alignment.TopEnd).size(26.dp).border(2.dp, Glass.Muted, CircleShape))
         Column(Modifier.align(Alignment.BottomStart)) {
             Text(name, color = if (enabled) Glass.Text else Glass.Muted, fontSize = if (big) 20.sp else 17.sp, fontWeight = FontWeight.Bold,
                 lineHeight = if (big) 24.sp else 21.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -479,7 +515,7 @@ private fun SourcePicker(total: Int, folders: List<MusicFolder>, picked: MusicFo
             Text(
                 if (picked == null) "All music · $total" else "${picked.name} · ${picked.tracks.size}",
                 color = Glass.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 200.dp),
+                modifier = Modifier.widthIn(max = 200.dp).weight(1f, fill = false),
             )
             if (folders.isNotEmpty()) Icon(Icons.Filled.KeyboardArrowDown, null, tint = Glass.Text, modifier = Modifier.size(18.dp))
         }

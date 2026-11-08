@@ -14,6 +14,20 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.2.0",
+            "Mix from several crates at once, on your phone, TV and Android Auto.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Pick several crates", "On the Mix tab, turn on Pick several and tap the crates you want. The set card adds them up, and the mix moves between those genres."),
+                        Change("Mix several on TV", "A new tile after All genres opens a list: tick crates with the remote, then Start. One press on a crate still starts it right away."),
+                        Change("Your set in Android Auto", "The crates you last mixed together appear as one row at the top of the list."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.1.2",
             "Crates are sorted by size, biggest first.",
             listOf(
