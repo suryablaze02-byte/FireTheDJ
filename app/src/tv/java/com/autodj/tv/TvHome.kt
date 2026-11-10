@@ -181,6 +181,7 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 48.dp - EDGE, vertical = 22.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // No song count here: the crates below show theirs, and without it Settings fits across a TV.
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.padding(horizontal = EDGE)) {
                 Row(
                     Modifier.height(48.dp).glass(CircleShape).padding(start = 8.dp, end = 18.dp),
@@ -195,13 +196,6 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                 GlassSegmented(
                     MixMode.entries, mode, { it.label }, vm::setMode,
                     Modifier.width(260.dp).tourTarget("tv_mode"), height = 40.dp, fontSize = 16.sp,
-                )
-                Text(
-                    buildString {
-                        append(songs(if (onlyBangers) com.autodj.dj.SetShape.bangersOf(ready).size else library.size))
-                        if (analysing > 0) append(" · $analysing analysing")
-                    },
-                    color = Glass.Muted, fontSize = 15.sp,
                 )
                 TvRoundButton(40.dp, Glass.Fill, "Your stats", onClick = { stats = true }) { com.autodj.ui.StatsGlyph(Glass.Text) }
                 TvRoundButton(40.dp, Glass.Fill, "Settings", Modifier.tourTarget("tv_settings"), onClick = { settings = true }) {
