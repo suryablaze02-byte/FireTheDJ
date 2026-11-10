@@ -14,6 +14,29 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.4.0",
+            "Only bangers, Change the vibe mid-set, Play full song and a shorter visualizer panel.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Only bangers", "A switch beside Smooth and Trickster: the set plays its big songs only, no slow ones. On the Mix tab and TV Home."),
+                        Change("Change the vibe", "Mid-set, pick an energy (as planned, warm up, peak, wind down or only bangers), the style and the languages. The song playing carries on; every song after it is picked again. Tap the set label on Now Playing, the Vibe card on the decks, or Up next on the TV visualizer."),
+                        Change("Play full song", "Let the playing song run to its end before the DJ mixes on. Tap again to undo."),
+                        Change("A shorter Look panel", "In the full-screen visualizer the looks and the buttons share one strip, so more of the show is on screen. Stop and Skip sit beside Pause."),
+                    ),
+                ),
+                Section(
+                    "Changes",
+                    listOf(
+                        Change("Cleaner decks", "The crossfader card is gone; whether the beats are locked now shows in Next mix. On TV, Coming up has more room."),
+                        Change("Foldables", "An unfolded foldable on its side gets the big-screen layouts."),
+                        Change("Clearer switches", "On and off are easy to tell apart in light mode."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.3.0",
             "Your listening stats and Wrapped cards, a new Club, and album search.",
             listOf(
