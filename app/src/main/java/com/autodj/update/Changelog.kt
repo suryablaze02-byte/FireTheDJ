@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.4.1",
+            "Settings is back on the TV.",
+            listOf(
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Settings on TV", "Only bangers had pushed the Settings button off the TV's Home screen. It's back, and the song count beside Smooth and Trickster is gone; the crates show theirs."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.4.0",
             "Only bangers, Change the vibe mid-set, Play full song and a shorter visualizer panel.",
             listOf(
