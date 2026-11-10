@@ -168,7 +168,7 @@ fun TvSettingsDialog(
                 }
                 if (match) Text("Following the TV: ${if (com.autodj.ui.Appearance.isLight()) "light" else "dark"} now.", color = Glass.Muted, fontSize = 14.sp,
                     modifier = Modifier.padding(start = TV_EDGE))
-                TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth())
+                if (com.autodj.BuildConfig.SELF_UPDATE) TvUpdateCard(state, Modifier.padding(horizontal = TV_EDGE, vertical = 6.dp).fillMaxWidth())
                 val current = Changelog.of(Updates.current) ?: Changelog.versions.first()
                 TvCard("What's new in ${current.version}", current.summary, Modifier.padding(horizontal = TV_EDGE).fillMaxWidth(), subtitleLines = 1) { whatsNew = true }
                 TvCard("Support FireTheDJ", "Ko-fi or UPI, scan with your phone", Modifier.padding(horizontal = TV_EDGE).fillMaxWidth(), onClick = onSupport)

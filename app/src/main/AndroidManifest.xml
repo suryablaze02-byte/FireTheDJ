@@ -8,11 +8,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- Casting to a Chromecast: capturing FireTheDJ's own audio to stream it to the TV. -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <!-- In-app updates: installing a newer FireTheDJ downloaded from its GitHub releases. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Support over UPI: to see whether any UPI app can take the payment link. -->
     <queries>
@@ -48,20 +43,8 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Streams the mix to a Chromecast while casting. -->
-        <service
-            android:name=".cast.CastStreamService"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
 
-        <!-- The package installer's answer about an in-app update. -->
-        <receiver
-            android:name=".update.UpdateInstallReceiver"
-            android:exported="false" />
 
-        <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.autodj.cast.CastOptionsProvider" />
 
         <!-- Marks FireTheDJ as an Android Auto media app. -->
         <meta-data

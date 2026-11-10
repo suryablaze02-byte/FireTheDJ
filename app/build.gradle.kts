@@ -44,7 +44,7 @@ android {
 
     // Two apps from one codebase: FireTheDJ for phones, and FireTheDJ TV (its own package, so both
     // install side by side) with a remote-driven home screen and an auto-rotating visualizer.
-    flavorDimensions += "device"
+    flavorDimensions += listOf("device", "dist")
     productFlavors {
         create("phone") {
             dimension = "device"
@@ -55,6 +55,19 @@ android {
         create("tv") {
             dimension = "device"
             applicationIdSuffix = ".tv"
+        }
+        // full: the GitHub release, with Chromecast and the in-app updater. foss: for F-Droid and
+        // IzzyOnDroid, with no Google Play libraries and updates left to the store.
+        create("full") {
+            dimension = "dist"
+            isDefault = true
+            buildConfigField("boolean", "CASTING", "true")
+            buildConfigField("boolean", "SELF_UPDATE", "true")
+        }
+        create("foss") {
+            dimension = "dist"
+            buildConfigField("boolean", "CASTING", "false")
+            buildConfigField("boolean", "SELF_UPDATE", "false")
         }
     }
 
@@ -93,8 +106,8 @@ dependencies {
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // Casting: Google Cast (Chromecast, Google TV) and the routes picker.
-    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
-    implementation("androidx.mediarouter:mediarouter:1.7.0")
+    "fullImplementation"("com.google.android.gms:play-services-cast-framework:21.5.0")
+    "fullImplementation"("androidx.mediarouter:mediarouter:1.7.0")
     // Media library callbacks (Android Auto's browse tree) answer with ListenableFutures.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.8.1")
     // YouTube Music: playlist listing, and the signature / `n` solving that makes stream URLs playable.

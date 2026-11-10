@@ -75,6 +75,7 @@ object Updates {
 
     /** On launch: checks at most once a day, if automatic checks are on. */
     fun autoCheck(context: Context) {
+        if (!com.autodj.BuildConfig.SELF_UPDATE) return
         val p = prefs(context)
         _lastChecked.value = p.getLong("lastChecked", 0L)
         if (!autoCheckEnabled(context) || System.currentTimeMillis() - _lastChecked.value < DAY_MS) {
@@ -88,6 +89,7 @@ object Updates {
     }
 
     fun check(context: Context) {
+        if (!com.autodj.BuildConfig.SELF_UPDATE) return
         if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Installing) return
         val app = context.applicationContext
         _state.value = UpdateState.Checking
@@ -123,6 +125,7 @@ object Updates {
      * check finds the release again (Android may have restarted the app when the switch changed).
      */
     fun resume(context: Context) {
+        if (!com.autodj.BuildConfig.SELF_UPDATE) return
         val app = context.applicationContext
         if (!canInstall(app)) return
         val s = _state.value

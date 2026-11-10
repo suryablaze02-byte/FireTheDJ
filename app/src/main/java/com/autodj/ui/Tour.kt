@@ -115,7 +115,7 @@ fun phoneTour(stems: Boolean) = listOfNotNull(
     TourStep("mode", "Smooth or Trickster", "Smooth blends long and clean. Trickster drops a trick about every 30 seconds: rolls, bass kills, scratches, word loops, and sounds that suit each song's language."),
     TourStep("tab_now", "Now Playing", "The record, the next mix and skip: tap it to mix out at the next phrase, again for the next bar. While a set plays, Mix and Music show it in a mini player too. Turn the phone sideways for two decks and the effects, live."),
     TourStep(null, "Pick a look", "Full-screen visualizers from Now Playing. Tap the screen while one plays to pick another; FireTheDJ remembers it.", art = TourArt.LOOKS),
-    TourStep("cast", "Take it to the TV", "Cast to a Chromecast or smart TV, and the visualizers fill the big screen."),
+    if (!com.autodj.BuildConfig.CASTING) null else TourStep("cast", "Take it to the TV", "Cast to a Chromecast or smart TV, and the visualizers fill the big screen."),
     TourStep("settings", "Settings", "Light, dark or as your phone is set, analysis in the background, updates and what's new, and stem separation."),
     if (stems) STEMS_STEP else null,
 )

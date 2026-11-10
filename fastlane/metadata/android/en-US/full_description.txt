@@ -1,0 +1,30 @@
+FireTheDJ mixes music the way a DJ does, on its own. It listens to every track (tempo, beat grid, key, phrases, drops, vocals and energy), sorts them into genre crates, and plays a continuous set. It picks what comes next, finds the right bar to leave one song and bring the next one in, matches tempo and key, and performs the transition with real effects. There is no "mix now" button: the AI is the DJ.
+
+<b>The DJ</b>
+<ul>
+<li>Hands-free sets from one genre crate, several, or all genres, taking a different route through the same music every time.</li>
+<li>Beat-matched, phrase-aligned transitions with tempo glides and key matching on the Camelot wheel.</li>
+<li>Blends as long as the genre: long techno and house blends, short drum &amp; bass and hip-hop cuts.</li>
+<li>Bass swaps, echo-outs, filter sweeps, loop rolls, backspins, scratches, vocal swaps and a cappella mashups.</li>
+<li>Smooth or Trickster: clean blends, or tricks all through the set, with party sounds that suit each song's language.</li>
+<li>A set with a shape: a calm opening, a build, a peak and a big finale.</li>
+<li>Change the vibe mid-set (energy, style, languages), Only bangers, and Play full song.</li>
+</ul>
+
+<b>Your music</b>
+<ul>
+<li>Songs on your phone, whole folders.</li>
+<li>YouTube Music playlists and albums, and Spotify and Apple Music playlists matched on YouTube Music, streamed and never saved.</li>
+<li>Audius, Jamendo, Internet Archive and M3U links.</li>
+</ul>
+
+<b>To watch</b>
+<ul>
+<li>Full-screen visualizers: a club with an LED wall, a night drive, acid trip, tunnel and more, with synced lyrics.</li>
+<li>Two decks sideways, showing each mix bar by bar.</li>
+<li>Your listening stats and Wrapped cards.</li>
+</ul>
+
+FireTheDJ has no ads, no account and no tracking. It is free software under the GPL-3.0.
+
+FireTheDJ is an independent project and is not affiliated with YouTube, Google, Spotify, Apple or any music service. Please use it in line with copyright law and the terms of the services you stream from.

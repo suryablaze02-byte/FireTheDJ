@@ -137,9 +137,11 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             AnalysisSettings()
 
-            GlassHeading("Updates", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
-            // Up to date: one quiet row. An update, a download or a problem: the full card.
-            if (state == UpdateState.UpToDate || state == UpdateState.Idle || state == UpdateState.Checking) {
+            GlassHeading(if (com.autodj.BuildConfig.SELF_UPDATE) "Updates" else "What's new", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+            // Up to date: one quiet row. An update, a download or a problem: the full card. The FOSS
+            // build gets its updates from its store, so it has only What's new.
+            if (!com.autodj.BuildConfig.SELF_UPDATE) Unit
+            else if (state == UpdateState.UpToDate || state == UpdateState.Idle || state == UpdateState.Checking) {
                 Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
                     SettingRow(
                         if (state == UpdateState.UpToDate) "You're up to date" else "Checking for updates…",

@@ -187,7 +187,7 @@ No Downloader? Send the APK from your phone with *Send Files to TV*, or use a US
 Requires JDK 17 and the Android SDK (platform 34).
 
 ```bash
-./gradlew testPhoneDebugUnitTest assemblePhoneDebug assembleTvDebug
+./gradlew testPhoneFullDebugUnitTest assemblePhoneFullDebug assembleTvFullDebug
 ```
 
 The phone and TV APKs land in `app/build/outputs/apk/phone/debug/` and `app/build/outputs/apk/tv/debug/`. Both apps share all the DJ code; the TV app's screens are in `app/src/tv`. Optional settings go in `local.properties`:

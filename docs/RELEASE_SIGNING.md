@@ -31,13 +31,13 @@ keyAlias=firethedj
 keyPassword=…
 ```
 
-From then on `./gradlew assemblePhoneRelease assembleTvRelease` signs with your key. Without the file, release builds
+From then on `./gradlew assemblePhoneFullRelease assembleTvFullRelease` signs with your key. Without the file, release builds
 fall back to the local debug key, which is fine for your own phone and nothing else.
 
 ## 3. Build and check
 
 ```bash
-./gradlew testPhoneDebugUnitTest assemblePhoneRelease assembleTvRelease
+./gradlew testPhoneFullDebugUnitTest assemblePhoneFullRelease assembleTvFullRelease
 ```
 
 That builds both apps:

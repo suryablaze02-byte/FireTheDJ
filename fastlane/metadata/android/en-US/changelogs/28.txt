@@ -1,0 +1,6 @@
+2.4.0
+- Only bangers: a set of big songs only, no slow ones.
+- Change the vibe mid-set: energy, style and languages; every song after the playing one is picked again.
+- Play full song: let the playing song run to its end.
+- A shorter Look panel in the full-screen visualizer.
+- Cleaner decks, foldable layouts and clearer switches.
