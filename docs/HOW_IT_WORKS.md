@@ -46,6 +46,7 @@ The technical tour: how a track is understood, how the next track and the transi
 | Backspin drop | Dubstep, DnB, hip-hop | A spins backwards to a stop; B drops straight into its first big section |
 | Scratch cut | Hip-hop | A beat is caught and baby-scratched for the rest of the bar, then cut to B |
 | Vocal swap | Beat-matched, keys fit, B has a sung phrase | A's vocal is cut (stereo centre above 180 Hz removed, bass kept) while B's vocal (centre only, 250 Hz–5 kHz) sings over A's beat for 8 bars; then the bass lines swap, B opens to full range and A fades |
+| Vocal carry | Smooth only: beat-matched, keys fit, A is singing, B has a quiet wordless intro | A's vocal alone sings over B's bass-less intro for 8 bars; then B's bass and full song come in under it as the voice fades over 8 more |
 | Loop & ramp | Cross-genre / tempo gaps up to ±45% | A's bar is looped while the deck speeds up (key-locked) to B's tempo over 4–8 bars, the loop halving 1 bar → ½ beat under a rising high-pass; B drops on the loop's downbeat |
 
 Cross-genre sets move between neighbouring families (house ↔ techno ↔ trance, hip-hop ↔ drum &

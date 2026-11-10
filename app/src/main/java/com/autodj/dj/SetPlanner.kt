@@ -7,6 +7,15 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.random.Random
 
+/** What the listener wants from the set's energy. [PLANNED] is the set's own arc. */
+enum class SetEnergy(val label: String, val hint: String) {
+    PLANNED("As planned", "Builds, peaks, ends big"),
+    WARM_UP("Warm up", "Easy, building slowly"),
+    PEAK("Peak", "Full dancefloor"),
+    WIND_DOWN("Wind down", "Easing off"),
+    BANGERS("Only bangers", "Big songs only, no slow ones"),
+}
+
 /**
  * Chooses what plays next. Each step should be a small move in tempo, genre, sound and
  * energy; across genres it prefers neighbouring families (house → techno, hip-hop → drum &
@@ -80,15 +89,19 @@ object SetPlanner {
         hour: Int = -1,
         /** Songs the listener just skipped in a row: the floor wants something else, so steer away. */
         avoid: List<TrackInfo> = emptyList(),
+        /** The energy asked for: the arc, or a level the listener chose in Change the vibe. */
+        energy: SetEnergy = SetEnergy.PLANNED,
     ): TrackInfo? {
         if (remaining.isEmpty()) return null
         val mine = lyrics(current)
-        val target = shape?.let { SetShape.target(progress, hour) }
+        val target = shape?.let { SetShape.target(progress, hour, energy) }
+        val pull = if (energy == SetEnergy.PLANNED) SHAPE_WEIGHT else CHOSEN_ENERGY_WEIGHT
+        val keepsFinale = energy == SetEnergy.PLANNED || energy == SetEnergy.BANGERS
         val away = changeOfCourse(avoid, shape)
         val costs = remaining.associateWith {
             transitionCost(current, it) - (if (mine != null && wordFriendly(current, it) && WordPlay.hasLink(mine, lyrics(it), it.durationSec)) WORD_LINK_BONUS else 0.0) +
-                (if (shape != null && target != null) SHAPE_WEIGHT * abs(shape.energyOf(it) - target) else 0.0) +
-                (if (shape != null && shape.heldForFinale(it, progress)) FINALE_HOLD else 0.0) +
+                (if (shape != null && target != null) pull * abs(shape.energyOf(it) - target) else 0.0) +
+                (if (shape != null && keepsFinale && shape.heldForFinale(it, progress)) FINALE_HOLD else 0.0) +
                 away(it)
         }
         val best = costs.values.min()
@@ -100,6 +113,12 @@ object SetPlanner {
 
     /** How hard the set's arc pulls: a track a whole energy range off target costs about a key clash. */
     private const val SHAPE_WEIGHT = 3.0
+
+    /** An energy the listener asked for pulls harder than the set's own arc. */
+    private const val CHOSEN_ENERGY_WEIGHT = 6.0
+
+    /** Fewer songs than this left to pick from isn't a vibe worth changing to. */
+    const val MIN_VIBE_SONGS = 3
 
     /** What it costs to play a finale track early: more than any ordinary mismatch. */
     private const val FINALE_HOLD = 4.0
@@ -153,13 +172,14 @@ object SetPlanner {
         atIndex: Int = 0,
         setSize: Int = 0,
         hour: Int = -1,
+        energy: SetEnergy = SetEnergy.PLANNED,
     ): List<TrackInfo> {
         val left = remaining.toMutableList()
         val result = mutableListOf<TrackInfo>()
         var at = current
         while (left.isNotEmpty()) {
             val progress = (atIndex + result.size + 1).toDouble() / maxOf(1, setSize - 1)
-            val next = pickNext(at, left, shape = shape, progress = progress, hour = hour)!!
+            val next = pickNext(at, left, shape = shape, progress = progress, hour = hour, energy = energy)!!
             left.remove(next)
             result += next
             at = next
@@ -218,12 +238,21 @@ class SetShape(tracks: List<TrackInfo>) {
 
     fun heldForFinale(t: TrackInfo, progress: Double) = progress < FINALE_FROM && t.uri in finale
 
+    /** One of the set's big songs: its top two-fifths by energy. */
+    fun isBanger(t: TrackInfo) = energyOf(t) >= BANGER_FROM
+
     companion object {
         /** Sets shorter than this have no room for an arc. */
         const val MIN_TRACKS = 6
 
         /** Where the finale starts, as a share of the set. */
         const val FINALE_FROM = 0.9
+
+        private const val BANGER_FROM = 0.6
+
+        /** Only the big songs of [tracks]; a set too short to rank stays whole. */
+        fun bangersOf(tracks: List<TrackInfo>): List<TrackInfo> =
+            forSet(tracks)?.let { shape -> tracks.filter(shape::isBanger) } ?: tracks
 
         fun forSet(tracks: List<TrackInfo>): SetShape? = if (tracks.size >= MIN_TRACKS) SetShape(tracks) else null
 
@@ -232,7 +261,13 @@ class SetShape(tracks: List<TrackInfo>) {
          * (-1 = any time): the same crowd wants a gentler peak at 8 pm than at 1 am, and less
          * again once it's nearly morning.
          */
-        fun target(progress: Double, hour: Int = -1): Double {
+        fun target(progress: Double, hour: Int = -1, energy: SetEnergy = SetEnergy.PLANNED): Double {
+            when (energy) {
+                SetEnergy.PLANNED -> Unit
+                SetEnergy.WARM_UP -> return 0.3
+                SetEnergy.PEAK, SetEnergy.BANGERS -> return 0.9
+                SetEnergy.WIND_DOWN -> return 0.2
+            }
             val p = progress.coerceIn(0.0, 1.0)
             val arc = when {
                 p < 0.2 -> 0.25 // opening: let the room arrive

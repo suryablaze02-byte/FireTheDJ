@@ -61,7 +61,16 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import com.autodj.dj.EngineState
+import com.autodj.ui.FullSongIcon
+import com.autodj.ui.showsFullSong
 import com.autodj.ui.Artwork
 import com.autodj.ui.DjViewModel
 import com.autodj.ui.Glass
@@ -98,6 +107,10 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
     val saved by vm.visualizerStyle.collectAsStateWithLifecycle()
     val style = if (saved.onTv) saved else VisualizerStyle.CLUB
     var controls by remember { mutableStateOf(false) }
+    var fullSongFocused by remember { mutableStateOf(false) }
+    var vibe by remember { mutableStateOf(false) }
+    val upNext = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val upNextFocused by upNext.collectIsFocusedAsState()
     var infoUntil by remember { mutableStateOf(0L) }
     // The look pill after ◀ ▶: just the look's name, briefly.
     var lookUntil by remember { mutableStateOf(0L) }
@@ -213,7 +226,13 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
                     }
                 }
                 state.next?.let { next ->
-                    Column(horizontalAlignment = Alignment.End) {
+                    // The bar's round buttons fill it, so Up next is the way to Change the vibe.
+                    Column(
+                        Modifier.border(3.dp, if (upNextFocused) Glass.Text else Color.Transparent, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))
+                            .clickable(upNext, indication = null, enabled = state.canChangeVibe, role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Change the vibe") { vibe = true }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        horizontalAlignment = Alignment.End,
+                    ) {
                         Text(
                             state.secondsToMix?.let { "UP NEXT · ${formatTime(it)}" } ?: "UP NEXT",
                             color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
@@ -241,8 +260,36 @@ fun TvPlayer(vm: DjViewModel, onHome: () -> Unit, onBack: () -> Unit) {
                     TvRoundButton(48.dp, if (state.skipping > 0) Glass.FillSelected else Glass.FillStrong, skipLabel, onClick = { vm.skip() }) {
                         SkipIcon(if (state.canSkip || state.skipping > 0) Glass.Text else Glass.Muted, Modifier.size(22.dp))
                     }
+                    if (state.showsFullSong) {
+                        TvRoundButton(
+                            48.dp, if (state.fullSong) Glass.Ember else Glass.FillStrong, if (state.fullSong) "Playing full song" else "Play full song",
+                            Modifier.onFocusChanged { fullSongFocused = it.hasFocus }, onClick = { vm.engine.toggleFullSong() },
+                        ) {
+                            val ink = if (!state.canFullSong) Glass.Muted else if (state.fullSong) Glass.OnAccent else Glass.Text
+                            if (state.fullSong) Icon(Icons.Filled.Check, null, tint = ink, modifier = Modifier.size(24.dp)) else FullSongIcon(ink, Modifier.size(22.dp))
+                        }
+                    }
                 }
             }
+        }
+
+        AnimatedVisibility(controls && upNextFocused, Modifier.align(Alignment.BottomEnd), enter = fadeIn(), exit = fadeOut()) {
+            Text(
+                "Change the vibe", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 470.dp, bottom = with(LocalDensity.current) { controlsPx.toDp() } - 20.dp)
+                    .glass(RoundedCornerShape(999.dp), Glass.FillDark).padding(horizontal = 14.dp, vertical = 7.dp),
+            )
+        }
+        if (vibe) com.autodj.ui.VibeSidePanel(vm, state, com.autodj.ui.VibeRoom.TV, 440.dp) { vibe = false }
+
+        // The bar's buttons are icons: this one's name, while the remote is on it.
+        AnimatedVisibility(controls && fullSongFocused, Modifier.align(Alignment.BottomEnd), enter = fadeIn(), exit = fadeOut()) {
+            Text(
+                if (state.fullSong) "Playing full song" else if (state.canFullSong) "Play full song" else "Already mixing",
+                color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 40.dp, bottom = with(LocalDensity.current) { controlsPx.toDp() } - 20.dp)
+                    .glass(RoundedCornerShape(999.dp), Glass.FillDark).padding(horizontal = 14.dp, vertical = 7.dp),
+            )
         }
     }
 }

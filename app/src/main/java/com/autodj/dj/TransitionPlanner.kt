@@ -110,6 +110,8 @@ object TransitionPlanner {
          * whichever of the style's moves has room before it; a hard cut if none has.
          */
         exitAt: Int? = null,
+        /** Only moves that overlap the songs: A keeps playing to the end of the mix. */
+        blendOnly: Boolean = false,
     ): Transition {
         val family = styleFamily ?: b.genreFamily
         val multiple = tempoMultiple(a.bpm, b.bpm)
@@ -139,13 +141,14 @@ object TransitionPlanner {
             DecisionEngine.scores(a, b, beatmatched, speed, history, keysFit, mode, family)
                 .mapValues { (r, s) -> if (lift == 2 && r.cut) s + LIFT_CUT_BONUS else s }
                 .filterValues { it.isFinite() }
+                .filterKeys { !blendOnly || !it.cut }
                 .entries.sortedByDescending { it.value }
                 .map { it.key to it.value }
         }
 
         val firstBar = max(0, a.barAt(nowSec) + 2)
         // A mix out is over by the end of A's music: a talking outro (SponsorBlock) isn't mixed through.
-        val lastBar = min(floor((a.durationSec - 0.25 - a.downbeatSec) / a.barSec).toInt(), a.musicEndBar)
+        val lastBar = lastMixBar(a)
         // B comes in where its music is: after a talking intro, if it has one.
         val firstPhrase = b.firstPhraseBar
         val musicFrom = b.musicStartBar
@@ -249,6 +252,36 @@ object TransitionPlanner {
             description = "$name $where$into · $tempoText$keyText",
         )
     }
+
+    private fun lastMixBar(a: TrackInfo) = min(floor((a.durationSec - 0.25 - a.downbeatSec) / a.barSec).toInt(), a.musicEndBar)
+
+    /**
+     * Play full song: A runs to its end and B blends in over its last bars. With no room to
+     * blend, A plays on to its last bar and cuts there.
+     */
+    fun planFullSong(
+        a: TrackInfo,
+        aEntryBar: Int,
+        nowSec: Double,
+        b: TrackInfo,
+        history: List<Recipe> = emptyList(),
+        aPitchSemis: Int = 0,
+        mode: MixMode = MixMode.SMOOTH,
+        random: Random? = null,
+        lyrics: (TrackInfo) -> TimedLyrics? = { null },
+        styleFamily: String? = null,
+    ): Transition {
+        val last = lastMixBar(a)
+        for (bars in FULL_SONG_BLEND_BARS) {
+            if (a.barTime(last - bars) <= nowSec) continue
+            val blend = plan(a, aEntryBar, nowSec, b, history, null, aPitchSemis, mode, random, lyrics, styleFamily, exitAt = last - bars, blendOnly = true)
+            if (blend.recipe != Recipe.HARD_CUT) return blend
+        }
+        return plan(a, aEntryBar, nowSec, b, history, Recipe.HARD_CUT, aPitchSemis, mode, random, lyrics, styleFamily, exitAt = max(last, a.barAt(nowSec) + 1))
+    }
+
+    /** How far from A's end a full-song blend may start, shortest first. */
+    private val FULL_SONG_BLEND_BARS = listOf(4, 8)
 
     /** How a word-play mix bridges the tempo gap between the songs. */
     enum class WordBridge(val label: String) {
@@ -524,7 +557,7 @@ object TransitionPlanner {
         // Lead-in bars up to B's drop, plus the bar after it.
         recipe == Recipe.BASS_DROP -> listOf((b.introEndBar - entry).let { if (it == 8 || it == 16) it + 1 else 0 })
         recipe == Recipe.VOCAL_SWAP -> listOf(12)
-        recipe == Recipe.ACAPELLA_MASHUP -> listOf(16)
+        recipe == Recipe.ACAPELLA_MASHUP || recipe == Recipe.VOCAL_CARRY -> listOf(16)
         recipe == Recipe.BREAKDOWN_SWAP -> listOf(8)
         // Different tempos can only overlap briefly.
         !beatmatched -> listOf(4)
@@ -543,7 +576,7 @@ object TransitionPlanner {
     private const val LENGTH_WEIGHT = 0.6
 
     /** Blends that deal with the two voices themselves. */
-    private val VOICE_HANDLING = setOf(Recipe.VOCAL_SWAP, Recipe.ACAPELLA_MASHUP)
+    private val VOICE_HANDLING = setOf(Recipe.VOCAL_SWAP, Recipe.ACAPELLA_MASHUP, Recipe.VOCAL_CARRY)
 
     /** Mean vocalness over an overlap that counts as singing through it. */
     private const val SINGING = 0.45
@@ -572,7 +605,7 @@ object TransitionPlanner {
         val handover = when {
             recipe.cut -> exit
             recipe == Recipe.VOCAL_SWAP -> exit + 6
-            recipe == Recipe.ACAPELLA_MASHUP -> exit + 8
+            recipe == Recipe.ACAPELLA_MASHUP || recipe == Recipe.VOCAL_CARRY -> exit + 8
             recipe == Recipe.BASS_DROP -> exit + mix - 1
             recipe == Recipe.BREAKDOWN_SWAP -> exit + 2
             else -> exit + min(mix / 2, 8)
@@ -600,6 +633,10 @@ object TransitionPlanner {
         } else if (recipe == Recipe.VOCAL_SWAP) {
             s += (after - 0.75) * 2 // B's vocal needs A's full beat underneath
             s += (1 - a.vocalIn(exit, exit + 8)) * 0.8 // cleaner still if A is instrumental there
+        } else if (recipe == Recipe.VOCAL_CARRY) {
+            // Only where A is really singing: its voice is all that's left of it.
+            if (a.vocalIn(exit, exit + 8) < VOCAL) return Double.NEGATIVE_INFINITY
+            s += 0.6
         } else {
             s += (before - after) * 2 // blend over a stretch where A calms down
             s -= max(0.0, after - 0.75) * 2
@@ -625,6 +662,10 @@ object TransitionPlanner {
         if (recipe == Recipe.VOCAL_SWAP || recipe == Recipe.ACAPELLA_MASHUP) {
             // A sung phrase landing on the other track's beat is the showpiece move when it's available.
             return if (b.vocalIn(entry, entry + 8) >= VOCAL) 1.8 - 0.2 * skipped else Double.NEGATIVE_INFINITY
+        }
+        if (recipe == Recipe.VOCAL_CARRY) {
+            // A's voice needs B's quiet, wordless intro to sing over.
+            return if (b.vocalIn(entry, entry + 8) < SINGING && quietBars(b, entry) >= 4) 1.0 - SKIP_COST_PER_MIN * skipped else Double.NEGATIVE_INFINITY
         }
         if (recipe == Recipe.DROP_SWAP || recipe == Recipe.POWER_CUT) {
             // B must come in at full swing: its drop replaces A's (or breaks the silence).

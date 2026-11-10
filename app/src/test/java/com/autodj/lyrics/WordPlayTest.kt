@@ -273,4 +273,17 @@ class WordPlayTest {
         val remix = JSONArray("""[{"trackName":"Sweater Weather (Gaullin Remix)","artistName":"The Neighbourhood","syncedLyrics":"[00:01.00] remix","duration":230}]""")
         assertEquals("[00:01.00] remix", lrclib.pick(remix, 230.0, "Sweater Weather", "The Neighbourhood", version = "gaullin")?.lrc)
     }
+
+    @Test
+    fun aSlowSongsWordLoopIsShortAndTight() {
+        val t = track("k", sungBars = (0 until 120).toSet(), bpm = 70.0)
+        val drop = t.barTime(8)
+        val l = timed(drop - 2.0 to "Kissik Kissik", 60.0 to "Kissik again", 70.0 to "Kissik more", 80.0 to "and the rest")
+        val rolls = com.autodj.dj.Performer.plan(t, 0, 1.0, 70.0, mode = MixMode.TRICKSTER, lyrics = l)
+            .events.filter { it.type == com.autodj.dj.fx.FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end > drop - 2 * t.barSec }
+        assertTrue(rolls.isNotEmpty())
+        assertTrue(rolls.minOf { it.start } >= drop - t.barSec)
+        assertTrue(rolls.all { it.p1 <= 0.5f })
+        assertEquals(0.0625f, rolls.maxBy { it.end }.p1, 1e-6f)
+    }
 }

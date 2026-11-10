@@ -55,6 +55,8 @@ fun DjScreen(vm: DjViewModel) {
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val state by vm.engine.state.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
+    val onlyBangers by vm.onlyBangers.collectAsStateWithLifecycle()
+    var vibe by remember { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(if (state.running) Tab.NOW_PLAYING else Tab.MIX) }
     // The mixing view opens by itself for each transition; Back hides it until the next one.
     var preview by remember { mutableStateOf(false) }
@@ -107,10 +109,16 @@ fun DjScreen(vm: DjViewModel) {
         SystemBarIcons(darkGround = true)
         DarkGlass {
             FullscreenVisualizer(
-                state, artwork, vm.engine::visual, onToggle = vm::togglePause, onClose = { fullscreen = false }, onStop = vm::stop, onSkip = vm::skip,
+                state, artwork, vm.engine::visual, onToggle = vm::togglePause, onClose = { fullscreen = false }, onStop = vm::stop, onSkip = vm::skip, onFullSong = vm::toggleFullSong,
                 style = style, onStyle = vm::setVisualizerStyle,
             )
         }
+        return
+    }
+
+    // Sideways the picker takes the whole screen, so the moving decks aren't drawn while choosing.
+    if (vibe && state.running && LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        VibeFullScreen(vm, state) { vibe = false }
         return
     }
 
@@ -195,6 +203,8 @@ fun DjScreen(vm: DjViewModel) {
                         library, artwork, folders,
                         mode = mode,
                         onMode = vm::setMode,
+                        onlyBangers = onlyBangers,
+                        onOnlyBangers = vm::setOnlyBangers,
                         pickedSource = pickedSource,
                         onPickSource = { pickedSource = it },
                         pickedCrate = pickedCrate,
@@ -234,6 +244,7 @@ fun DjScreen(vm: DjViewModel) {
                         onRemove = vm::remove,
                     )
                     Tab.NOW_PLAYING -> {
+                        if (vibe && state.running) VibeSheet(vm, state) { vibe = false }
                         val showMix = state.running && (preview || (state.mixing && hiddenFor != state.index))
                         if (landscape && state.running && preview) {
                             // Sideways the decks are always on screen; the effects view opens only from its panel.
@@ -241,9 +252,10 @@ fun DjScreen(vm: DjViewModel) {
                         } else if (landscape && state.current != null && state.set.getOrNull(state.index) != null) {
                             // With nothing playing, sideways shows the same "Go to Mix" screen as upright (below).
                             TwoDeckScreen(
-                                state, artwork, visual = vm.engine::visual, onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip,
+                                state, artwork, visual = vm.engine::visual, onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip, onFullSong = vm::toggleFullSong,
                                 onOpenEffects = { preview = true },
                                 languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
+                                onVibe = { vibe = true },
                             )
                         } else if (showMix) {
                             MixingScreen(state, artwork, visual = vm.engine::visual, onBack = {
@@ -251,7 +263,7 @@ fun DjScreen(vm: DjViewModel) {
                                 hiddenFor = state.index
                             })
                         } else {
-                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, onSkip = vm::skip, visual = vm.engine::visual,
+                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, onSkip = vm::skip, onFullSong = vm::toggleFullSong, onVibe = { vibe = true }, visual = vm.engine::visual,
                                 onFullscreen = { fullscreen = true },
                                 onCast = { castDialog = true },
                                 setLanguage = setLanguage,

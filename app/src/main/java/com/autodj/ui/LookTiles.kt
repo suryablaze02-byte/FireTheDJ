@@ -41,7 +41,7 @@ import com.autodj.ui.vis.VisualizerStyle
  * ember; on a TV the one the remote is on grows and is ringed in white.
  */
 @Composable
-fun LookTile(style: VisualizerStyle, selected: Boolean, onClick: () -> Unit, width: Dp = 64.dp, height: Dp = 64.dp, fontSize: TextUnit = 12.sp, modifier: Modifier = Modifier) {
+fun LookTile(style: VisualizerStyle, selected: Boolean, onClick: () -> Unit, width: Dp = 64.dp, height: Dp = 64.dp, fontSize: TextUnit = 12.sp, modifier: Modifier = Modifier, showName: Boolean = true) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val grow by animateFloatAsState(if (focused) 1.1f else 1f, label = "focus")
@@ -70,7 +70,7 @@ fun LookTile(style: VisualizerStyle, selected: Boolean, onClick: () -> Unit, wid
                     shape,
                 ),
         )
-        Text(style.short, color = if (selected) Glass.EmberText else Color.White.copy(alpha = 0.85f), fontSize = fontSize,
+        if (showName) Text(style.short, color = if (selected) Glass.EmberText else Color.White.copy(alpha = 0.85f), fontSize = fontSize,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold, maxLines = 1)
     }
 }

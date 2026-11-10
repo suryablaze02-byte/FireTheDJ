@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -39,6 +40,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.autodj.dj.EngineState
 import com.autodj.dj.VisualFrame
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 
 @Composable
 fun NowPlayingScreen(
@@ -48,6 +60,8 @@ fun NowPlayingScreen(
     onStop: () -> Unit,
     onOpenMix: () -> Unit,
     onSkip: () -> Unit = {},
+    onFullSong: () -> Unit = {},
+    onVibe: () -> Unit = {},
     visual: () -> VisualFrame? = { null },
     onFullscreen: () -> Unit = {},
     onCast: () -> Unit = {},
@@ -93,22 +107,29 @@ fun NowPlayingScreen(
     val genre = label.substringAfterLast(" · ")
     val header: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                Modifier.height(if (tablet) 40.dp else 32.dp).glass(RoundedCornerShape(20.dp)).padding(horizontal = 12.dp),
+            // The label names the vibe, so tapping it changes the vibe.
+            Box(Modifier.weight(1f)) { Row(
+                Modifier.height(if (tablet) 40.dp else 32.dp).glass(RoundedCornerShape(20.dp))
+                    .then(if (state.canChangeVibe) Modifier.clickable(role = Role.Button, onClickLabel = "Change the vibe", onClick = onVibe) else Modifier)
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(Modifier.size(7.dp).background(Glass.Ember, CircleShape))
                 Text(listOfNotNull(genre, state.mode.label, setLanguage).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Text,
-                    fontSize = if (tablet) 15.sp else 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            }
-            Spacer(Modifier.weight(1f))
+                    fontSize = if (tablet) 15.sp else 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (state.canChangeVibe) Icon(Icons.Filled.KeyboardArrowDown, null, tint = Glass.Text, modifier = Modifier.size(16.dp))
+            } }
             GlassIconButton("Open the full-screen visualizer", size = if (tablet) 48.dp else 44.dp, onClick = onFullscreen) { ExpandGlyph(Glass.Text) }
             CastButton(rememberCasting(), diameter = if (tablet) 48.dp else 44.dp, onClick = onCast)
         }
-        if (source.isNotBlank()) {
-            Text("Playing from $source", color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 6.dp))
+        val chosen = state.energy.takeIf { it != com.autodj.dj.SetEnergy.PLANNED }?.label
+        if (source.isNotBlank() || chosen != null) {
+            Row(Modifier.padding(top = 6.dp)) {
+                if (source.isNotBlank()) Text("Playing from $source" + if (chosen != null) " · " else "", color = Glass.Muted, fontSize = 12.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (chosen != null) Text(chosen, color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
         }
     }
     // The title (up to two lines), the artist and the song's details as chips.
@@ -179,7 +200,11 @@ fun NowPlayingScreen(
             ) { SkipIcon(if (state.canSkip || skipping) Glass.Text else Glass.Muted, Modifier.size(26.dp)) }
         }
         // Under play/pause, as on the sideways screen.
-        Text("AI in control", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
+        if (state.showsFullSong) {
+            Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) { PlayFullSongButton(state, onFullSong) }
+        } else {
+            Text("AI in control", color = Glass.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
+        }
     }
 
     if (tablet) {
@@ -265,5 +290,43 @@ private fun UpNext(state: EngineState, artwork: Map<String, String>, onOpenMix: 
             )
         }
         Icon(Icons.Filled.KeyboardArrowRight, null, tint = Glass.Muted)
+    }
+}
+
+/** The last song has no next one to wait for, so there's nothing to hold back. */
+val EngineState.showsFullSong get() = next != null || fullSong
+
+/** Lets this song run to its end before the DJ mixes on; orange while it's on, dimmed once the mix has begun. */
+@Composable
+fun PlayFullSongButton(state: EngineState, onClick: () -> Unit, modifier: Modifier = Modifier, height: Dp = 44.dp, fontSize: TextUnit = 15.sp) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val on = state.fullSong
+    val ink = if (on) Glass.OnAccent else Glass.Text
+    Row(
+        modifier.height(height).alpha(if (state.canFullSong) 1f else 0.5f).clip(CircleShape)
+            .background(if (on) Glass.Ember else Glass.Fill)
+            .border(if (focused) 3.dp else 1.dp, if (focused) Glass.Text else Glass.Text.copy(alpha = 0.3f), CircleShape)
+            .clickable(interaction, indication = null, enabled = state.canFullSong, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        if (on) Icon(Icons.Filled.Check, null, tint = ink, modifier = Modifier.size(18.dp)) else FullSongIcon(ink, Modifier.size(18.dp))
+        Text(if (on) "Playing full song" else "Play full song", color = ink, fontSize = fontSize, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+/** An arrow reaching a stop line: on to the end of the song. */
+@Composable
+fun FullSongIcon(color: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val stroke = w * 0.11f
+        fun line(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, Offset(w * x1, w * y1), Offset(w * x2, w * y2), stroke, StrokeCap.Round)
+        line(0.12f, 0.5f, 0.74f, 0.5f)
+        line(0.54f, 0.25f, 0.78f, 0.5f)
+        line(0.54f, 0.75f, 0.78f, 0.5f)
+        line(0.92f, 0.2f, 0.92f, 0.8f)
     }
 }

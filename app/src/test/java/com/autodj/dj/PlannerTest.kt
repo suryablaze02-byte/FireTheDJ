@@ -2,6 +2,7 @@ package com.autodj.dj
 
 import com.autodj.analysis.AudioFeatures
 import com.autodj.analysis.Genres
+import com.autodj.dj.fx.FxEvent
 import com.autodj.dj.fx.FxType
 import com.autodj.dj.fx.Lane
 import com.autodj.dj.fx.Ramp
@@ -973,6 +974,63 @@ class PlannerTest {
     }
 
     @Test
+    fun aVocalCarryLaysAsVoiceOverBsIntroThenBringsBsBassIn() {
+        val a = track("a", 124.0, vocalBars = 48 until 96, keyConfidence = 0.8f)
+        val b = track("b", 124.0, keyConfidence = 0.8f)
+        val t = TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.VOCAL_CARRY)
+        assertEquals(Recipe.VOCAL_CARRY, t.recipe)
+        val mid = t.exitSec + 4 * a.barSec
+        val bMid = t.entrySec + 4 * a.barSec
+        // A is only its voice; B's intro plays under it with no bass.
+        assertEquals(1f, t.aPlan.active(FxType.VOCAL_ISOLATE, mid)!!.amount(mid), 1e-6f)
+        assertEquals(0.72f, t.aPlan.gain.at(mid), 1e-3f)
+        assertEquals(0.72f, t.bPlan.gain.at(bMid), 1e-3f)
+        assertEquals(0f, t.bPlan.bass.at(bMid), 1e-6f)
+        // After the swap B has its bass and is all there, and A's voice has gone by the end.
+        assertEquals(1f, t.bPlan.bass.at(t.entrySec + 10 * a.barSec), 1e-6f)
+        assertEquals(1f, t.bPlan.gain.at(t.entrySec + 10 * a.barSec), 1e-6f)
+        assertEquals(0f, t.aPlan.gain.at(t.exitSec + 16 * a.barSec), 1e-6f)
+    }
+
+    @Test
+    fun aVocalCarryNeedsASingingAndAWordlessIntroInSmoothOnly() {
+        val singing = track("a", 124.0, vocalBars = 48 until 96, keyConfidence = 0.8f)
+        val intro = track("b", 124.0, keyConfidence = 0.8f)
+        val instrumental = track("c", 124.0, keyConfidence = 0.8f)
+        val sungIntro = track("d", 124.0, vocalBars = 0 until 48, keyConfidence = 0.8f)
+        assertNotEquals(Recipe.VOCAL_CARRY, TransitionPlanner.plan(instrumental, 0, 10.0, intro, forced = Recipe.VOCAL_CARRY).recipe)
+        assertNotEquals(Recipe.VOCAL_CARRY, TransitionPlanner.plan(singing, 0, 10.0, sungIntro, forced = Recipe.VOCAL_CARRY).recipe)
+        assertEquals(Double.NEGATIVE_INFINITY, DecisionEngine.scores(singing, intro, true, 1.0, emptyList(), mode = MixMode.TRICKSTER)[Recipe.VOCAL_CARRY]!!, 0.0)
+    }
+
+    @Test
+    fun aSmoothIndianSetPrefersABlendToADrumFillCut() {
+        val t1 = track("t1", 96.0, Genres.POP, genre = "Telugu")
+        val t2 = track("t2", 96.0, Genres.POP, genre = "Telugu")
+        val s = DecisionEngine.scores(t1, t2, true, 1.0, emptyList(), mode = MixMode.SMOOTH)
+        assertTrue(s[Recipe.DRUM_FILL_CUT]!! > Double.NEGATIVE_INFINITY)
+        assertTrue("${s.maxBy { it.value }.key}", s.maxBy { it.value }.key.smooth)
+        assertTrue(s[Recipe.DRUM_FILL_CUT]!! < s[Recipe.BASS_SWAP_BLEND]!!)
+    }
+
+    @Test
+    fun aSmoothSetWaitsFourMixesBetweenDrumFillCuts() {
+        val t1 = track("t1", 96.0, Genres.POP, genre = "Telugu")
+        val t2 = track("t2", 96.0, Genres.POP, genre = "Telugu")
+        val recent = listOf(Recipe.DRUM_FILL_CUT, Recipe.BASS_DROP, Recipe.VOCAL_SWAP, Recipe.REVERB_WASH)
+        assertEquals(Double.NEGATIVE_INFINITY, DecisionEngine.scores(t1, t2, true, 1.0, recent)[Recipe.DRUM_FILL_CUT]!!, 0.0)
+        val longAgo = listOf(Recipe.DRUM_FILL_CUT) + recent.drop(1) + Recipe.LOOP_MIX
+        assertTrue(DecisionEngine.scores(t1, t2, true, 1.0, longAgo)[Recipe.DRUM_FILL_CUT]!! > Double.NEGATIVE_INFINITY)
+    }
+
+    @Test
+    fun aVocalCarryWorksOverAFourBarIntro() {
+        val a = track("a", 124.0, vocalBars = 48 until 96, keyConfidence = 0.8f)
+        val b = track("b", 124.0, intro = 4, keyConfidence = 0.8f)
+        assertEquals(Recipe.VOCAL_CARRY, TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.VOCAL_CARRY).recipe)
+    }
+
+    @Test
     fun aPowerCutStopsDeadForABeatThenBDrops() {
         val a = track("a", 124.0)
         val t = TransitionPlanner.plan(a, 0, 10.0, track("b", 124.0, intro = 0), forced = Recipe.POWER_CUT)
@@ -1082,5 +1140,91 @@ class PlannerTest {
         val list = SetPlanner.upcoming(opener, tracks - opener, shape, atIndex = 0, setSize = tracks.size)
         val biggest = tracks.maxBy { shape.energyOf(it) }
         assertTrue("biggest at ${list.indexOf(biggest)} of ${list.size}", list.indexOf(biggest) >= list.size - 2)
+    }
+
+    private fun dropBuild(t: TrackInfo): Triple<List<FxEvent>, Double, Performance> {
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = t.bpm, mode = MixMode.TRICKSTER)
+        val drop = t.barTime(80)
+        return Triple(p.events.filter { it.type == FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end > drop - 2 * t.barSec }, drop, p)
+    }
+
+    @Test
+    fun aSlowSongRollsLikeOneAtDoubleTheTempo() {
+        var tapeStops = 0
+        for (name in "abcdefghij") {
+            val t = track(name.toString(), 70.0)
+            val (rolls, drop, p) = dropBuild(t)
+            val first = rolls.minBy { it.start }
+            assertEquals(drop - t.barSec, first.start, 1e-6)
+            assertEquals(0.5f, first.p1, 1e-6f)
+            assertEquals(0f, first.from, 1e-6f)
+            assertEquals(first.start, p.tricks.first { "drop" in it.label && it.endSec > drop }.startSec, 1e-6)
+            val tapeStop = p.events.firstOrNull { it.type == FxType.BRAKE && it.end == drop }
+            if (tapeStop != null) {
+                tapeStops++
+                assertEquals(drop - t.beatSec, tapeStop.start, 1e-6)
+            }
+            assertEquals(if (tapeStop != null) 2 else 4, rolls.size)
+        }
+        assertTrue(tapeStops > 0)
+        val (rolls, drop) = dropBuild(track("a", 128.0, bars = 112))
+        assertEquals(1f, rolls.minBy { it.start }.p1, 1e-6f)
+        assertEquals(drop - 2 * (240.0 / 128.0), rolls.minOf { it.start }, 1e-6)
+    }
+
+    @Test
+    fun aSlowSongsRollFillIsHalfABar() {
+        val fills = ('a'..'z').flatMap { n ->
+            val t = track(n.toString(), 70.0)
+            Performer.plan(t, 0, 1.0, 70.0, mode = MixMode.TRICKSTER).tricks.filter { it.label.startsWith("Roll fill") }.map { it to t }
+        }
+        assertTrue(fills.isNotEmpty())
+        fills.forEach { (trick, t) -> assertEquals(t.barSec / 2, trick.endSec - trick.startSec, 1e-6) }
+    }
+
+    @Test
+    fun aFullSongBlendsOverItsLastBars() {
+        val a = track("a", 124.0)
+        val t = TransitionPlanner.planFullSong(a, 0, 10.0, track("b", 126.0))
+        assertFalse(t.recipe.cut)
+        assertTrue("exit bar ${t.exitBar}", t.exitBar >= a.barCount - 9)
+        // Too late to blend: plays on and cuts after the current bar.
+        val now = a.barTime(a.barCount - 2)
+        val late = TransitionPlanner.planFullSong(a, 0, now, track("b", 126.0))
+        assertEquals(Recipe.HARD_CUT, late.recipe)
+        assertTrue(a.barTime(late.exitBar) > now)
+    }
+
+    private fun energyLadder() = (0 until 20).map { i -> track("t$i", 124.0, loudness = -16.0 + i * 0.5) }
+
+    @Test
+    fun onlyBangersKeepsTheBiggestSongsOfTheSet() {
+        val tracks = energyLadder()
+        val bangers = SetShape.bangersOf(tracks)
+        assertEquals(tracks.takeLast(8).toSet(), bangers.toSet())
+    }
+
+    @Test
+    fun onlyBangersLeavesASetTooShortToRankWhole() {
+        val tracks = energyLadder().take(4)
+        assertEquals(tracks, SetShape.bangersOf(tracks))
+    }
+
+    @Test
+    fun aChosenEnergyPullsThePick() {
+        val tracks = energyLadder()
+        val shape = SetShape.forSet(tracks)!!
+        val now = tracks[10]
+        val left = tracks - now
+        val peak = SetPlanner.pickNext(now, left, shape = shape, progress = 0.1, energy = SetEnergy.PEAK)!!
+        val down = SetPlanner.pickNext(now, left, shape = shape, progress = 0.6, energy = SetEnergy.WIND_DOWN)!!
+        assertTrue("peak picked ${shape.energyOf(peak)}", shape.energyOf(peak) >= 0.7)
+        assertTrue("wind down picked ${shape.energyOf(down)}", shape.energyOf(down) <= 0.5)
+    }
+
+    @Test
+    fun aChosenEnergyIgnoresTheClockAndTheArc() {
+        assertEquals(0.9, SetShape.target(0.05, 20, SetEnergy.PEAK), 1e-9)
+        assertEquals(0.2, SetShape.target(0.7, 1, SetEnergy.WIND_DOWN), 1e-9)
     }
 }

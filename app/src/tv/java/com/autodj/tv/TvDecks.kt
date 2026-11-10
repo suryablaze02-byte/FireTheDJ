@@ -33,6 +33,7 @@ fun TvDecks(vm: DjViewModel, onHome: () -> Unit, onVisualizer: () -> Unit) {
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val library by vm.library.collectAsStateWithLifecycle()
     var effects by rememberSaveable { mutableStateOf(false) }
+    var vibe by remember { mutableStateOf(false) }
     val buttons = remember { TvDeckButtons(onHome, onVisualizer) }
     KeepScreenOn()
 
@@ -47,11 +48,13 @@ fun TvDecks(vm: DjViewModel, onHome: () -> Unit, onVisualizer: () -> Unit) {
                 BackHandler(onBack = onHome)
                 TwoDeckScreen(
                     state, artwork, visual = vm.engine::visual,
-                    onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip,
+                    onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip, onFullSong = vm::toggleFullSong,
                     onOpenEffects = { effects = true },
                     languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
                     tv = buttons,
+                    onVibe = { vibe = true },
                 )
+                if (vibe) com.autodj.ui.VibeSidePanel(vm, state, com.autodj.ui.VibeRoom.TV, 440.dp) { vibe = false }
                 // Each time the decks show (first, or back from the effects view), the remote starts on the visualizer button.
                 LaunchedEffect(Unit) { runCatching { buttons.visualizerFocus.requestFocus() } }
             }

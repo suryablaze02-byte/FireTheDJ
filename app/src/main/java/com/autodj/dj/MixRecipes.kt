@@ -74,6 +74,9 @@ enum class Recipe(
     /** B's vocal alone sings over A's instrumental, then B's beat comes in under its own voice. */
     ACAPELLA_MASHUP("A cappella mashup", cut = false),
 
+    /** A's vocal alone carries over B's bass-less intro, then B's bass and full song come in under it. */
+    VOCAL_CARRY("Vocal carry", cut = false),
+
     /** A stops dead mid-phrase, a beat of silence, and B's drop lands on the one. */
     POWER_CUT("Power cut", cut = true, preBars = 1, tailBars = 1),
 }
@@ -181,7 +184,7 @@ object DecisionEngine {
 
     /** Blends that need the beats locked for their whole length. */
     private val needsBeatmatch = setOf(
-        Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP, Recipe.BREAKDOWN_SWAP, Recipe.LOOP_MIX, Recipe.ACAPELLA_MASHUP,
+        Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP, Recipe.BREAKDOWN_SWAP, Recipe.LOOP_MIX, Recipe.ACAPELLA_MASHUP, Recipe.VOCAL_CARRY,
     )
 
     private val vocalGenres = setOf(Genres.POP, Genres.HOUSE, Genres.HIPHOP, Genres.LATIN)
@@ -206,8 +209,11 @@ object DecisionEngine {
     /** A move that isn't one of the genre's own. */
     private const val OFF_STYLE = 0.0
 
-    /** Smooth mode's cut penalty, mostly given back for the Indian drum-fill cut. */
-    private const val INDIAN_SMOOTH_CUT = 2.0
+    /** Smooth mode's cut penalty, partly given back for the Indian drum-fill cut: a rare accent among blends. */
+    private const val INDIAN_SMOOTH_CUT = 1.0
+
+    /** Mixes a Smooth set plays after a drum-fill cut before it may use another. */
+    private const val DRUM_FILL_GAP = 4
 
     /**
      * [speed] is the rate B would need to match A (B's beats per A beat already folded in), so
@@ -244,6 +250,12 @@ object DecisionEngine {
         // The mashup is the vocal swap's bolder cousin: a little rarer, under the same rules.
         base[Recipe.ACAPELLA_MASHUP] = when {
             !beatmatched || !keysFit -> Double.NEGATIVE_INFINITY
+            family in vocalGenres -> 2.4
+            else -> 1.6
+        }
+        // A voice riding into the next song is a Smooth move: Trickster's blends are too short for it.
+        base[Recipe.VOCAL_CARRY] = when {
+            !beatmatched || !keysFit || mode != MixMode.SMOOTH -> Double.NEGATIVE_INFINITY
             family in vocalGenres -> 2.4
             else -> 1.6
         }
@@ -284,7 +296,7 @@ object DecisionEngine {
                 MixMode.SMOOTH -> {
                     score += if (r.smooth) SMOOTH_BLEND_BIAS else SMOOTH_CUT_BIAS
                     // Even a smooth Indian set keeps its drum-fill cuts.
-                    if (r == Recipe.DRUM_FILL_CUT) score += INDIAN_SMOOTH_CUT
+                    if (r == Recipe.DRUM_FILL_CUT) score = if (r in history.takeLast(DRUM_FILL_GAP)) Double.NEGATIVE_INFINITY else score + INDIAN_SMOOTH_CUT
                     if (!r.smooth && history.lastOrNull()?.smooth == false) score += CUT_AFTER_CUT
                 }
                 MixMode.TRICKSTER -> {
@@ -399,6 +411,7 @@ internal class RecipeBuilder(
         Recipe.REVERB_WASH -> reverbWash()
         Recipe.LOOP_MIX -> loopMix(mixBars)
         Recipe.ACAPELLA_MASHUP -> acapellaMashup()
+        Recipe.VOCAL_CARRY -> vocalCarry()
         Recipe.POWER_CUT -> powerCut()
         Recipe.GATE_BUILD -> gateBuild()
         Recipe.BACKSPIN_DROP -> backspin()
@@ -600,6 +613,36 @@ internal class RecipeBuilder(
         return Built(
             aOut, bIn, e, end,
             listOf(Phase("A cappella over A", e, swap), Phase("Beat swap", swap, swap + 2 * bar), Phase("A out", swap + 2 * bar, end)),
+        )
+    }
+
+    /**
+     * The mashup the other way round: A's vocal alone sings over B's intro for 8 bars, with B's bass
+     * held back. Then B's bass and full song come in under the voice as it fades over 8 more.
+     */
+    private fun vocalCarry(): Built {
+        val e = exitSec
+        val swap = e + 8 * bar
+        val end = e + 16 * bar
+        val aOut = aPlan(
+            gain = listOf(Ramp(e, e + bar, 1f, MASHUP_VOICE), Ramp(swap, end, MASHUP_VOICE, 0f, Law.CONSTANT_POWER)),
+            bass = listOf(Ramp(e, e + bar, 1f, 0f)),
+            events = listOf(
+                FxEvent(FxType.VOCAL_ISOLATE, e, e + bar, 0f, 1f),
+                FxEvent(FxType.VOCAL_ISOLATE, e + bar, end, 1f, 1f),
+            ),
+        )
+        val bIn = bPlan(
+            gain = listOf(
+                Ramp(toB(e), toB(e + bar), 0f, MASHUP_VOICE, Law.CONSTANT_POWER),
+                Ramp(toB(swap), toB(swap + bar), MASHUP_VOICE, 1f),
+            ),
+            bass = listOf(Ramp(toB(swap - beat / 2), toB(swap + beat / 2), 0f, 1f)),
+            events = emptyList(),
+        )
+        return Built(
+            aOut, bIn, e, end,
+            listOf(Phase("A's vocal over B", e, swap), Phase("B's beat in", swap, swap + 2 * bar), Phase("Vocal fades", swap + 2 * bar, end)),
         )
     }
 

@@ -1,5 +1,10 @@
 package com.autodj.ui
 
+import android.content.res.Configuration
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.core.animateDpAsState
@@ -83,6 +88,7 @@ fun FullscreenVisualizer(
     onClose: () -> Unit,
     onStop: () -> Unit = {},
     onSkip: () -> Unit = {},
+    onFullSong: () -> Unit = {},
     style: VisualizerStyle = VisualizerStyle.CLUB,
     onStyle: (VisualizerStyle) -> Unit = {},
 ) {
@@ -134,42 +140,59 @@ fun FullscreenVisualizer(
             Column(
                 Modifier.onSizeChanged { panelPx = it.height }.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp)
                     .widthIn(max = 520.dp)
-                    .glass(RoundedCornerShape(30.dp), Glass.FillDark).padding(horizontal = 14.dp, vertical = 16.dp),
+                    .glass(RoundedCornerShape(30.dp), Glass.FillDark).padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Pick a look by its picture; the choice is remembered. The strip scrolls when it's wider than the screen.
-                // The label keeps its width; a long description is the part that trims.
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("LOOK", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1, softWrap = false)
-                    Text(
-                        "${style.label} · ${style.blurb.lowercase()}", color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.weight(1f),
-                    )
-                }
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    VisualizerStyle.entries.forEach { s -> LookTile(s, s == style, { onStyle(s); touches++ }) }
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Glass.Text.copy(alpha = 0.12f)))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    RoundButton(52.dp, Glass.FillStrong, "Stop the set", { touches++; onStop() }) { StopIcon(Glass.Text, Modifier.size(20.dp)) }
-                    RoundButton(72.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", { touches++; onToggle() }) {
-                        if (state.paused) PlayIcon(Color(0xFF120A10)) else PauseIcon(Color(0xFF120A10))
-                    }
-                    RoundButton(52.dp, Glass.FillStrong, "Skip to the next song", { touches++; onSkip() }) { SkipIcon(if (state.canSkip) Glass.Text else Glass.Muted, Modifier.size(22.dp)) }
-                }
                 val next = state.next
                 val status = when {
                     state.mixing -> "Mixing into ${next?.title?.let(::displayTitle) ?: "the next track"} · ${state.recipe.orEmpty()}"
+                    state.fullSong -> "Playing full song"
                     state.trickNow != null -> "Now: ${state.trickNow}"
                     next != null && state.secondsToMix != null -> "Next: ${displayTitle(next.title)} in ${formatTime(state.secondsToMix)}"
                     else -> null
                 }
-                if (status != null) {
+                // One line for what's picked and what's next. The other looks are known by their picture.
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("LOOK", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1, softWrap = false)
+                    Text(style.label, color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                     Text(
-                        status, color = if (state.mixing) Dj.BlueText else Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        status.orEmpty(), color = if (state.mixing) Dj.BlueText else Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.weight(1f),
                     )
+                }
+                val looks: @Composable (Modifier) -> Unit = { m ->
+                    Row(m.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        VisualizerStyle.entries.forEach { s -> LookTile(s, s == style, { onStyle(s); touches++ }, width = 48.dp, height = 48.dp, showName = false) }
+                    }
+                }
+                val transport: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        RoundButton(48.dp, Glass.FillStrong, "Stop the set", { touches++; onStop() }) { StopIcon(Glass.Text, Modifier.size(20.dp)) }
+                        RoundButton(60.dp, Color.White, if (state.paused) "Resume the set" else "Pause the set", { touches++; onToggle() }) {
+                            if (state.paused) PlayIcon(Color(0xFF120A10)) else PauseIcon(Color(0xFF120A10))
+                        }
+                        RoundButton(48.dp, Glass.FillStrong, "Skip to the next song", { touches++; onSkip() }) { SkipIcon(if (state.canSkip) Glass.Text else Glass.Muted, Modifier.size(22.dp)) }
+                    }
+                }
+                if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        looks(Modifier.weight(1f))
+                        transport()
+                        if (state.showsFullSong) PlayFullSongButton(state, { touches++; onFullSong() })
+                    }
+                } else {
+                    looks(Modifier.fillMaxWidth())
+                    // Pause stays in the middle; Play full song takes the space after Skip.
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        transport()
+                        if (state.showsFullSong) Box(Modifier.align(Alignment.CenterEnd)) {
+                            RoundButton(48.dp, if (state.fullSong) Glass.Ember else Glass.FillStrong, if (state.fullSong) "Playing full song" else "Play full song", { touches++; onFullSong() }) {
+                                val ink = if (!state.canFullSong) Glass.Muted else if (state.fullSong) Glass.OnAccent else Glass.Text
+                                if (state.fullSong) Icon(Icons.Filled.Check, null, tint = ink, modifier = Modifier.size(22.dp)) else FullSongIcon(ink, Modifier.size(22.dp))
+                            }
+                        }
+                    }
                 }
             }
         }

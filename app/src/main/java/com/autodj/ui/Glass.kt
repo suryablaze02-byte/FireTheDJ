@@ -321,10 +321,11 @@ val GlassOverContent: Color @Composable @ReadOnlyComposable get() =
 /**
  * A big screen held sideways, like a tablet: wide enough and tall enough for the roomy layouts
  * (a wider rail, bigger records, the mix plan and what's coming up). A phone on its side is
- * wide but too short for them.
+ * wide but too short for them. 720 rather than 840 so an unfolded foldable on its side (about
+ * 780dp wide) counts.
  */
 @Composable
 fun isRoomyLandscape(): Boolean {
     val c = LocalConfiguration.current
-    return c.screenWidthDp >= 840 && c.screenHeightDp >= 600
+    return c.screenWidthDp >= 720 && c.screenHeightDp >= 600
 }

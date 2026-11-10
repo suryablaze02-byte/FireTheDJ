@@ -19,7 +19,9 @@ import com.autodj.dj.EngineHolder
 import com.autodj.dj.MixEngine
 import com.autodj.dj.MixMode
 import com.autodj.dj.MixService
+import com.autodj.dj.SetEnergy
 import com.autodj.dj.SfxDressing
+import com.autodj.dj.VibePreview
 import com.autodj.model.TrackInfo
 import com.autodj.remote.ImportResult
 import com.autodj.remote.PlaylistImporter
@@ -97,6 +99,45 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     fun setMode(m: MixMode) {
         _mode.value = m
         prefs.edit().putString(KEY_MODE, m.name).apply()
+    }
+
+    private val _onlyBangers = MutableStateFlow(prefs.getBoolean(KEY_BANGERS, false))
+
+    /** Start sets with their big songs only. */
+    val onlyBangers: StateFlow<Boolean> = _onlyBangers
+
+    fun setOnlyBangers(on: Boolean) {
+        _onlyBangers.value = on
+        prefs.edit().putBoolean(KEY_BANGERS, on).apply()
+    }
+
+    private val _vibeLanguages = MutableStateFlow<Set<String>>(emptySet())
+
+    /** The languages picked in Change the vibe; empty means all of them. */
+    val vibeLanguages: StateFlow<Set<String>> = _vibeLanguages
+
+    private fun languageKeep(languages: Set<String>): (TrackInfo) -> Boolean {
+        if (languages.isEmpty()) return { true }
+        val by = _library.value.associate { it.uri to it.language }
+        return { by[it.uri] in languages }
+    }
+
+    /** The commonest languages among the songs still to come. */
+    fun vibeLanguageChoices(): List<String> {
+        val by = _library.value.associate { it.uri to it.language }
+        return engine.vibePool().mapNotNull { by[it.uri] }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(4).map { it.key }
+    }
+
+    suspend fun vibePreview(energy: SetEnergy, languages: Set<String>): VibePreview = engine.vibePreview(energy, languageKeep(languages))
+
+    /** Re-picks the songs after the playing one. False, with nothing changed, when too few fit. */
+    fun applyVibe(energy: SetEnergy, mode: MixMode, languages: Set<String>, preview: VibePreview): Boolean {
+        if (!engine.changeVibe(energy, mode, languageKeep(languages), preview)) return false
+        _vibeLanguages.value = languages
+        val by = _library.value.associate { it.uri to it.language }
+        _setLanguage.value = Languages.ofSet(preview.songs.map { by[it.uri] })
+        SfxDressing.setLanguage = _setLanguage.value
+        return true
     }
 
     private val _visualizerStyle = MutableStateFlow(
@@ -290,7 +331,8 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         _setLanguage.value = Languages.ofSet(tracks.map { languages[it.uri] })
         SfxDressing.setLanguage = _setLanguage.value
         Log.i("AutoDJ", "set language: ${_setLanguage.value ?: "mixed"} (" + tracks.mapNotNull { languages[it.uri] }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.joinToString { "${it.key} ${it.value}" } + ")")
-        engine.start(tracks, label, _mode.value)
+        _vibeLanguages.value = emptySet()
+        engine.start(tracks, label, _mode.value, if (_onlyBangers.value) SetEnergy.BANGERS else SetEnergy.PLANNED)
         playingSet = PlayingSet(crate, folder?.uri, label)
     }
 
@@ -319,6 +361,8 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
 
     fun togglePause() = engine.togglePause()
     fun skip() = engine.skip()
+
+    fun toggleFullSong() = engine.toggleFullSong()
     fun stop() = engine.stop()
 
     /**
@@ -369,6 +413,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     private companion object {
         const val KEY_URIS = "uris"
         const val KEY_MODE = "mode"
+        const val KEY_BANGERS = "only_bangers"
         const val KEY_PICKS = "picks"
         const val KEY_VISUALIZER = "visualizer"
         const val KEY_FOLDERS = "folders"

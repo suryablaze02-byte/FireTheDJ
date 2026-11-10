@@ -181,6 +181,15 @@ object Performer {
     /** A drop's bass boost, dB. */
     private const val BOOST_DB = 5f
 
+    /** Below this tempo a song's rolls and word loops count in half-beats. */
+    private const val SLOW_ROLL_BPM = 95.0
+
+    /** A slow song's beat is so long that a roll counted in it drags; half-beats make 70 BPM roll like 140. */
+    private fun rollBeat(t: TrackInfo) = if (t.bpm < SLOW_ROLL_BPM) t.beatSec / 2 else t.beatSec
+
+    /** Lyrics without word timing give each word about this long, so a slow song's limit must let it through. */
+    private const val ESTIMATED_WORD_SEC = 0.55
+
     /** How far a drop's roll climbs, semitones (a fifth). */
     private const val RISE_SEMIS = 7f
 
@@ -244,29 +253,33 @@ object Performer {
             // (A word loop keeps its whole tightening: no tape stop cutting it short.)
             val setup = Math.floorMod(dressTurn + n, 3).let { if (word != null && it == 2) 1 else it }
             val tapeStop = setup == 2
-            val rollEnd = if (tapeStop) dSec - 2 * beat else dSec
+            val rollBeat = rollBeat(t)
+            val rollBar = bar * rollBeat / beat
+            val rollSize = (rollBeat / beat).toFloat()
+            val rollEnd = if (tapeStop) dSec - 2 * rollBeat else dSec
             // The last word sung before the drop, looped and tightening into it; else a roll that
             // tightens and rises in pitch as it goes, the way festival builds climb.
-            events += if (word != null) {
+            val build = if (word != null) {
                 val loops = wordLoop(t, word, dSec).filter { it.start < rollEnd }.map { if (it.end > rollEnd) FxEvent(it.type, it.start, rollEnd, it.from, it.to, it.p1, it.p2) else it }
                 // From stems, the loop takes just the sung word: a clean a cappella stutter into the drop.
                 loops + FxEvent(FxType.STEM_ACAPELLA, loops.first().start, rollEnd)
             } else {
                 listOf(
-                    FxEvent(FxType.LOOP_ROLL, dSec - 2 * bar, dSec - bar, 0f, 0.5f, p1 = 1f, p2 = RISE_SEMIS),
-                    FxEvent(FxType.LOOP_ROLL, dSec - bar, dSec - bar / 2, 0.5f, 0.75f, p1 = 0.5f, p2 = RISE_SEMIS),
-                    FxEvent(FxType.LOOP_ROLL, dSec - bar / 2, minOf(rollEnd, dSec - bar / 4), 0.75f, 0.875f, p1 = 0.25f, p2 = RISE_SEMIS),
-                    FxEvent(FxType.LOOP_ROLL, dSec - bar / 4, dSec, 0.875f, 1f, p1 = 0.125f, p2 = RISE_SEMIS),
+                    FxEvent(FxType.LOOP_ROLL, dSec - 2 * rollBar, dSec - rollBar, 0f, 0.5f, p1 = rollSize, p2 = RISE_SEMIS),
+                    FxEvent(FxType.LOOP_ROLL, dSec - rollBar, dSec - rollBar / 2, 0.5f, 0.75f, p1 = 0.5f * rollSize, p2 = RISE_SEMIS),
+                    FxEvent(FxType.LOOP_ROLL, dSec - rollBar / 2, minOf(rollEnd, dSec - rollBar / 4), 0.75f, 0.875f, p1 = 0.25f * rollSize, p2 = RISE_SEMIS),
+                    FxEvent(FxType.LOOP_ROLL, dSec - rollBar / 4, dSec, 0.875f, 1f, p1 = 0.125f * rollSize, p2 = RISE_SEMIS),
                 ).filter { it.start < rollEnd }
             }
-            events += FxEvent(FxType.HIGH_PASS, dSec - 2 * bar, dSec, 0f, 0.55f)
+            events += build
+            events += FxEvent(FxType.HIGH_PASS, dSec - 2 * rollBar, dSec, 0f, 0.55f)
             // Build as long as the quiet run-up, landing with a hit sized to the drop.
             events += SfxDressing.build(t, d, SfxDressing.buildBars(t, d), dressTurn + n)
             events += SfxDressing.hit(t, d, dressTurn + n)
             events += when (setup) {
-                0 -> FxEvent(FxType.MUTE, dSec - beat / 2, dSec)
-                1 -> FxEvent(FxType.BASS_KILL, dSec - bar, dSec)
-                else -> FxEvent(FxType.BRAKE, dSec - 2 * beat, dSec)
+                0 -> FxEvent(FxType.MUTE, dSec - rollBeat / 2, dSec)
+                1 -> FxEvent(FxType.BASS_KILL, dSec - rollBar, dSec)
+                else -> FxEvent(FxType.BRAKE, dSec - 2 * rollBeat, dSec)
             }
             // The first drop gets a bass boost to ride on for a phrase, easing back.
             if (n == 0) {
@@ -279,7 +292,7 @@ object Performer {
                 1 -> "bass kill"
                 else -> "tape stop"
             }
-            tricks += Trick("$into · $how · drop", dSec - 2 * bar, dSec + beat)
+            tricks += Trick("$into · $how · drop", build.minOf { it.start }, dSec + beat)
         }
 
         // Hook replay: needs room after it, and must not collide with a roll build. Jumping back
@@ -381,6 +394,7 @@ object Performer {
                 Fill.GUNSHOT -> pe to pe + 2 * beat
                 Fill.WHOOSH -> pe - 2 * beat to pe
                 Fill.LASER, Fill.RISER_SWELL -> pe - 2 * bar to pe
+                Fill.ROLL -> pe - bar * rollBeat(t) / beat to pe
                 Fill.DAPPU, Fill.MARFA, Fill.DHOL, Fill.TIMBALES, Fill.DARBUKA, Fill.CLAPS, Fill.WHISTLE -> pe - bar to pe + 3 * beat
                 else -> pe - bar to pe
             }
@@ -425,9 +439,10 @@ object Performer {
      */
     private fun wordBeforeDrop(t: TrackInfo, l: TimedLyrics, dSec: Double): LyricWord? {
         val beat = t.beatSec
+        val rollBeat = rollBeat(t)
         val fits = l.words.withIndex().filter { (i, w) ->
-            w.startSec >= dSec - 2 * t.barSec && w.startSec <= dSec - 1.5 * beat &&
-                w.endSec - w.startSec <= beat * 1.05 && WordKey.linkable(w.key) &&
+            w.startSec >= dSec - 2 * t.barSec * rollBeat / beat && w.startSec <= dSec - 1.5 * beat &&
+                w.endSec - w.startSec <= maxOf(rollBeat * 1.05, minOf(beat * 1.05, ESTIMATED_WORD_SEC)) && WordKey.linkable(w.key) &&
                 (w.lineStart || l.words.getOrNull(i - 1)?.let { p -> p.line == w.line && p.lineStart } == true)
         }.map { it.value }
         // A line's first word is timed by the lyrics themselves; later ones are estimates.
@@ -442,11 +457,13 @@ object Performer {
      */
     private fun wordLoop(t: TrackInfo, w: LyricWord, dSec: Double): List<FxEvent> {
         val beat = t.beatSec
-        val quarter = beat / 4
+        val rollBeat = rollBeat(t)
+        val rollSize = rollBeat / beat
+        val quarter = rollBeat / 4
         val start = t.downbeatSec + floor((w.startSec - t.downbeatSec) / quarter) * quarter
-        val len = min(1.0, WordPlay.loopBeats(w.endSec - start, beat))
+        val len = min(rollSize, WordPlay.loopBeats(w.endSec - start, beat))
         // The last two beats tighten; before them the word plays at its own length.
-        val tiers = listOf(dSec - 2 * beat to 0.5, dSec - beat to 0.25, dSec - beat / 2 to 0.125)
+        val tiers = listOf(dSec - 2 * rollBeat to 0.5 * rollSize, dSec - rollBeat to 0.25 * rollSize, dSec - rollBeat / 2 to 0.125 * rollSize)
             .filter { (_, l) -> l < len }
         val out = mutableListOf<FxEvent>()
         var from = start
@@ -477,11 +494,15 @@ object Performer {
         Fill.SIREN -> listOf(FxEvent(FxType.SIREN, pe - bar, pe, level * 0.5f, level * 0.85f, p1 = 4f))
         // Catch half a beat, then slow one-beat baby-scratch strokes over the live beat.
         Fill.SCRATCH -> listOf(FxEvent(FxType.SCRATCH, pe - bar, pe, p1 = 0.5f, p2 = 1f))
-        Fill.ROLL -> listOf(
-            FxEvent(FxType.LOOP_ROLL, pe - bar, pe - bar / 2, p1 = 1f),
-            FxEvent(FxType.LOOP_ROLL, pe - bar / 2, pe - bar / 4, p1 = 0.5f),
-            FxEvent(FxType.LOOP_ROLL, pe - bar / 4, pe, p1 = 0.25f),
-        )
+        Fill.ROLL -> {
+            val rollBar = bar * rollBeat(t) / beat
+            val rollSize = (rollBeat(t) / beat).toFloat()
+            listOf(
+                FxEvent(FxType.LOOP_ROLL, pe - rollBar, pe - rollBar / 2, p1 = rollSize),
+                FxEvent(FxType.LOOP_ROLL, pe - rollBar / 2, pe - rollBar / 4, p1 = 0.5f * rollSize),
+                FxEvent(FxType.LOOP_ROLL, pe - rollBar / 4, pe, p1 = 0.25f * rollSize),
+            )
+        }
         // Send the last beat into a 3/4-beat echo that rings over into the next phrase.
         Fill.ECHO_THROW -> listOf(FxEvent(FxType.ECHO, pe - beat, pe, 1f, 1f, p1 = 0.75f, p2 = 0.5f))
         Fill.GATE -> listOf(FxEvent(FxType.GATE, pe - bar, pe, 1f, 1f, p1 = 0.25f))

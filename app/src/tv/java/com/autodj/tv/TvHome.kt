@@ -129,12 +129,17 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
     val artwork by vm.artwork.collectAsStateWithLifecycle()
     val ready = library.mapNotNull { it.info }.filter { it.genreFamily != Genres.UNCLASSIFIED }
     val analysing = library.count { it.status == AnalysisStatus.QUEUED || it.status == AnalysisStatus.ANALYZING }
-    val crates = buildList {
+    val onlyBangers by vm.onlyBangers.collectAsStateWithLifecycle()
+    val allCrates = buildList {
         if (ready.isNotEmpty()) add(ALL to ready.size)
         ready.groupingBy { it.genreFamily }.eachCount().entries.sortedByDescending { it.value }.forEach { add(it.key to it.value) }
     }
 
     if (stats) TvStatsScreen(artwork, onDismiss = { stats = false })
+    // With Only bangers on, each crate counts the songs it would really play.
+    val crates = if (!onlyBangers) allCrates else allCrates.map { (crate, _) ->
+        crate to com.autodj.dj.SetShape.bangersOf(if (crate == ALL) ready else ready.filter { it.genreFamily == crate }).size
+    }
     val families = crates.filter { it.first != ALL }
     var mixSeveral by remember { mutableStateOf(false) }
     var picks by remember { mutableStateOf(emptySet<String>()) }
@@ -186,13 +191,14 @@ fun TvHome(vm: DjViewModel, onWatch: () -> Unit, onYtMusic: () -> Unit) {
                     FireTheDjWordmark(22.sp)
                 }
                 Spacer(Modifier.weight(1f))
+                TvOnlyBangers(onlyBangers, vm::setOnlyBangers)
                 GlassSegmented(
                     MixMode.entries, mode, { it.label }, vm::setMode,
                     Modifier.width(260.dp).tourTarget("tv_mode"), height = 40.dp, fontSize = 16.sp,
                 )
                 Text(
                     buildString {
-                        append(songs(library.size))
+                        append(songs(if (onlyBangers) com.autodj.dj.SetShape.bangersOf(ready).size else library.size))
                         if (analysing > 0) append(" · $analysing analysing")
                     },
                     color = Glass.Muted, fontSize = 15.sp,
@@ -351,6 +357,23 @@ fun TvGlassDialog(onDismiss: () -> Unit, width: Dp = 620.dp, content: @Composabl
         ) { content(first) }
     }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+}
+
+/** Only bangers, in the row with Smooth and Trickster. OK turns it on or off. */
+@Composable
+private fun TvOnlyBangers(on: Boolean, onChange: (Boolean) -> Unit) {
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Row(
+        Modifier.height(48.dp).clip(CircleShape).background(if (focused) Glass.FillSelected else if (on) Glass.FireSelected else Glass.Fill, CircleShape)
+            .border(if (focused) 3.dp else 1.dp, if (focused) Glass.Text else if (on) Glass.Ember else Color.White.copy(alpha = .14f), CircleShape)
+            .clickable(interaction, indication = null, role = Role.Switch) { onChange(!on) }.padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Only bangers", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        com.autodj.ui.GlassSwitch(on)
+    }
 }
 
 /** Space beside cards in a row, so a focused card can grow and ring without being clipped. */

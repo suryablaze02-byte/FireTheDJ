@@ -101,9 +101,11 @@ fun TwoDeckScreen(
     onToggle: () -> Unit,
     onStop: () -> Unit,
     onSkip: () -> Unit,
+    onFullSong: () -> Unit,
     onOpenEffects: () -> Unit,
     languageOf: (String) -> String?,
     tv: TvDeckButtons? = null,
+    onVibe: () -> Unit = {},
 ) {
     val deck = state.current
     val track = state.set.getOrNull(state.index)
@@ -134,7 +136,7 @@ fun TwoDeckScreen(
             modifier = Modifier.weight(1f),
         )
         MixerPanel(
-            state, visual, artwork, coming, onToggle, onStop, onSkip, onOpenEffects, tv,
+            state, visual, artwork, coming, onToggle, onStop, onSkip, onFullSong, onOpenEffects, onVibe, tv,
             Modifier.width(if (tv != null) 300.dp else if (roomy) 320.dp else 220.dp).fillMaxHeight(),
         )
         // Deck B: the next song, cued, then mixing in.
@@ -284,7 +286,9 @@ private fun MixerPanel(
     onToggle: () -> Unit,
     onStop: () -> Unit,
     onSkip: () -> Unit,
+    onFullSong: () -> Unit,
     onOpenEffects: () -> Unit,
+    onVibe: () -> Unit,
     tv: TvDeckButtons?,
     modifier: Modifier,
 ) {
@@ -308,6 +312,7 @@ private fun MixerPanel(
             // How the next song comes in: its tempo against the set, and where in it the mix starts.
             val how = listOfNotNull(state.tempoChange, state.entrySec?.let { "B from ${formatTime(it)}" }).joinToString(" · ")
             if (how.isNotEmpty()) Text(how, color = Glass.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 1.dp))
+            BeatLock(state)
             if (coming > 0 && tv == null && state.phases.isNotEmpty()) {
                 // Room for the plan: its phases along a strip, the mix's progress marked once it's under way.
                 PhaseStrip(state.phases, if (live) state.mixProgress else null, Modifier.padding(top = 8.dp))
@@ -327,13 +332,11 @@ private fun MixerPanel(
                 }
             }
         }
-        Card {
-            val locked = state.incoming != null
-            Crossfader(state.current?.gain ?: 1f, state.incoming?.gain ?: 0f, locked, if (locked) "Beats locked · ${abs(state.phaseErrMs).roundToInt()} ms" else "Beats lock on entry")
-        }
         if (coming > 0) {
             // A big screen or a TV: the effects in this mix, then what's coming and how far in the set is.
-            EffectsPanel(state, visual, onOpenEffects, if (tv != null) 28.sp else 32.sp, list = true, rows = if (tv != null) 2 else 5)
+            // On a TV the list gives way to a bigger Coming up.
+            EffectsPanel(state, visual, onOpenEffects, if (tv != null) 28.sp else 32.sp, list = tv == null)
+            if (state.canChangeVibe) VibeCard(state, onVibe, wide = true)
             Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ComingUp(state, artwork, coming)
@@ -343,8 +346,9 @@ private fun MixerPanel(
         } else {
             // The panel keeps its size; on a short screen it's clipped so the controls below always show.
             Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) { EffectsPanel(state, visual, onOpenEffects, 24.sp, list = false, Modifier.fillMaxHeight()) }
+            if (state.canChangeVibe) VibeCard(state, onVibe, wide = false)
         }
-        Controls(state, onToggle, onStop, onSkip, tv)
+        Controls(state, onToggle, onStop, onSkip, onFullSong, tv)
     }
 }
 
@@ -372,11 +376,14 @@ private fun PhaseStrip(phases: List<PhaseUi>, progress: Float?, modifier: Modifi
 
 /** The next songs in the set, with their cover, BPM and key; the first is the one the next mix brings in. */
 @Composable
-internal fun ComingUp(state: EngineState, artwork: Map<String, String>, count: Int) {
+internal fun ComingUp(state: EngineState, artwork: Map<String, String>, count: Int, onVibe: (() -> Unit)? = null) {
     val ahead = state.set.drop(state.index + 1).take(count)
     if (ahead.isEmpty()) return
     Card {
-        Text("COMING UP", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("COMING UP", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
+            if (onVibe != null) VibeLinkButton(onVibe)
+        }
         ahead.forEachIndexed { i, t ->
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Artwork(artwork[t.uri], t.uri, t.title, Modifier.size(38.dp), RoundedCornerShape(8.dp))
@@ -541,33 +548,51 @@ private fun Card(modifier: Modifier = Modifier, highlight: Boolean = false, cont
     )
 }
 
-/** Where the mix stands between the decks, from their gains: all A at the left, all B at the right. */
+/**
+ * The vibe in force and the way to change it, under Effects: a slim card, since it changes a few
+ * times a night while the effect changes every few seconds. On a TV the remote rings it in white.
+ */
 @Composable
-private fun Crossfader(gainA: Float, gainB: Float, locked: Boolean, lock: String) {
-    val total = gainA + gainB
-    val pos = if (total <= 0f) 0f else (gainB / total).coerceIn(0f, 1f)
-    Row(Modifier.fillMaxWidth()) {
-        Text("A", color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        // Between A and B: whether the beats are locked (a crossfader needs no label).
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(7.dp).background(if (locked) Color(0xFF5BD69A) else Glass.FillSelected, CircleShape))
-            Text(lock, color = Glass.Muted, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(start = 5.dp))
-        }
-        Text("B", color = DeckBText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+private fun VibeCard(state: EngineState, onVibe: () -> Unit, wide: Boolean) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(if (focused) Glass.FillSelected else CardFill)
+            .border(if (focused) 3.dp else 1.dp, if (focused) Glass.Text else CardEdge, shape)
+            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Change the vibe", onClick = onVibe)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // One line, so Effects above keeps room for its effect name.
+        Text("VIBE", color = Glass.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(if (wide) "${state.energy.label} · ${state.mode.label}" else state.energy.label, color = Glass.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Box(
+            Modifier.height(28.dp).clip(CircleShape).background(Glass.FireSelected).border(1.dp, Glass.Ember, CircleShape).padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text("Change", color = Glass.EmberText, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
     }
-    Box(Modifier.fillMaxWidth().height(22.dp).padding(top = 4.dp).semantics { contentDescription = "Crossfader ${(pos * 100).roundToInt()}% towards deck B" }) {
-        Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Glass.FillSelected))
-        val thumb = Glass.Text
-        Canvas(Modifier.fillMaxSize()) {
-            val x = pos * (size.width - 14.dp.toPx())
-            drawRoundRect(thumb, topLeft = Offset(x, 0f), size = Size(14.dp.toPx(), size.height), cornerRadius = CornerRadius(4.dp.toPx()))
-        }
+}
+
+/**
+ * Whether the beats are locked: green once B is in and its beats sit on A's, how far apart they
+ * are. The decks show the blend itself, so no crossfader is drawn.
+ */
+@Composable
+private fun BeatLock(state: EngineState) {
+    val locked = state.incoming != null
+    Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(7.dp).background(if (locked) Color(0xFF5BD69A) else Glass.FillSelected, CircleShape))
+        Text(if (locked) "Beats locked · ${abs(state.phaseErrMs).roundToInt()} ms" else "Beats lock on entry", color = Glass.Muted, fontSize = 12.sp, maxLines = 1,
+            modifier = Modifier.padding(start = 5.dp))
     }
 }
 
 /** Stop, play/pause and skip (on a TV, Home and the visualizer too), with "AI in control" (or the skip in progress) under play. */
 @Composable
-private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Unit, onSkip: () -> Unit, tv: TvDeckButtons?) {
+private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Unit, onSkip: () -> Unit, onFullSong: () -> Unit, tv: TvDeckButtons?) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (tv != null) 10.dp else 14.dp)) {
             if (tv != null) RoundButton(44.dp, Glass.FillStrong, "Home, the music keeps playing", tv.onHome) { HomeGlyph(Glass.Text) }
@@ -593,10 +618,14 @@ private fun Controls(state: EngineState, onToggle: () -> Unit, onStop: () -> Uni
             }
         }
         val skipping = state.skipping > 0
-        Text(
-            if (skipping) "Skipping at the next ${if (state.skipping >= 2) "bar" else "phrase"}" else "AI in control",
-            color = if (skipping) Glass.EmberText else Glass.Muted, fontSize = 12.sp,
-        )
+        if (!skipping && state.showsFullSong) {
+            PlayFullSongButton(state, onFullSong, height = 32.dp, fontSize = 13.sp)
+        } else {
+            Text(
+                if (skipping) "Skipping at the next ${if (state.skipping >= 2) "bar" else "phrase"}" else "AI in control",
+                color = if (skipping) Glass.EmberText else Glass.Muted, fontSize = 12.sp,
+            )
+        }
     }
 }
 

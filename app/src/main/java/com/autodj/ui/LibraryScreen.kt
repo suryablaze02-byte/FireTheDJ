@@ -115,6 +115,8 @@ fun MixScreen(
     folders: List<MusicFolder>,
     mode: MixMode,
     onMode: (MixMode) -> Unit,
+    onlyBangers: Boolean = false,
+    onOnlyBangers: (Boolean) -> Unit = {},
     pickedSource: String,
     onPickSource: (String) -> Unit,
     pickedCrate: String?,
@@ -162,7 +164,9 @@ fun MixScreen(
     // A tablet held upright: the set card goes wide and the crates take three columns.
     val tablet = !landscape && config.screenWidthDp >= 600
     val big = roomy || tablet
-    val columns = if (landscape || tablet) 3 else 2
+    // An unfolded foldable on its side is roomy but narrower than a tablet: a slimmer set card and two crate columns.
+    val midRoomy = roomy && config.screenWidthDp < 900
+    val columns = if (midRoomy) 2 else if (landscape || tablet) 3 else 2
 
     val header: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth().padding(top = if (landscape) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -188,7 +192,7 @@ fun MixScreen(
         if (update != null && showBanner) UpdateBanner(update, onOpen = onSettings, onDismiss = onDismissUpdate, Modifier.padding(top = 12.dp))
     }
     val setCard: @Composable (Modifier) -> Unit = { modifier ->
-        val tracks = if (mixable) tracksOf(crate) else emptyList()
+        val tracks = if (!mixable) emptyList() else tracksOf(crate).let { if (onlyBangers) com.autodj.dj.SetShape.bangersOf(it) else it }
         SetCard(
             name = if (!mixable) null else crateLabel(crate),
             tracks = tracks,
@@ -196,6 +200,8 @@ fun MixScreen(
             artwork = artwork,
             mode = mode,
             onMode = onMode,
+            onlyBangers = onlyBangers,
+            onOnlyBangers = onOnlyBangers,
             wide = tablet,
             big = big,
             compact = landscape && !roomy,
@@ -291,7 +297,7 @@ fun MixScreen(
     if (landscape) {
         // Sideways: the set and Start in a column on the left, the crates scrolling on the right.
         Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 16.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(if (roomy) 20.dp else 14.dp)) {
-            Column(Modifier.width(if (roomy) 400.dp else 290.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+            Column(Modifier.width(if (midRoomy) 340.dp else if (roomy) 400.dp else 290.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                 header()
                 setCard(Modifier.padding(top = 12.dp, bottom = 12.dp))
             }
@@ -357,6 +363,8 @@ private fun SetCard(
     artwork: Map<String, String>,
     mode: MixMode,
     onMode: (MixMode) -> Unit,
+    onlyBangers: Boolean,
+    onOnlyBangers: (Boolean) -> Unit,
     wide: Boolean,
     big: Boolean,
     compact: Boolean,
@@ -400,6 +408,7 @@ private fun SetCard(
             }
             GlassSegmented(MixMode.entries, mode, { it.label }, onMode, Modifier.fillMaxWidth().tourTarget("mode"), height = if (big) 44.dp else 40.dp)
             Text(how, color = Glass.Muted, fontSize = if (big) 15.sp else 14.sp, lineHeight = if (big) 21.sp else 19.sp)
+            if (name != null) OnlyBangersRow(onlyBangers, onOnlyBangers)
         }
     }
     val start: @Composable (Modifier) -> Unit = { m ->

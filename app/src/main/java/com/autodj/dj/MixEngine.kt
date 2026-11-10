@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.log2
@@ -137,7 +138,18 @@ data class EngineState(
     val skipping: Int = 0,
     /** Whether a skip tap would still do something (a next song, the mix not yet begun, not already at the next bar). */
     val canSkip: Boolean = false,
+    /** The listener asked to hear this song to its end. */
+    val fullSong: Boolean = false,
+    /** Whether Play full song can still change this song's mix (there's a next song and it hasn't begun). */
+    val canFullSong: Boolean = false,
+    /** The energy asked for in Only bangers or Change the vibe. */
+    val energy: SetEnergy = SetEnergy.PLANNED,
+    /** Whether there are songs left that Change the vibe could re-pick. */
+    val canChangeVibe: Boolean = false,
 )
+
+/** What a Change the vibe choice would make: the [songs] that fit of [total] left, and the song it would play [next]. */
+class VibePreview(val songs: List<TrackInfo>, val total: Int, val next: TrackInfo?)
 
 /**
  * Plays a crate (or every genre) through two decks with no user control over the mixing.
@@ -170,6 +182,16 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
 
     /** Songs skipped one after another, most recent last: three in a row change the set's course. */
     private val skippedRun = mutableListOf<TrackInfo>()
+
+    /** Songs of the set the vibe left out; a later vibe can bring them back. */
+    private val sidelined = mutableListOf<TrackInfo>()
+    private var energy = SetEnergy.PLANNED
+    private var vibeKeep: (TrackInfo) -> Boolean = { true }
+
+    /** A Change the vibe waiting for the control loop, which owns the decks and the plan. */
+    private class AskedVibe(val energy: SetEnergy, val mode: MixMode, val keep: (TrackInfo) -> Boolean, val next: TrackInfo?)
+    private var queueJob: Job? = null
+    private var vibeAsked: AskedVibe? = null
     private var next: TrackInfo? = null
     /** Played + now + the order the rest would play in; recomputed only when the queue moves. */
     private var queue: List<TrackInfo> = emptyList()
@@ -186,6 +208,11 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     /** Skip taps on the playing song (1 = out at the next phrase, 2 = at the next bar), and how many have been planned. */
     private var skipAsked = 0
     private var skipDone = 0
+    private var fullSong = false
+    private var fullSongAsked = false
+
+    /** The song's tricks as planned, to put back if Play full song is tapped off. */
+    private var keptPerf: Performance? = null
     private var masterBpm = 0.0
     private var plan: Transition? = null
     private val history = mutableListOf<Recipe>()
@@ -274,7 +301,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     }
 
     /** Plays [tracks] in an order the engine decides as it goes. [crate] is a label for the UI. */
-    fun start(tracks: List<TrackInfo>, crate: String, mode: MixMode = MixMode.SMOOTH) {
+    fun start(tracks: List<TrackInfo>, crate: String, mode: MixMode = MixMode.SMOOTH, energy: SetEnergy = SetEnergy.PLANNED) {
         stop()
         StemJobs.newSet()
         if (tracks.isEmpty()) return
@@ -283,11 +310,15 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         // A one-genre set is styled by its genre; "All genres" styles each mix by the incoming song.
         styleFamily = crate.substringAfterLast(" · ").takeIf { it in Genres.families }
         this.mode = mode
-        setSize = tracks.size
         shape = SetShape.forSet(tracks)
         skippedRun.clear()
-        val opener = SetPlanner.opener(tracks, shape = shape)
-        remaining.addAll(tracks - opener)
+        this.energy = energy
+        // Ranked against the whole crate, so the left-out songs can return with a later vibe.
+        val playing = if (energy == SetEnergy.BANGERS) SetShape.bangersOf(tracks) else tracks
+        sidelined.addAll(tracks - playing.toSet())
+        setSize = playing.size
+        val opener = SetPlanner.opener(playing, shape = shape)
+        remaining.addAll(playing - opener)
         main = 0
         mainEntryBar = opener.musicStartBar
         masterBpm = opener.bpm
@@ -343,6 +374,12 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         publish()
     }
 
+    /** Play full song, or back to the DJ's plan: this song only, applied on the next tick. */
+    fun toggleFullSong() {
+        if (loop == null || next == null || started) return
+        fullSongAsked = true
+    }
+
     private fun setPaused(p: Boolean) {
         if (p == paused) return
         paused = p
@@ -368,6 +405,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         replayState = ReplayState.DONE
         skipAsked = 0
         skipDone = 0
+        fullSong = false
+        fullSongAsked = false
+        keptPerf = null
         history.clear()
         played.clear()
         remaining.clear()
@@ -378,6 +418,11 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         paused = false
         resumeOnFocus = false
         focus.abandon()
+        sidelined.clear()
+        energy = SetEnergy.PLANNED
+        vibeKeep = { true }
+        vibeAsked = null
+        queueJob?.cancel()
         _state.value = EngineState()
     }
 
@@ -397,6 +442,9 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         lifted = p.keyLiftSec == null
         skipAsked = 0
         skipDone = 0
+        fullSong = false
+        fullSongAsked = false
+        keptPerf = null
         deck.plan = performancePlan(t, p)
         // The last song has no mix to wait for; the others ask once their mix is planned (tricks after it never play).
         if (remaining.isEmpty()) separateTricks(deck, t, p, Double.MAX_VALUE)
@@ -454,11 +502,12 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
 
         // 0. Decide what plays next as soon as a track starts, so the listener can see it; the
         //    transition itself is planned once the track's own tricks (a hook replay) are done.
+        vibeAsked?.let { if (replayState != ReplayState.PLAYING) applyVibe(it, a, b, ta, posA) }
         if (next == null && remaining.isNotEmpty()) {
             // The next track plays this far through the set (the opener is the first of setSize).
             val progress = (played.size + 1).toDouble() / maxOf(1, setSize - 1)
             val avoid = skippedRun.takeIf { it.size >= SetPlanner.SKIPS_TO_CHANGE }.orEmpty().toList()
-            next = SetPlanner.pickNext(ta, remaining, Random.Default, wordPlayLyrics, shape, progress, java.time.LocalTime.now().hour, avoid)
+            next = SetPlanner.pickNext(ta, remaining, Random.Default, wordPlayLyrics, shape, progress, java.time.LocalTime.now().hour, avoid, energy)
             if (avoid.isNotEmpty()) {
                 Log.i(TAG, "${avoid.size} skips in a row: changing course to \"${next?.title}\"")
                 skippedRun.clear()
@@ -481,6 +530,10 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         // A skip tap: once a hook replay under way has finished, the mix out is moved up.
         if (skipAsked > skipDone && replayState != ReplayState.PLAYING) {
             applySkip(a, b, ta, posA)
+            return publish()
+        }
+        if (fullSongAsked && replayState != ReplayState.PLAYING) {
+            applyFullSong(a, b, ta, posA)
             return publish()
         }
 
@@ -611,6 +664,23 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         }
         if (old != null && old.exitBar <= exit) return
         if (replayState == ReplayState.LOADED || loaded) b.unload()
+        fullSong = false
+        keptPerf = null
+        dropTricksAhead(ta, posA)
+        val tr = TransitionPlanner.plan(
+            ta, mainEntryBar, posA, nx, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default,
+            lyrics = wordPlayLyrics, styleFamily = styleFamily, exitAt = exit,
+        )
+        adoptPlan(a, ta, nx, posA, tr)
+        Log.i(
+            TAG,
+            "skip at the next ${if (skipAsked >= 2) "bar" else "phrase"}: \"${ta.title}\" → \"${nx.title}\": ${tr.description} · " +
+                "B in ${formatSec(tr.exitSec)} (bar ${tr.exitBar}, B from ${formatSec(tr.entrySec)})",
+        )
+    }
+
+    /** Takes the song's tricks still to come off the plan; the one playing now finishes. */
+    private fun dropTricksAhead(ta: TrackInfo, posA: Double) {
         replayState = ReplayState.DONE
         loaded = false
         lifted = true
@@ -620,21 +690,137 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                 p.tricks.filter { it.startSec <= posA }, p.targetSpeed, null,
             )
         }
-        val tr = TransitionPlanner.plan(
-            ta, mainEntryBar, posA, nx, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default,
-            lyrics = wordPlayLyrics, styleFamily = styleFamily, exitAt = exit,
-        )
+    }
+
+    /** Whether a song passes the vibe in force: its language, and big enough for Only bangers. */
+    private fun fits(t: TrackInfo, energy: SetEnergy, keep: (TrackInfo) -> Boolean, shape: SetShape? = this.shape) =
+        keep(t) && (energy != SetEnergy.BANGERS || shape?.isBanger(t) != false)
+
+    /** The next song is settled: the blend is under way, or the listener already steered this mix. */
+    private fun nextIsSettled(): Boolean {
+        val p = plan
+        return started || fullSong || skipAsked > 0 || (p != null && decks[main].positionSec >= min(p.startSec, p.exitSec))
+    }
+
+    /**
+     * What [energy] and [keep] would make of the songs still to come. Called on the main thread;
+     * the search through them, with its word links, runs off it so the set and the screen don't stall.
+     */
+    suspend fun vibePreview(energy: SetEnergy, keep: (TrackInfo) -> Boolean): VibePreview {
+        val pool = remaining + sidelined
+        val ta = decks[main].track
+        val settled = next.takeIf { nextIsSettled() }
+        val heard = played.size
+        val ranks = shape
+        val hour = java.time.LocalTime.now().hour
+        return withContext(Dispatchers.Default) {
+            val songs = pool.filter { fits(it, energy, keep, ranks) }
+            val progress = (heard + 1).toDouble() / maxOf(1, heard + songs.size)
+            val next = settled ?: ta?.let { SetPlanner.pickNext(it, songs, null, wordPlayLyrics, ranks, progress, hour, energy = energy) }
+            VibePreview(songs, pool.size, next)
+        }
+    }
+
+    /** The songs still to come, for the choices Change the vibe offers. Main thread. */
+    fun vibePool(): List<TrackInfo> = remaining + sidelined
+
+    /**
+     * Picks every song after the playing one again. A blend already running finishes first. False
+     * (and nothing changes) when too few songs fit.
+     */
+    fun changeVibe(energy: SetEnergy, mode: MixMode, keep: (TrackInfo) -> Boolean, preview: VibePreview): Boolean {
+        if (loop == null || preview.songs.size < SetPlanner.MIN_VIBE_SONGS) return false
+        vibeAsked = AskedVibe(energy, mode, keep, preview.next)
+        return true
+    }
+
+    private fun applyVibe(asked: AskedVibe, a: Deck, b: Deck, ta: TrackInfo, posA: Double) {
+        vibeAsked = null
+        energy = asked.energy
+        mode = asked.mode
+        vibeKeep = asked.keep
+        skippedRun.clear()
+        val settled = nextIsSettled()
+        val held = next.takeIf { settled }
+        val pool = remaining + sidelined
+        val songs = pool.filter { it == held || fits(it, energy, vibeKeep) }
+        remaining.clear()
+        remaining.addAll(songs)
+        sidelined.clear()
+        sidelined.addAll(pool - songs.toSet())
+        setSize = played.size + 1 + remaining.size
+        if (!settled) {
+            if (loaded) {
+                b.unload()
+                loaded = false
+            }
+            plan = null
+            perf?.let { a.plan = performancePlan(ta, it) }
+            // The song the panel promised; if the queue moved on since, the next tick picks one.
+            next = asked.next?.takeIf { it in remaining }
+        }
+        Log.i(TAG, "vibe: ${energy.label}, ${mode.label}, ${remaining.size} songs, at ${formatSec(posA)}; next \"${next?.title}\"")
+        refreshQueueOffMain(ta)
+    }
+
+    /** Like [refreshQueue], for a whole re-pick: the list fills in at once and sorts itself a moment later. */
+    private fun refreshQueueOffMain(current: TrackInfo) {
+        queueJob?.cancel()
+        val n = next
+        val rest = if (n != null) remaining - n else remaining.toList()
+        val before = played + current + listOfNotNull(n)
+        queue = before + rest
+        val from = n ?: current
+        val at = played.size + if (n != null) 1 else 0
+        val ranks = shape
+        val size = setSize
+        val wanted = energy
+        val hour = java.time.LocalTime.now().hour
+        queueJob = scope.launch {
+            val order = withContext(Dispatchers.Default) { SetPlanner.upcoming(from, rest, ranks, at, size, hour, wanted) }
+            queue = before + order
+            publish()
+        }
+    }
+
+    /** The mix replanned mid-song: its effects that would have started before now are left out. */
+    private fun adoptPlan(a: Deck, ta: TrackInfo, nx: TrackInfo, posA: Double, tr: Transition) {
         plan = tr
         separateFor(ta, nx, tr)
-        // No run-up to clear here: the trick playing now finishes, and the mix's effects that
-        // would have started before the tap are left out.
         a.plan = FxPlan(ta.beatSec, ta.downbeatSec, tr.aPlan.gain, tr.aPlan.bass, perf?.events.orEmpty() + tr.aPlan.events.filter { it.start >= posA })
-        Log.i(
-            TAG,
-            "skip at the next ${if (skipAsked >= 2) "bar" else "phrase"}: \"${ta.title}\" → \"${nx.title}\": ${tr.description} · " +
-                "B in ${formatSec(tr.exitSec)} (bar ${tr.exitBar}, B from ${formatSec(tr.entrySec)})",
-        )
         refreshQueue(ta)
+    }
+
+    /**
+     * Play full song: the rest of the song plays without tricks and B blends in over its last
+     * bars. Asked again, the tricks come back and the DJ plans the mix afresh.
+     */
+    private fun applyFullSong(a: Deck, b: Deck, ta: TrackInfo, posA: Double) {
+        fullSongAsked = false
+        val nx = next ?: return
+        val old = plan
+        if (started || skipAsked > 0 || (old != null && posA >= old.startSec)) return
+        if (replayState == ReplayState.LOADED || loaded) b.unload()
+        if (fullSong) {
+            fullSong = false
+            loaded = false
+            // A hook replay already given up doesn't come back.
+            perf = keptPerf?.let { Performance(it.events, it.speed, null, it.tricks, it.targetSpeed, null) }
+            keptPerf = null
+            plan = null
+            perf?.let { a.plan = performancePlan(ta, it) }
+            refreshQueue(ta)
+            return
+        }
+        fullSong = true
+        keptPerf = perf
+        dropTricksAhead(ta, posA)
+        val tr = TransitionPlanner.planFullSong(
+            ta, mainEntryBar, posA, nx, history, aPitchSemis = a.pitchSemis, mode = mode, random = Random.Default,
+            lyrics = wordPlayLyrics, styleFamily = styleFamily,
+        )
+        adoptPlan(a, ta, nx, posA, if (old != null && old.exitBar >= tr.exitBar) old else tr)
+        Log.i(TAG, "full song: \"${ta.title}\" → \"${nx.title}\": ${plan?.description}")
     }
 
     /**
@@ -867,26 +1053,29 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
      */
     fun addTracks(tracks: List<TrackInfo>) {
         if (loop == null) return
-        val known = (played + remaining).mapTo(HashSet()) { it.uri }
+        val known = (played + remaining + sidelined).mapTo(HashSet()) { it.uri }
         decks.forEach { d -> d.track?.let { known += it.uri } }
         next?.let { known += it.uri }
         val fresh = tracks.filter { it.uri !in known }
         if (fresh.isEmpty()) return
-        remaining.addAll(fresh)
-        setSize += fresh.size
         // The newcomers' energies are ranked against the rest of the set.
-        shape = SetShape.forSet(played + remaining + listOfNotNull(decks[main].track))
+        shape = SetShape.forSet(played + remaining + sidelined + fresh + listOfNotNull(decks[main].track))
+        val (joining, left) = fresh.partition { fits(it, energy, vibeKeep) }
+        remaining.addAll(joining)
+        sidelined.addAll(left)
+        setSize += joining.size
         decks[main].track?.let(::refreshQueue)
         publish()
     }
 
     private fun refreshQueue(current: TrackInfo) {
+        queueJob?.cancel()
         val n = next
         val hour = java.time.LocalTime.now().hour
         val ahead = if (n != null) {
-            listOf(n) + SetPlanner.upcoming(n, remaining - n, shape, played.size + 1, setSize, hour)
+            listOf(n) + SetPlanner.upcoming(n, remaining - n, shape, played.size + 1, setSize, hour, energy)
         } else {
-            SetPlanner.upcoming(current, remaining, shape, played.size, setSize, hour)
+            SetPlanner.upcoming(current, remaining, shape, played.size, setSize, hour, energy)
         }
         queue = played + current + ahead
     }
@@ -955,6 +1144,10 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             tempoChange = if (p != null && next != null) tempoChange(p, ta, a.speed, next) else null,
             skipping = skipAsked,
             canSkip = next != null && !started && (p == null || posA < p.startSec) && skipAsked < 2,
+            fullSong = fullSong,
+            canFullSong = next != null && !started && (p == null || posA < p.startSec) && skipAsked == 0,
+            energy = energy,
+            canChangeVibe = remaining.size + sidelined.size > 0,
         )
     }
 
