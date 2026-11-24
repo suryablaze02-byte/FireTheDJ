@@ -1,5 +1,12 @@
 package com.autodj.ui
 
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import android.Manifest
 import android.content.res.Configuration
 import android.content.pm.PackageManager
@@ -43,13 +50,17 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.autodj.cast.CastControl
+import com.autodj.dj.DeckState
+import com.autodj.dj.Taste
+import com.autodj.remote.YouTubeStreams
+import kotlinx.coroutines.delay
 import com.autodj.update.UpdateState
 import com.autodj.update.Updates
 import com.autodj.cast.TvPresentation
 
 @UnstableApi
 @Composable
-fun DjScreen(vm: DjViewModel) {
+fun DjScreen(vm: DjViewModel, survey: Boolean = false, onSurveyDone: () -> Unit = {}) {
     val library by vm.library.collectAsStateWithLifecycle()
     val setLanguage by vm.setLanguage.collectAsStateWithLifecycle()
     val artwork by vm.artwork.collectAsStateWithLifecycle()
@@ -57,21 +68,16 @@ fun DjScreen(vm: DjViewModel) {
     val mode by vm.mode.collectAsStateWithLifecycle()
     val onlyBangers by vm.onlyBangers.collectAsStateWithLifecycle()
     var vibe by remember { mutableStateOf(false) }
+    // Likes and dislikes: read again whenever one changes.
+    val tasteVersion by Taste.version.collectAsStateWithLifecycle()
+    /** The song just disliked, while its "won't play again" note (with Undo) shows. */
+    var hiddenNote by remember { mutableStateOf<DeckState?>(null) }
+    LaunchedEffect(hiddenNote) { if (hiddenNote != null) { delay(6000); hiddenNote = null } }
     var tab by rememberSaveable { mutableStateOf(if (state.running) Tab.NOW_PLAYING else Tab.MIX) }
-    // The mixing view opens by itself for each transition; Back hides it until the next one.
-    var preview by remember { mutableStateOf(false) }
-    var hiddenFor by remember { mutableStateOf(-1) }
-    LaunchedEffect(state.running) {
-        if (state.running) tab = Tab.NOW_PLAYING
-        // A new set counts transitions from 0 again: forget what was hidden in the last one.
-        hiddenFor = -1
-        preview = false
-    }
+    LaunchedEffect(state.running) { if (state.running) tab = Tab.NOW_PLAYING }
     // Full-screen visualizer: closes by itself when the set ends.
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.running) { if (!state.running) fullscreen = false }
-    // A preview opened from "Up next" ends with that transition.
-    LaunchedEffect(state.index) { preview = false }
 
     // The Stream page (YT Music or Spotify) opens over the Library, from its tile.
     var ytMusic by rememberSaveable { mutableStateOf(false) }
@@ -153,11 +159,34 @@ fun DjScreen(vm: DjViewModel) {
         return
     }
 
+    // The taste survey: once on a fresh install (after the tour), and from Settings › Your taste.
+    var editTaste by rememberSaveable { mutableStateOf(false) }
+    if (survey || editTaste) {
+        SystemBarIcons(darkGround = LocalGlassDark.current)
+        val close = { editTaste = false; onSurveyDone() }
+        TasteSurvey(
+            initial = remember { Taste.survey() },
+            onSkip = { if (!Taste.surveyDone()) Taste.skipSurvey(); close() },
+            onDone = { answers ->
+                vm.buildMadeForYou(answers)
+                // Straight to the set it builds, when this phone can stream it.
+                if (YouTubeStreams.supported() && answers.let { it.artists.size + it.languages.size + it.genres.size } > 0) {
+                    pickedSource = MADE_FOR_YOU
+                    pickedCrate = ALL
+                    settings = false
+                    tab = Tab.MIX
+                }
+                close()
+            },
+        )
+        return
+    }
+
     if (settings) {
         SystemBarIcons(darkGround = LocalGlassDark.current)
         Box(Modifier.fillMaxSize()) {
             AmbientLight(Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().safeDrawingPadding()) { SettingsScreen(onBack = { settings = false }) }
+            Box(Modifier.fillMaxSize().safeDrawingPadding()) { SettingsScreen(onBack = { settings = false }, onEditTaste = { editTaste = true }, onUnhide = vm::unhide) }
         }
         return
     }
@@ -200,7 +229,8 @@ fun DjScreen(vm: DjViewModel) {
             CompositionLocalProvider(LocalTabBarInset provides if (landscape) 0.dp else TAB_BAR_SPACE + if (mini) MINI_PLAYER_SPACE else 0.dp) {
                 when (tab) {
                     Tab.MIX -> MixScreen(
-                        library, artwork, folders,
+                        // A disliked song is left out of every crate.
+                        remember(library, tasteVersion) { library.filterNot { it.info?.let(Taste::isHidden) == true } }, artwork, folders,
                         mode = mode,
                         onMode = vm::setMode,
                         onlyBangers = onlyBangers,
@@ -245,30 +275,30 @@ fun DjScreen(vm: DjViewModel) {
                     )
                     Tab.NOW_PLAYING -> {
                         if (vibe && state.running) VibeSheet(vm, state) { vibe = false }
-                        val showMix = state.running && (preview || (state.mixing && hiddenFor != state.index))
-                        if (landscape && state.running && preview) {
-                            // Sideways the decks are always on screen; the effects view opens only from its panel.
-                            MixingScreenLandscape(state, onBack = { preview = false })
-                        } else if (landscape && state.current != null && state.set.getOrNull(state.index) != null) {
+                        // The mixing view is no longer shown: the mix runs the same, Now Playing tells the story.
+                        if (landscape && state.current != null && state.set.getOrNull(state.index) != null) {
                             // With nothing playing, sideways shows the same "Go to Mix" screen as upright (below).
                             TwoDeckScreen(
                                 state, artwork, visual = vm.engine::visual, onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip, onFullSong = vm::toggleFullSong,
-                                onOpenEffects = { preview = true },
+                                onOpenEffects = null,
                                 languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
                                 onVibe = { vibe = true },
                             )
-                        } else if (showMix) {
-                            MixingScreen(state, artwork, visual = vm.engine::visual, onBack = {
-                                preview = false
-                                hiddenFor = state.index
-                            })
                         } else {
-                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onOpenMix = { preview = true }, onSkip = vm::skip, onFullSong = vm::toggleFullSong, onVibe = { vibe = true }, visual = vm.engine::visual,
+                            NowPlayingScreen(state, artwork, onToggle = vm::togglePause, onStop = vm::stop, onSkip = vm::skip, onFullSong = vm::toggleFullSong, onVibe = { vibe = true }, visual = vm.engine::visual,
                                 onFullscreen = { fullscreen = true },
                                 onCast = { castDialog = true },
                                 setLanguage = setLanguage,
                                 onGoToMix = { tab = Tab.MIX },
                                 languageOf = { uri -> library.firstOrNull { it.uri == uri }?.language },
+                                liked = remember(state.current, tasteVersion) { state.current?.let { Taste.isLiked(it.uri, it.title, it.artist) } == true },
+                                onLike = { state.current?.let { vm.toggleLike(it.uri, it.title, it.artist) } },
+                                onDislike = {
+                                    state.current?.let {
+                                        vm.hide(it.uri, it.title, it.artist)
+                                        hiddenNote = it
+                                    }
+                                },
                             )
                         }
                     }
@@ -278,6 +308,13 @@ fun DjScreen(vm: DjViewModel) {
                 MiniPlayer(
                     state, artwork, onOpen = { tab = Tab.NOW_PLAYING }, onToggle = vm::togglePause,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 10.dp + 64.dp + 8.dp),
+                )
+            }
+            hiddenNote?.let { song ->
+                HiddenNote(
+                    onUndo = { vm.unhide(song.uri, song.title, song.artist); hiddenNote = null },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(start = 16.dp, end = 16.dp, bottom = if (landscape) 16.dp else 10.dp + 64.dp + 10.dp),
                 )
             }
             if (!landscape) {
@@ -301,4 +338,25 @@ private enum class Tab(val label: String, val tourKey: String?, val icon: @Compo
     MIX("Mix", null, { FlameGlyph(it) }),
     MUSIC("Music", "tab_music", { NoteGlyph(it) }),
     NOW_PLAYING("Now Playing", "tab_now", { BarsGlyph(it) }),
+}
+
+/** After a dislike: the song is mixing out and won't play in any set again. Undo only brings it back to the crates. */
+@Composable
+private fun HiddenNote(onUndo: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().floatingGlass(RoundedCornerShape(18.dp), Glass.Sheet)
+            .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+            .semantics(mergeDescendants = false) { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Text("Mixing out now", color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("This song won't play in any set again", color = Glass.Muted, fontSize = 13.sp)
+        }
+        Text(
+            "Undo", color = Glass.EmberText, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onUndo)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        )
+    }
 }

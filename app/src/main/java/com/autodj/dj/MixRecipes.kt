@@ -79,6 +79,15 @@ enum class Recipe(
 
     /** A stops dead mid-phrase, a beat of silence, and B's drop lands on the one. */
     POWER_CUT("Power cut", cut = true, preBars = 1, tailBars = 1),
+
+    /**
+     * Trickster only: B plays over A at full level (no bass, no vocal), cutting out on the last bar
+     * of every 4; after the last gap B lands with everything on the one and A is gone.
+     */
+    WEAVE("Weave", cut = false, smooth = false),
+
+    /** The set opener only: two same-tempo songs start together and drop together (see [DoubleStart]). */
+    DOUBLE_START("Double start", cut = false),
 }
 
 /** The loop a [Recipe.LOOP_MIX] repeats: 4 bars when the deck can hold them, else 2. */
@@ -185,6 +194,7 @@ object DecisionEngine {
     /** Blends that need the beats locked for their whole length. */
     private val needsBeatmatch = setOf(
         Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND, Recipe.BASS_DROP, Recipe.BREAKDOWN_SWAP, Recipe.LOOP_MIX, Recipe.ACAPELLA_MASHUP, Recipe.VOCAL_CARRY,
+        Recipe.WEAVE,
     )
 
     private val vocalGenres = setOf(Genres.POP, Genres.HOUSE, Genres.HIPHOP, Genres.LATIN)
@@ -261,8 +271,12 @@ object DecisionEngine {
         }
         // Whether B has a drop to land on is checked by the planner when it picks B's entry.
         base[Recipe.BASS_DROP] = if (mode == MixMode.SMOOTH) 3.4 else 1.8
+        // The weave is a trick: Trickster only.
+        base[Recipe.WEAVE] = if (mode == MixMode.TRICKSTER) 2.4 else Double.NEGATIVE_INFINITY
         // Word play needs a word both songs sing; the planner finds that itself, from their lyrics.
         base[Recipe.WORD_PLAY] = Double.NEGATIVE_INFINITY
+        // The Double start opens a set; it is never a mix between two songs.
+        base[Recipe.DOUBLE_START] = Double.NEGATIVE_INFINITY
         // The regional drums are for music with a regional flavour (Indian, Latin, Arabic) only.
         val indian = SfxDressing.regional(a) || SfxDressing.regional(b)
         if (indian) indianCuts.forEach { (r, s) -> base[r] = maxOf(base[r] ?: 0.0, s) }
@@ -379,8 +393,8 @@ internal class RecipeBuilder(
         bPlan(listOf(Ramp(entrySec, entrySec + CUT_SEC, 0f, 1f)), emptyList(), extra)
 
     /** [drum]: the regional drum for a [Recipe.DRUM_FILL_CUT]. */
-    fun build(recipe: Recipe, mixBars: Int, rampBars: Int = 8, rampTo: Double = 1.0, drum: FxType = FxType.DHOL): Built {
-        val built = recipeFor(recipe, mixBars, rampBars, rampTo, drum)
+    fun build(recipe: Recipe, mixBars: Int, rampBars: Int = 8, rampTo: Double = 1.0, drum: FxType = FxType.DHOL, short: Boolean = false): Built {
+        val built = recipeFor(recipe, mixBars, rampBars, rampTo, drum, short)
         // Keep A running (silent, dry) until its echo and reverb tails have died away, so the
         // deck never stops mid-tail. A track that ends sooner simply ends the transition then.
         val tailEnd = built.aPlan.events.maxOfOrNull { e ->
@@ -394,16 +408,17 @@ internal class RecipeBuilder(
         return Built(built.aPlan, built.bPlan, built.startSec, end, built.phases, built.speedRamp, handoverSec = built.handoverSec)
     }
 
-    private fun recipeFor(recipe: Recipe, mixBars: Int, rampBars: Int, rampTo: Double, drum: FxType): Built = when (recipe) {
-        // Word play is timed to the words by the planner; built here it's just its clean cut.
-        Recipe.HARD_CUT, Recipe.WORD_PLAY -> hardCut()
+    private fun recipeFor(recipe: Recipe, mixBars: Int, rampBars: Int, rampTo: Double, drum: FxType, short: Boolean): Built = when (recipe) {
+        // Word play is timed by the planner and the Double start by [DoubleStart]; here they are a clean cut.
+        Recipe.HARD_CUT, Recipe.WORD_PLAY, Recipe.DOUBLE_START -> hardCut()
         Recipe.DROP_SWAP -> dropSwap()
         Recipe.BRAKE_STOP -> brakeStop()
         Recipe.DRUM_FILL_CUT -> drumFillCut(drum)
         Recipe.BREAKDOWN_SWAP -> breakdownSwap()
         Recipe.LOOP_RAMP -> loopRamp(rampBars, rampTo)
-        Recipe.VOCAL_SWAP -> vocalSwap()
+        Recipe.VOCAL_SWAP -> vocalSwap(short)
         Recipe.BASS_DROP -> bassDrop(mixBars - 1)
+        Recipe.WEAVE -> weave(mixBars)
         Recipe.BASS_SWAP_BLEND, Recipe.PHASER_BLEND, Recipe.FLANGER_BLEND -> blend(recipe, mixBars)
         Recipe.FILTER_FADE -> filterFade(mixBars)
         Recipe.LOFI_FADE -> lofiFade(mixBars)
@@ -735,7 +750,8 @@ internal class RecipeBuilder(
      * continuous crossfade: B is heard (vocal-forward, music underneath) from the first beat and
      * rises, while A, its own vocal cut, eases down across the whole 16 bars.
      */
-    private fun vocalSwap(): Built {
+    private fun vocalSwap(short: Boolean): Built {
+        if (short) return shortVocalSwap()
         val e = exitSec
         val swap = e + 6 * bar
         val end = e + 12 * bar
@@ -760,6 +776,28 @@ internal class RecipeBuilder(
         return Built(
             aOut, bIn, e, end,
             listOf(Phase("A vocal out · B vocal in", e, swap), Phase("Beat swap", swap, swap + 2 * bar), Phase("A out", swap + 2 * bar, end)),
+        )
+    }
+
+    /**
+     * Trickster's vocal swap: B comes in clean (no vocal-only filtering) with just its bass held
+     * back for 2 bars while A's vocal drops out, then the beats swap and A is gone 2 bars later.
+     * A long overlap of two half-songs sounds muffled; this keeps it to a few seconds.
+     */
+    private fun shortVocalSwap(): Built {
+        val e = exitSec
+        val swap = e + 2 * bar
+        val end = swap + 2 * bar
+        val (aGain, bGain) = crossfade(e, end)
+        val aOut = aPlan(
+            gain = aGain,
+            bass = listOf(Ramp(swap - beat / 2, swap + beat / 2, 1f, 0f)),
+            events = listOf(FxEvent(FxType.VOCAL_CUT, e, e + bar, 0f, 1f), FxEvent(FxType.VOCAL_CUT, e + bar, end, 1f, 1f)),
+        )
+        val bIn = bPlan(gain = bGain, bass = listOf(Ramp(toB(swap - beat / 2), toB(swap + beat / 2), 0f, 1f)), events = emptyList())
+        return Built(
+            aOut, bIn, e, end,
+            listOf(Phase("A vocal out · B in", e, swap), Phase("Beat swap", swap, swap + bar), Phase("A out", swap + bar, end)),
         )
     }
 
@@ -789,6 +827,37 @@ internal class RecipeBuilder(
             aOut, bIn, e, end,
             listOf(Phase("Crossfade", e, d - bar), Phase("No bass", d - bar, d), Phase("Drop", d, end)),
             handoverSec = d,
+        )
+    }
+
+    /**
+     * B over A at full level from the first beat, with no bass and no vocal, cutting out on the
+     * last bar of every [WEAVE_EVERY] (so [mixBars] = 8 gives two gaps). On the bar line after the
+     * last gap B lands with its bass and voice, and A stops.
+     */
+    private fun weave(mixBars: Int): Built {
+        val e = exitSec
+        val end = e + mixBars * bar
+        val click = 0.03
+        val bGain = buildList {
+            add(Ramp(toB(e), toB(e) + click, 0f, 1f))
+            for (k in WEAVE_EVERY - 1 until mixBars step WEAVE_EVERY) {
+                val out = toB(e + k * bar)
+                val back = toB(e + (k + 1) * bar)
+                add(Ramp(out, out + click, 1f, 0f))
+                add(Ramp(back, back + click, 0f, 1f))
+            }
+        }
+        val aOut = aPlan(gain = aCutAt(end), bass = emptyList(), events = emptyList())
+        val bIn = bPlan(
+            gain = bGain,
+            bass = listOf(Ramp(toB(end) - 0.01, toB(end), 0f, 1f)),
+            events = listOf(FxEvent(FxType.VOCAL_CUT, toB(e), toB(end), 1f, 1f)),
+        )
+        return Built(
+            aOut, bIn, e, end + beat,
+            listOf(Phase("Weave", e, end), Phase("B lands", end, end + beat)),
+            handoverSec = end,
         )
     }
 
@@ -893,6 +962,9 @@ internal class RecipeBuilder(
 
     private companion object {
         const val CUT_SEC = 0.012
+
+        /** A weave cuts B out on the last bar of every this many. */
+        const val WEAVE_EVERY = 4
 
         /** In a blend, the mids of the song not in front sit this far down (1 = −18 dB): about −11 dB. */
         const val BLEND_MID_CUT = 0.6f

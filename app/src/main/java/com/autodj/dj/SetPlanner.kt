@@ -58,18 +58,24 @@ object SetPlanner {
             2 -> 0.6
             else -> if (fits) abs(shift) * 0.4 else 2.5
         }
-        return tempo + genre + sound + bass + energy + key
+        // A doubted tempo may be far off what it reads (Starboy read 124, plays at 93): a poor
+        // tempo match, picked only when nothing better fits.
+        val unsure = if (a.tempoUnsure || b.tempoUnsure) UNSURE_TEMPO else 0.0
+        return tempo + genre + sound + bass + energy + key + unsure
     }
+
+    private const val UNSURE_TEMPO = 6.0
 
     /**
      * Any of the set's quieter tracks can open it (with a [shape]: its lowest-energy third), so
      * the same playlist takes a different route every time but never peaks in the first song.
      */
-    fun opener(tracks: List<TrackInfo>, random: Random = Random.Default, shape: SetShape? = null): TrackInfo {
-        if (shape == null) return tracks.random(random)
-        val calm = tracks.sortedBy { shape.energyOf(it) }.take(maxOf(1, tracks.size / 3))
-        return calm.random(random)
-    }
+    fun opener(tracks: List<TrackInfo>, random: Random = Random.Default, shape: SetShape? = null): TrackInfo =
+        openers(tracks, shape).random(random)
+
+    /** The songs a set may open with: the calmest third when the set has an arc, else any. */
+    fun openers(tracks: List<TrackInfo>, shape: SetShape? = null): List<TrackInfo> =
+        if (shape == null) tracks else tracks.sortedBy { shape.energyOf(it) }.take(maxOf(1, tracks.size / 3))
 
     /**
      * The next track from [remaining] after [current]. With [random], picks among the tracks

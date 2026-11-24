@@ -22,11 +22,11 @@ class WordPlayTest {
     private val features = AudioFeatures(0.35, 2000.0, 0.95, 0.2, 1.6, 4.0, 0.2)
 
     /** 120 BPM (2 s bars), downbeat at 0, sung on [sungBars]. */
-    private fun track(name: String, bars: Int = 120, sungBars: Set<Int> = emptySet(), bpm: Double = 120.0) = TrackInfo(
+    private fun track(name: String, bars: Int = 120, sungBars: Set<Int> = emptySet(), bpm: Double = 120.0, breakdown: IntRange = IntRange.EMPTY) = TrackInfo(
         uri = name, title = name, artist = "", genre = Genres.POP, genreFamily = Genres.POP,
         genreConfidence = 0.9f, genreSource = "tag",
         durationSec = bars * 240.0 / bpm + 1.0, bpm = bpm, downbeatSec = 0.0, phraseOffsetBars = 0,
-        barEnergy = FloatArray(bars) { if (it < 8 || it >= bars - 8) 0.4f else 1f },
+        barEnergy = FloatArray(bars) { if (it < 8 || it >= bars - 8 || it in breakdown) 0.4f else 1f },
         introEndBar = 8, outroStartBar = bars - 8, dropBars = intArrayOf(),
         loudnessDb = -10.0, features = features,
         vocalness = FloatArray(bars) { if (it in sungBars) 0.9f else 0.1f },
@@ -186,15 +186,15 @@ class WordPlayTest {
 
     @Test
     fun aWordBeforeTheDropLoopsIntoIt() {
-        // The drop lands at bar 8 (16 s), with "Kissik" opening a line a beat-and-a-bit before the last bar.
-        val t = track("k", sungBars = (0 until 120).toSet())
-        val l = timed(13.5 to "Kissik Kissik", 40.0 to "Kissik again", 50.0 to "Kissik more", 60.0 to "and the rest")
+        // After a breakdown the drop lands at bar 32 (64 s), with "Kissik" opening a line a beat-and-a-bit before the last bar.
+        val t = track("k", sungBars = (0 until 120).toSet(), breakdown = 24 until 32)
+        val l = timed(61.5 to "Kissik Kissik", 90.0 to "Kissik again", 100.0 to "Kissik more", 110.0 to "and the rest")
         val p = com.autodj.dj.Performer.plan(t, 0, 1.0, 120.0, mode = MixMode.TRICKSTER, lyrics = l)
-        val drop = 16.0
+        val drop = 64.0
         val rolls = p.events.filter { it.type == com.autodj.dj.fx.FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end > drop - 2 * t.barSec }
         // (A tape stop into the drop ends the loop two beats early.)
         // Starts where the word does, at the word's own loop length, and tightens into the drop.
-        assertEquals(13.5, rolls.minOf { it.start }, 1e-9)
+        assertEquals(61.5, rolls.minOf { it.start }, 1e-9)
         assertEquals(0.125f, rolls.maxBy { it.end }.p1, 1e-6f)
         assertTrue(p.tricks.any { it.label.startsWith("Word loop “Kissik”") })
         // Without lyrics, the plain roll.
@@ -276,9 +276,9 @@ class WordPlayTest {
 
     @Test
     fun aSlowSongsWordLoopIsShortAndTight() {
-        val t = track("k", sungBars = (0 until 120).toSet(), bpm = 70.0)
-        val drop = t.barTime(8)
-        val l = timed(drop - 2.0 to "Kissik Kissik", 60.0 to "Kissik again", 70.0 to "Kissik more", 80.0 to "and the rest")
+        val t = track("k", sungBars = (0 until 120).toSet(), bpm = 70.0, breakdown = 24 until 32)
+        val drop = t.barTime(32)
+        val l = timed(drop - 2.0 to "Kissik Kissik", drop + 30.0 to "Kissik again", drop + 40.0 to "Kissik more", drop + 50.0 to "and the rest")
         val rolls = com.autodj.dj.Performer.plan(t, 0, 1.0, 70.0, mode = MixMode.TRICKSTER, lyrics = l)
             .events.filter { it.type == com.autodj.dj.fx.FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end > drop - 2 * t.barSec }
         assertTrue(rolls.isNotEmpty())

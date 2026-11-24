@@ -102,7 +102,7 @@ fun TwoDeckScreen(
     onStop: () -> Unit,
     onSkip: () -> Unit,
     onFullSong: () -> Unit,
-    onOpenEffects: () -> Unit,
+    onOpenEffects: (() -> Unit)?,
     languageOf: (String) -> String?,
     tv: TvDeckButtons? = null,
     onVibe: () -> Unit = {},
@@ -287,7 +287,7 @@ private fun MixerPanel(
     onStop: () -> Unit,
     onSkip: () -> Unit,
     onFullSong: () -> Unit,
-    onOpenEffects: () -> Unit,
+    onOpenEffects: (() -> Unit)?,
     onVibe: () -> Unit,
     tv: TvDeckButtons?,
     modifier: Modifier,
@@ -446,7 +446,7 @@ class TvDeckButtons(val onHome: () -> Unit, val onVisualizer: () -> Unit) {
  * on a TV) opens the full effects view.
  */
 @Composable
-private fun EffectsPanel(state: EngineState, visual: () -> VisualFrame?, onOpen: () -> Unit, wordSize: TextUnit, list: Boolean, modifier: Modifier = Modifier, rows: Int = 5) {
+private fun EffectsPanel(state: EngineState, visual: () -> VisualFrame?, onOpen: (() -> Unit)?, wordSize: TextUnit, list: Boolean, modifier: Modifier = Modifier, rows: Int = 5) {
     // The newest effect playing on either deck; it changes only when one starts or ends.
     var playing by remember { mutableStateOf<FxType?>(null) }
     LaunchedEffect(visual) {
@@ -469,7 +469,7 @@ private fun EffectsPanel(state: EngineState, visual: () -> VisualFrame?, onOpen:
     val hot = playing != null || state.trickNow != null
     Column(
         modifier.fillMaxWidth().clip(shape)
-            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen)
+            .then(if (onOpen != null) Modifier.clickable(interaction, indication = null, role = Role.Button, onClickLabel = "Show all effects", onClick = onOpen) else Modifier)
             .semantics { contentDescription = playing?.let { "Effect now: " + EffectLayer.label(it) } ?: "Effects" }
             .background(if (focused) Glass.FillSelected else if (hot) Color(0x1AFF8A3D) else CardFill)
             .border(if (focused) 3.dp else 1.dp, if (focused) Glass.Text else if (hot) DeckA.copy(alpha = 0.45f) else CardEdge, shape)
@@ -478,7 +478,7 @@ private fun EffectsPanel(state: EngineState, visual: () -> VisualFrame?, onOpen:
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("EFFECTS", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
-            Text(if (state.fx.isNotEmpty()) "All ${state.fx.size} ›" else "All ›", color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            if (onOpen != null) Text(if (state.fx.isNotEmpty()) "All ${state.fx.size} ›" else "All ›", color = Glass.EmberText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         val top = playing
         val trick = state.trickNow

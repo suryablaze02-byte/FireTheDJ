@@ -1,5 +1,6 @@
 package com.autodj.ui
 
+import com.autodj.dj.Taste
 import com.autodj.dj.stems.Stems
 import com.autodj.BuildConfig
 import android.content.pm.ActivityInfo
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
             window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
         }
         Appearance.load(this)
+        Taste.init(this)
         setContent {
             val accent = Color(0xFF7C5CFF)
             val light = Appearance.isLight()
@@ -56,6 +58,8 @@ class MainActivity : ComponentActivity() {
                 val stems = remember { Stems.supported(this) }
                 val news = remember { if (TourMemory.done(this)) phoneWhatsNew(TourMemory.seenVersion(this), stems) else emptyList() }
                 var showNews by remember { mutableStateOf(news.isNotEmpty()) }
+                // A fresh install asks what the listener likes, once the tour is over.
+                var survey by remember { mutableStateOf(!TourMemory.done(this) && !Taste.surveyDone()) }
                 val tourState = remember { TourState() }
                 // The splash and the guided tours (which point at the bottom tabs) stay upright;
                 // after them the app turns with the phone.
@@ -64,7 +68,7 @@ class MainActivity : ComponentActivity() {
                     requestedOrientation = if (upright) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                 }
                 CompositionLocalProvider(LocalTour provides tourState) {
-                    DjScreen(vm)
+                    DjScreen(vm, survey = survey && !splash && !tour, onSurveyDone = { survey = false })
                     if (splash) {
                         SplashScreen { splash = false }
                     } else if (tour) {

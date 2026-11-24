@@ -21,6 +21,7 @@ import com.autodj.dj.MixMode
 import com.autodj.dj.MixService
 import com.autodj.dj.SetEnergy
 import com.autodj.dj.SfxDressing
+import com.autodj.dj.Taste
 import com.autodj.dj.VibePreview
 import com.autodj.model.TrackInfo
 import com.autodj.remote.ImportResult
@@ -31,6 +32,9 @@ import com.autodj.remote.RemotePlaylist
 import com.autodj.remote.StreamProviders
 import com.autodj.remote.StreamStore
 import com.autodj.remote.TrackSink
+import com.autodj.remote.RemoteTrack
+import com.autodj.remote.YtMusicSearch
+import com.autodj.remote.YouTubeStreams
 import com.autodj.ui.vis.VisualizerStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -155,6 +159,7 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     val engine: MixEngine = EngineHolder.get(app)
 
     init {
+        Taste.init(app)
         // The engine picks each song's party sounds (Latin, Arabic, Indian) by the language it's sung in.
         SfxDressing.languageOf = { t -> _library.value.firstOrNull { it.uri == t.uri }?.language }
         val saved = prefs.getString(KEY_URIS, "").orEmpty().lines().filter { it.isNotBlank() }
@@ -340,9 +345,79 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
     private class PlayingSet(val crate: String, val folderUri: String?, val label: String)
     private var playingSet: PlayingSet? = null
 
+    /** Hidden songs belong to no crate: they never play, from any source. */
     private fun belongs(t: TrackInfo, crate: String, folder: MusicFolder?) =
-        inCrate(t.genreFamily, crate) &&
+        !Taste.isHidden(t) && inCrate(t, crate) &&
             (folder == null || t.uri in folder.tracks)
+
+    /** Likes the playing song, or takes the like back. */
+    fun toggleLike(uri: String, title: String, artist: String) {
+        Taste.toggleLike(uri, title, artist)
+    }
+
+    /**
+     * Hides a song from every set: it leaves the set's songs to come and, when it's the one
+     * playing, mixes out at its next phrase.
+     */
+    fun hide(uri: String, title: String, artist: String) {
+        Taste.hide(uri, title, artist)
+        engine.dropTracks { Taste.isHidden(it) }
+        if (engine.state.value.current?.uri == uri) engine.skip()
+    }
+
+    /** Brings a hidden song back; it joins the playing set if it belongs there. */
+    fun unhide(uri: String, title: String, artist: String) {
+        Taste.unhide(uri, title, artist)
+        val id = Taste.idOf(uri)
+        val match = Taste.matchOf(title, artist)
+        _library.value.mapNotNull { it.info }
+            .filter { Taste.idOf(it.uri) == id || (match.isNotEmpty() && Taste.matchOf(it.title, it.artist) == match) }
+            .forEach(::offerToPlayingSet)
+    }
+
+    fun unhide(song: Taste.Song) = unhide(song.id, song.title, song.artist)
+
+    private val _madeForYou = MutableStateFlow<MadeForYou>(MadeForYou.Idle)
+    /** The first set built from the survey, while it is looked up on YouTube Music. */
+    val madeForYou: StateFlow<MadeForYou> = _madeForYou
+
+    /**
+     * Saves the survey and builds "Made for you" from it: top songs of each artist, then party
+     * songs in each language and hits of each genre, about [MADE_FOR_YOU_MAX] in all. Songs join the
+     * source as each search comes back, so analysis starts at once. Needs Android 13 (YouTube
+     * streaming); on older phones only the answers are saved.
+     */
+    fun buildMadeForYou(survey: Taste.Survey) {
+        Taste.saveSurvey(survey)
+        if (_madeForYou.value is MadeForYou.Building || !YouTubeStreams.supported()) return
+        val queries = survey.artists.map { it.name to 8 } +
+            survey.languages.map { "$it party songs" to 10 } +
+            survey.genres.map { "${genreQuery(it)} hits" to 6 }
+        if (queries.isEmpty()) return
+        _madeForYou.value = MadeForYou.Building(0)
+        viewModelScope.launch {
+            val found = linkedMapOf<String, RemoteTrack>()
+            for ((q, n) in queries) {
+                if (found.size >= MADE_FOR_YOU_MAX) break
+                val songs = withContext(Dispatchers.IO) { runCatching { YtMusicSearch.songs(q, n) }.getOrDefault(emptyList()) }
+                songs.filter { !Taste.isHidden(it.streamUrl, it.title, it.artist) }
+                    .forEach { if (found.size < MADE_FOR_YOU_MAX) found.putIfAbsent(it.providerTrackId, it) }
+                if (songs.isNotEmpty()) {
+                    importOrigin = survey.languages.firstOrNull()
+                    ingest(RemotePlaylist(MADE_FOR_YOU, "youtube", "made-for-you", "Made for you", found.values.toList()))
+                    importOrigin = null
+                }
+                _madeForYou.value = MadeForYou.Building(found.size)
+            }
+            _madeForYou.value = if (found.isEmpty()) MadeForYou.Failed else MadeForYou.Done(found.size)
+        }
+    }
+
+    private fun genreQuery(family: String) = when (family) {
+        Genres.BASS -> "dubstep bass"
+        "Pop & Dance" -> "dance pop"
+        else -> family.lowercase()
+    }
 
     /**
      * A song just finished analysing: if a set from its crate (and source) is playing, it joins
@@ -418,4 +493,15 @@ class DjViewModel(app: Application) : AndroidViewModel(app), TrackSink {
         const val KEY_VISUALIZER = "visualizer"
         const val KEY_FOLDERS = "folders"
     }
+}
+
+/** The link "Made for you" is kept under as a source. */
+const val MADE_FOR_YOU = "firethedj:made-for-you"
+private const val MADE_FOR_YOU_MAX = 60
+
+sealed interface MadeForYou {
+    data object Idle : MadeForYou
+    data class Building(val found: Int) : MadeForYou
+    data class Done(val songs: Int) : MadeForYou
+    data object Failed : MadeForYou
 }

@@ -281,8 +281,10 @@ internal val YT_RED = Color(0xFFFF4E45)
 private val imageCache = LruCache<String, ImageBitmap>(80)
 
 @Composable
-private fun rememberRemoteImage(url: String?): ImageBitmap? {
+internal fun rememberRemoteImage(url: String?): ImageBitmap? {
     val image by produceState(url?.let { imageCache.get(it) }, url) {
+        // A new url starts from what's cached for it, never the last url's picture.
+        value = url?.let { imageCache.get(it) }
         if (url == null || value != null) return@produceState
         value = withContext(Dispatchers.IO) { runCatching { download(url) }.getOrNull() }?.also { imageCache.put(url, it) }
     }

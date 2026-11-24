@@ -13,6 +13,7 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import org.schabi.newpipe.extractor.localization.Localization
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
+import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
@@ -199,6 +200,9 @@ object YouTubeStreams {
      * NewPipe 0.26 encodes URLs with `URLEncoder.encode(String, Charset)`, which Android only
      * has from 13 on; below that it fails with an Error that would take the app down.
      */
+    /** Whether this phone can stream from YouTube at all (see [requireSupported]). */
+    fun supported() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
     fun requireSupported() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) throw IOException("YouTube Music needs Android 13 or newer")
         init
@@ -388,12 +392,53 @@ private class NewPipeDownloader : Downloader() {
 internal fun albumName(name: String) = name.replace(Regex("""^(?:Album|Single|EP)\s*[^\p{L}\p{N}\s]\s*"""), "").ifBlank { name }
 
 /** YouTube Music's own search: anything public there, people's own playlists too, and albums and singles. */
+/** An artist found on YouTube Music: their name and picture. */
+data class YtArtist(val name: String, val photo: String?)
+
 object YtMusicSearch {
     /** Blocking; run off the main thread. Needs Android 13 (see [YouTubeStreams.requireSupported]). */
     fun playlists(query: String, max: Int = 20) = cards(query, YoutubeSearchQueryHandlerFactory.MUSIC_PLAYLISTS, max)
 
     /** Albums and singles together: the search doesn't say which is which. Same rules as [playlists]. */
     fun albums(query: String, max: Int = 20) = cards(query, YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS, max)
+
+    /** Artists by name, each with their YouTube Music picture when it has one. Same rules as [playlists]. */
+    fun artists(query: String, max: Int = 12): List<YtArtist> {
+        YouTubeStreams.requireSupported()
+        val search = ServiceList.YouTube.getSearchExtractor(query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_ARTISTS), "")
+            .apply { fetchPage() }
+        return search.initialPage.items.filterIsInstance<ChannelInfoItem>().mapNotNull { item ->
+            val name = item.name.orEmpty().trim().ifBlank { return@mapNotNull null }
+            YtArtist(name, item.thumbnails.maxByOrNull { it.width.toLong() * it.height }?.url?.let { if (it.startsWith("//")) "https:$it" else it }?.takeIf { it.startsWith("https://") })
+        }.distinctBy { it.name.lowercase() }.take(max)
+    }
+
+    /** Songs (not videos) for a search, ready to stream. Same rules as [playlists]. */
+    fun songs(query: String, max: Int = 10): List<RemoteTrack> {
+        YouTubeStreams.requireSupported()
+        val search = ServiceList.YouTube.getSearchExtractor(query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), "")
+            .apply { fetchPage() }
+        return search.initialPage.items.filterIsInstance<StreamInfoItem>().asSequence()
+            .filter { it.streamType != StreamType.LIVE_STREAM && it.streamType != StreamType.AUDIO_LIVE_STREAM }
+            .mapNotNull { item ->
+                val videoId = YouTubeLinks.videoId(item.url) ?: return@mapNotNull null
+                RemoteTrack(
+                    title = YouTubeLinks.cleanTitle(item.name.orEmpty()),
+                    artist = item.uploaderName.orEmpty().removeSuffix(" - Topic").trim(),
+                    streamUrl = YouTubeLinks.watchUrl(videoId),
+                    providerId = "youtube",
+                    providerTrackId = videoId,
+                    artworkUrl = item.thumbnails.maxByOrNull { it.width.toLong() * it.height }?.url?.takeIf { it.startsWith("https://") },
+                    durationSec = item.duration.takeIf { it > 0 }?.toDouble(),
+                    storable = false,
+                )
+            }
+            // A set wants songs, not 20-minute jukebox uploads.
+            .filter { (it.durationSec ?: 200.0) in 90.0..480.0 }
+            .distinctBy { it.providerTrackId }
+            .take(max)
+            .toList()
+    }
 
     private fun cards(query: String, filter: String, max: Int): List<YtPlaylistCard> {
         YouTubeStreams.requireSupported()

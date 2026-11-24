@@ -41,6 +41,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -105,7 +109,18 @@ const val ALL = "All"
 fun inCrate(family: String, crate: String) =
     family != Genres.UNCLASSIFIED && (crate == ALL || family in crate.split(com.autodj.dj.CRATE_SEP))
 
-fun crateLabel(crate: String) = if (crate == ALL) "All genres" else com.autodj.dj.cratesLabel(crate.split(com.autodj.dj.CRATE_SEP))
+/** The crate of songs the listener liked, from every genre. */
+const val LIKED = "Liked songs"
+
+/** Whether [t] is in [crate]: [LIKED] goes by the listener's likes, the rest by genre. */
+fun inCrate(t: TrackInfo, crate: String) =
+    if (crate == LIKED) com.autodj.dj.Taste.isLiked(t) else inCrate(t.genreFamily, crate)
+
+fun crateLabel(crate: String) = when (crate) {
+    ALL -> "All genres"
+    LIKED -> LIKED
+    else -> com.autodj.dj.cratesLabel(crate.split(com.autodj.dj.CRATE_SEP))
+}
 
 /** The Mix tab: your set (what it would make, the mode and Start), then the crates to pick from. */
 @Composable
@@ -142,18 +157,28 @@ fun MixScreen(
     val crates = Genres.families.filter { (counts[it] ?: 0) > 0 }.sortedByDescending { counts[it] ?: 0 }
     val largest = counts.filterKeys { it != Genres.UNCLASSIFIED }.maxByOrNull { it.value }?.key ?: ALL
     val picks = pickedCrate?.split(com.autodj.dj.CRATE_SEP).orEmpty()
-    val picked = if (ALL in picks) listOf(ALL) else crates.filter { it in picks }.ifEmpty { listOf(largest) }
+    val likedCount = ready.count { com.autodj.dj.Taste.isLiked(it) }
+    val picked = when {
+        ALL in picks -> listOf(ALL)
+        LIKED in picks && likedCount > 0 -> listOf(LIKED)
+        else -> crates.filter { it in picks }.ifEmpty { listOf(largest) }
+    }
     val crate = picked.joinToString(com.autodj.dj.CRATE_SEP)
     val allCount = ready.count { it.genreFamily != Genres.UNCLASSIFIED }
-    val mixCount = if (crate == ALL) allCount else picked.sumOf { counts[it] ?: 0 }
+    val mixCount = when (crate) {
+        ALL -> allCount
+        LIKED -> likedCount
+        else -> picked.sumOf { counts[it] ?: 0 }
+    }
     val mixable = crate != Genres.UNCLASSIFIED && mixCount > 0
     val analysing = inSource.count { it.status == AnalysisStatus.QUEUED || it.status == AnalysisStatus.ANALYZING }
     val unclassified = counts[Genres.UNCLASSIFIED] ?: 0
-    fun tracksOf(c: String) = ready.filter { inCrate(it.genreFamily, c) }
+    fun tracksOf(c: String) = ready.filter { inCrate(it, c) }
     // With Pick several on, a tap adds or removes a crate; the last one stays, so Start has something to play.
+    // All genres and Liked songs are sets of their own, never one of several.
     fun tapCrate(c: String) {
-        if (!pickSeveral || c == ALL) return onPickCrate(c)
-        val others = picked - ALL
+        if (!pickSeveral || c == ALL || c == LIKED) return onPickCrate(c)
+        val others = picked - ALL - LIKED
         val next = if (c in others) others - c else others + c
         if (next.isNotEmpty()) onPickCrate(next.joinToString(com.autodj.dj.CRATE_SEP))
     }
@@ -247,15 +272,19 @@ fun MixScreen(
             }
         } else Column(Modifier.tourTarget("crates"), verticalArrangement = Arrangement.spacedBy(if (big) 16.dp else 12.dp)) {
             val cardHeight = if (big) 176.dp else 132.dp
-            val cells: List<Pair<String, String>> = listOf(ALL to "${songs(allCount)} · across genres") +
-                crates.map { it to songs(counts[it] ?: 0) }
+            // Liked songs leads once there's a song liked, then All genres, then the genres.
+            val cells: List<Pair<String, String>> =
+                (if (likedCount > 0) listOf(LIKED to "${songs(likedCount)} · across genres") else emptyList()) +
+                    listOf(ALL to "${songs(allCount)} · across genres") +
+                    crates.map { it to songs(counts[it] ?: 0) }
             cells.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(if (big) 16.dp else 12.dp)) {
                     row.forEach { (c, sub) ->
                         CrateCard(
-                            if (c == ALL) "All genres" else c, sub, c in picked, if (c == ALL) allCount > 0 else true,
+                            crateLabel(c).takeIf { c == ALL || c == LIKED } ?: c, sub, c in picked, if (c == ALL) allCount > 0 else true,
                             coversFor(tracksOf(c), artwork), artwork, cardHeight, big, Modifier.weight(1f),
-                            checkbox = pickSeveral && c != ALL,
+                            checkbox = pickSeveral && c != ALL && c != LIKED,
+                            heart = c == LIKED,
                         ) { tapCrate(c) }
                     }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
@@ -472,6 +501,8 @@ private fun CrateCard(
     modifier: Modifier,
     /** Shows an empty ring while unpicked, so it reads as one of several choices. */
     checkbox: Boolean = false,
+    /** The Liked songs crate: an orange heart in place of the covers. */
+    heart: Boolean = false,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(if (big) 26.dp else 22.dp)
@@ -497,7 +528,11 @@ private fun CrateCard(
             .selectable(selected, interactionSource = interaction, indication = null, role = if (checkbox) Role.Checkbox else Role.RadioButton, onClick = onClick)
             .padding(if (big) 18.dp else 14.dp),
     ) {
-        if (covers.isNotEmpty()) CoverFan(covers, artwork, if (big) 56.dp else 40.dp, Modifier.align(Alignment.TopStart))
+        if (heart) Box(
+            Modifier.align(Alignment.TopStart).size(if (big) 52.dp else 40.dp).background(Glass.Ember, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Favorite, null, tint = Glass.OnAccent, modifier = Modifier.size(if (big) 28.dp else 22.dp)) }
+        else if (covers.isNotEmpty()) CoverFan(covers, artwork, if (big) 56.dp else 40.dp, Modifier.align(Alignment.TopStart))
         if (selected) Box(Modifier.align(Alignment.TopEnd).size(26.dp).background(Glass.Ember, CircleShape), contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Check, null, tint = Glass.OnAccent, modifier = Modifier.size(16.dp))
         } else if (checkbox) Box(Modifier.align(Alignment.TopEnd).size(26.dp).border(2.dp, Glass.Muted, CircleShape))
@@ -594,6 +629,30 @@ fun MusicScreen(
         )
     }
     val status = library.associateBy { it.uri }
+    // A source tapped in Your sources: only its songs show. Gone when the source is removed.
+    var pickedUri by rememberSaveable { mutableStateOf<String?>(null) }
+    val picked = folders.firstOrNull { it.uri == pickedUri }
+    val songs = if (picked == null) library else library.filter { it.uri in picked.tracks }
+    val pick: (MusicFolder) -> Unit = { pickedUri = if (pickedUri == it.uri) null else it.uri }
+    val songsHeading: @Composable (Modifier) -> Unit = { modifier ->
+        if (picked == null) {
+            GlassHeading(if (library.isEmpty()) "Songs" else "Songs · ${library.size}", modifier)
+        } else {
+            Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GlassHeading("Songs · ${picked.name} · ${songs.size}", Modifier.weight(1f))
+                Row(
+                    Modifier.height(36.dp).glass(CircleShape, Glass.FillStrong)
+                        .clickable(role = Role.Button, onClickLabel = "Show every song") { pickedUri = null }
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Show all", color = Glass.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Icon(Icons.Filled.Close, null, tint = Glass.Text, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
+    }
     val addTiles: @Composable () -> Unit = {
         Row(
             Modifier.fillMaxWidth().padding(bottom = 10.dp).height(56.dp).glass(RoundedCornerShape(18.dp))
@@ -641,17 +700,20 @@ fun MusicScreen(
                 if (folders.isNotEmpty()) {
                     GlassHeading("Your sources", Modifier.padding(start = 4.dp, top = 8.dp))
                     folders.forEachIndexed { i, f ->
-                        SourceRow(f, analysed(f), groupShape(i, folders.size), languages = languageSummary(f.tracks.mapNotNull { status[it]?.language })) { onRemoveFolder(f.uri) }
+                        SourceRow(f, analysed(f), groupShape(i, folders.size), languages = languageSummary(f.tracks.mapNotNull { status[it]?.language }),
+                            selected = f == picked, dimmed = picked != null && f != picked, onSelect = { pick(f) }) { onRemoveFolder(f.uri) }
                     }
                 }
                 clear(Modifier.padding(top = 8.dp))
             }
             Column(Modifier.weight(1f).fillMaxHeight().glass(RoundedCornerShape(28.dp), GlassOverContent).padding(horizontal = 18.dp, vertical = 14.dp)) {
-                Text(if (library.isEmpty()) "Songs" else "All songs · ${library.size}", color = Glass.Text, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+                if (picked == null) {
+                    Text(if (library.isEmpty()) "Songs" else "All songs · ${library.size}", color = Glass.Text, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+                } else songsHeading(Modifier.padding(start = 4.dp, bottom = 8.dp))
                 if (library.isEmpty()) empty()
                 LazyVerticalGrid(GridCells.Fixed(2), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    items(library, key = { it.uri }) { item -> TrackRow(item, artwork[item.uri], RoundedCornerShape(0.dp), onRemove, plain = true) }
+                    items(songs, key = { it.uri }) { item -> TrackRow(item, artwork[item.uri], RoundedCornerShape(0.dp), onRemove, plain = true) }
                 }
             }
         }
@@ -670,32 +732,46 @@ fun MusicScreen(
                 // Each source as a card with a collage of its covers, side by side.
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     folders.forEach { f ->
-                        SourceCard(f, analysed(f), artwork, languageSummary(f.tracks.mapNotNull { status[it]?.language })) { onRemoveFolder(f.uri) }
+                        SourceCard(f, analysed(f), artwork, languageSummary(f.tracks.mapNotNull { status[it]?.language }),
+                            selected = f == picked, dimmed = picked != null && f != picked, onSelect = { pick(f) }) { onRemoveFolder(f.uri) }
                     }
                 }
+                Text("Tap a source to see only its songs. Hold to remove it.", color = Glass.Muted, fontSize = 13.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp))
             }
         }
         item {
-            GlassHeading(if (library.isEmpty()) "Songs" else "Songs · ${library.size}", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+            songsHeading(Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
             if (library.isEmpty()) empty()
         }
-        itemsIndexed(library, key = { _, it -> it.uri }) { i, item ->
-            TrackRow(item, artwork[item.uri], groupShape(i, library.size), onRemove)
+        itemsIndexed(songs, key = { _, it -> it.uri }) { i, item ->
+            TrackRow(item, artwork[item.uri], groupShape(i, songs.size), onRemove)
         }
         item { clear(Modifier.padding(top = 24.dp)) }
     }
 }
 
-/** A folder or playlist as a card: a collage of its first covers, its name, and its songs (or how far analysis is). Long-press to remove. */
+/** A folder or playlist as a card: a collage of its first covers, its name, and its songs (or how far analysis is). Tap to show only its songs, long-press to remove. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SourceCard(folder: MusicFolder, analysed: Int, artwork: Map<String, String>, languages: String?, onRemove: () -> Unit) {
+private fun SourceCard(
+    folder: MusicFolder, analysed: Int, artwork: Map<String, String>, languages: String?,
+    selected: Boolean, dimmed: Boolean, onSelect: () -> Unit, onRemove: () -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     val total = folder.tracks.size
-    Box {
+    val shape = RoundedCornerShape(20.dp)
+    Box(Modifier.alpha(if (dimmed) 0.45f else 1f)) {
         Column(
-            Modifier.width(168.dp).glass(RoundedCornerShape(20.dp))
-                .combinedClickable(onClick = { menu = true }, onLongClick = { menu = true }, onClickLabel = "Options for ${folder.name}")
+            Modifier.width(168.dp)
+                .glass(shape, if (selected) Glass.FireSelected else Glass.Fill,
+                    if (selected) androidx.compose.ui.graphics.SolidColor(Glass.Ember) else Glass.Edge, if (selected) 2.dp else 1.dp)
+                .combinedClickable(
+                    onClick = onSelect, onLongClick = { menu = true },
+                    onClickLabel = if (selected) "Show every song" else "Show only songs from ${folder.name}",
+                    onLongClickLabel = "Options for ${folder.name}",
+                )
+                .semantics { this.selected = selected }
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -720,6 +796,9 @@ private fun SourceCard(folder: MusicFolder, analysed: Int, artwork: Map<String, 
                     Text(listOfNotNull(songs(total), languages).joinToString(" · "), color = Glass.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+        }
+        if (selected) Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(26.dp).background(Glass.Ember, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Check, null, tint = Glass.OnAccent, modifier = Modifier.size(16.dp))
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("Remove from FireTheDJ") }, onClick = {
@@ -754,7 +833,10 @@ private fun AddTile(kind: SourceKind, label: String, modifier: Modifier, onClick
 
 /** A folder or playlist: its kind, name, song count (or analysis progress) and a menu to remove it. */
 @Composable
-private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, languages: String? = null, onRemove: () -> Unit) {
+private fun SourceRow(
+    folder: MusicFolder, analysed: Int, shape: Shape, languages: String? = null,
+    selected: Boolean = false, dimmed: Boolean = false, onSelect: () -> Unit = {}, onRemove: () -> Unit,
+) {
     val kind = when {
         !folder.remote -> SourceKind.PHONE
         "youtube" in folder.uri -> SourceKind.YOUTUBE
@@ -765,7 +847,13 @@ private fun SourceRow(folder: MusicFolder, analysed: Int, shape: Shape, language
     val total = folder.tracks.size
     var menu by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().background(Glass.Fill, shape).padding(start = 14.dp, end = 4.dp).height(68.dp),
+        Modifier.fillMaxWidth().alpha(if (dimmed) 0.45f else 1f)
+            .background(if (selected) Glass.FireSelected else Glass.Fill, shape)
+            .then(if (selected) Modifier.border(2.dp, Glass.Ember, shape) else Modifier)
+            .clip(shape)
+            .clickable(role = Role.Button, onClickLabel = if (selected) "Show every song" else "Show only songs from ${folder.name}", onClick = onSelect)
+            .semantics { this.selected = selected }
+            .padding(start = 14.dp, end = 4.dp).height(68.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {

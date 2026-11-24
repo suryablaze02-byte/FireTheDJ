@@ -146,6 +146,12 @@ data class EngineState(
     val energy: SetEnergy = SetEnergy.PLANNED,
     /** Whether there are songs left that Change the vibe could re-pick. */
     val canChangeVibe: Boolean = false,
+    /** During a Double start: where it is ("Double drop in 0:26"), else null. */
+    val doubleCue: String? = null,
+    /** During a Double start: where the two drops land, in the playing song's time. */
+    val doubleDropSec: Double? = null,
+    /** During a Double start: when the first song is gone, in its own time. */
+    val doubleEndSec: Double? = null,
 )
 
 /** What a Change the vibe choice would make: the [songs] that fit of [total] left, and the song it would play [next]. */
@@ -200,6 +206,11 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private var mode = MixMode.SMOOTH
     private var mainEntryBar = 0
     private var perf: Performance? = null
+    /** Whether the next song gets a roll build into its drop; flips each song. */
+    private var showpieceNext = false
+
+    /** Waits for both decks of a Double start to be ready, then starts them together. */
+    private var doubleJob: Job? = null
     private var replayState = ReplayState.DONE
 
     /** The current track's key lift has happened (or it has none). */
@@ -225,6 +236,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
     private var baseSpeedB = 1.0
     private var phaseErrSec = 0.0
     private var lastAdjust = 0L
+    private var lastResync = 0L
     private var lastSpeedSet = 0L
     private var ticks = 0
     private var lastLoggedBeat = -1
@@ -317,16 +329,23 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val playing = if (energy == SetEnergy.BANGERS) SetShape.bangersOf(tracks) else tracks
         sidelined.addAll(tracks - playing.toSet())
         setSize = playing.size
-        val opener = SetPlanner.opener(playing, shape = shape)
+        // Two songs at the same tempo open together when a pair fits (the Double start).
+        val double = if (playing.size >= 2) DoubleStart.find(playing, playing) else null
+        if (double == null && playing.size >= 2) Log.i(TAG, "double start: no pair · ${DoubleStart.whyNot(playing, playing)}")
+        val opener = double?.a ?: SetPlanner.opener(playing, shape = shape)
         remaining.addAll(playing - opener)
         main = 0
-        mainEntryBar = opener.musicStartBar
         masterBpm = opener.bpm
-        decks[0].load(opener, musicStart(opener), 1.0, FxPlan.EMPTY)
-        beginTrack(decks[0], opener, opener.musicStartBar)
-        refreshQueue(opener)
-        // During a call the set is ready but waits, paused, instead of playing over it.
-        if (focus.request()) decks[0].player.play() else paused = true
+        if (double != null) {
+            startDouble(double)
+        } else {
+            mainEntryBar = opener.musicStartBar
+            decks[0].load(opener, musicStart(opener), 1.0, FxPlan.EMPTY)
+            beginTrack(decks[0], opener, opener.musicStartBar)
+            refreshQueue(opener)
+            // During a call the set is ready but waits, paused, instead of playing over it.
+            if (focus.request()) decks[0].player.play() else paused = true
+        }
         loop = scope.launch {
             var last = android.os.SystemClock.elapsedRealtime()
             while (isActive) {
@@ -399,6 +418,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         logHeard(decks[main].track)
         loop?.cancel()
         loop = null
+        doubleJob?.cancel()
+        doubleJob = null
         decks.forEach { it.unload() }
         plan = null
         perf = null
@@ -431,11 +452,60 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         decks.forEach { it.release() }
     }
 
+    /**
+     * Opens the set with [d]: both decks load at their run-up and wait until both are ready, so
+     * they start on the same beat. The pair then plays out as a planned mix: B is the next song,
+     * already in, and takes over when A has filtered out.
+     */
+    private fun startDouble(d: DoubleStart.Pair) {
+        val tr = DoubleStart.plan(d, mode)
+        val a = decks[0]
+        val b = decks[1]
+        mainEntryBar = d.aStartBar
+        heardMs = 0
+        perf = null
+        replayState = ReplayState.DONE
+        lifted = true
+        a.load(d.a, tr.startSec, 1.0, tr.aPlan)
+        baseSpeedB = tr.speedForB(d.a, d.b, 1.0)
+        b.load(d.b, tr.entrySec, baseSpeedB, tr.bPlan)
+        next = d.b
+        plan = tr
+        loaded = true
+        started = false
+        Log.i(
+            TAG,
+            "double start: \"${d.a.title}\" from bar ${d.aStartBar} + \"${d.b.title}\" from bar ${d.bStartBar}, " +
+                "drops at ${formatSec(d.a.barTime(d.aDropBar))} (${d.runUpBars} bars in), done ${formatSec(tr.endSec)}",
+        )
+        refreshQueue(d.a)
+        doubleJob = scope.launch {
+            // A stream can be slow or fail once and be reopened (see rescue): wait for both, so
+            // neither song joins late.
+            val until = SystemClock.uptimeMillis() + DOUBLE_READY_MS
+            while (SystemClock.uptimeMillis() < until && plan === tr && b.track != null &&
+                listOf(a, b).any { it.player.playbackState != Player.STATE_READY }
+            ) delay(20)
+            started = true
+            doubleJob = null
+            // During a call the set is ready but waits, paused, instead of playing over it.
+            if (focus.request()) {
+                a.player.play()
+                b.player.play()
+            } else {
+                paused = true
+            }
+            publish()
+        }
+    }
+
     /** Plans the tricks inside a track that has just become the main deck. */
     private fun beginTrack(deck: Deck, t: TrackInfo, entryBar: Int) {
         heardMs = 0
         // A hook replay is a treat: never on two tracks in a row.
-        val p = Performer.plan(t, entryBar, deck.speed, masterBpm, allowReplay = perf?.replay == null, mode = mode, lyrics = wordPlayLyrics(t))
+        // A roll build into a drop on every other song only: on every song it soon sounds like a habit.
+        showpieceNext = !showpieceNext
+        val p = Performer.plan(t, entryBar, deck.speed, masterBpm, allowReplay = perf?.replay == null, mode = mode, lyrics = wordPlayLyrics(t), showpiece = showpieceNext)
         perf = p
         Log.i(TAG, "track \"${t.title}\" from bar $entryBar · tricks: ${p.tricks.joinToString { "${it.label} @${formatSec(it.startSec)}" }.ifEmpty { "none" }}")
         replayState = if (p.replay != null) ReplayState.PENDING else ReplayState.DONE
@@ -494,6 +564,8 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         val a = decks[main]
         val b = decks[1 - main]
         val ta = a.track ?: return
+        // A Double start waits until both decks can start on the same beat.
+        if (doubleJob != null) return publish()
         if (paused) return publish()
         if (rescue(a, b, ta)) return publish()
 
@@ -588,6 +660,7 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
                 started = true
             }
             if (started) {
+                if (p.recipe == Recipe.DOUBLE_START) keepDoubleInStep(a, b, p, posA)
                 if (p.beatmatched) lockPhase(a, b, p.tempoMultiple)
                 if (posA >= p.endSec || aEnded) {
                     finishTransition(p)
@@ -952,6 +1025,26 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    /**
+     * During a Double start's run-up, puts B back where it should be against A when it is off by
+     * more than phase lock can fix (it joined late after a slow or failed stream), so the drops
+     * still land together. Never in the bar before the drop, where a jump would be heard.
+     */
+    private fun keepDoubleInStep(a: Deck, b: Deck, p: Transition, posA: Double) {
+        val ta = a.track ?: return
+        val tb = b.track ?: return
+        val drop = p.phases.firstOrNull()?.endSec ?: return
+        if (posA >= drop - ta.barSec || !b.player.isPlaying || !a.player.isPlaying) return
+        val now = SystemClock.uptimeMillis()
+        if (now - lastResync < RESYNC_MS) return
+        val want = p.entrySec + (posA - p.startSec) * (tb.beatSec / ta.beatSec)
+        val off = b.positionSec - want
+        if (abs(off) < RESYNC_SEC) return
+        lastResync = now
+        Log.i(TAG, "double start: B off by %.2f s, back in step".format(off))
+        b.player.seekTo((want * 1000).toLong())
+    }
+
     /** Applies the performance's speed lane (master-tempo glide, tempo push), rate-limited. */
     private fun followPerformanceSpeed(deck: Deck, pos: Double) {
         val p = perf ?: return
@@ -1068,6 +1161,21 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         publish()
     }
 
+    /**
+     * Takes the songs [drop] picks out of the songs still to come (a hidden song). The song
+     * playing and the one already lined up stay: the playing one leaves by [skip].
+     */
+    fun dropTracks(drop: (TrackInfo) -> Boolean) {
+        if (loop == null) return
+        val gone = remaining.filter { it != next && drop(it) }
+        remaining.removeAll(gone.toSet())
+        val side = sidelined.removeAll(drop)
+        if (gone.isEmpty() && !side) return
+        setSize -= gone.size
+        decks[main].track?.let(::refreshQueue)
+        publish()
+    }
+
     private fun refreshQueue(current: TrackInfo) {
         queueJob?.cancel()
         val n = next
@@ -1148,7 +1256,21 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
             canFullSong = next != null && !started && (p == null || posA < p.startSec) && skipAsked == 0,
             energy = energy,
             canChangeVibe = remaining.size + sidelined.size > 0,
+            doubleCue = p?.takeIf { it.recipe == Recipe.DOUBLE_START && mixing }?.let { doubleCue(it, posA, a.speed) },
+            doubleDropSec = p?.takeIf { it.recipe == Recipe.DOUBLE_START && mixing }?.phases?.getOrNull(1)?.startSec,
+            doubleEndSec = p?.takeIf { it.recipe == Recipe.DOUBLE_START && mixing }?.endSec,
         )
+    }
+
+    /** Where a Double start is: counting down to the drop, then to A's way out. */
+    private fun doubleCue(p: Transition, posA: Double, speed: Double): String {
+        val drop = p.phases.getOrNull(1)?.startSec ?: p.startSec
+        val out = p.phases.getOrNull(2)?.startSec ?: p.endSec
+        return when {
+            posA < drop -> "Double drop in ${formatSec((drop - posA) / speed)}"
+            posA < out -> "Both dropping · A out in ${formatSec((out - posA) / speed)}"
+            else -> "A filtering out"
+        }
     }
 
     /**
@@ -1208,6 +1330,13 @@ class MixEngine(context: Context, private val scope: CoroutineScope) {
         const val ADJUST_MS = 150L
         const val LOCK_STEP = 0.005
         const val PRELOAD_SEC = 8.0
+
+        /** How long a Double start waits for both decks to be ready before starting anyway. */
+        const val DOUBLE_READY_MS = 15000L
+
+        /** B further than this from its place in a Double start is put back (phase lock covers less). */
+        const val RESYNC_SEC = 0.12
+        const val RESYNC_MS = 2000L
         const val REPLAY_PRELOAD_SEC = 6.0
         const val PUBLISH_EVERY = 3
 

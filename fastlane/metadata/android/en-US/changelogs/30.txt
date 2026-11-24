@@ -1,0 +1,6 @@
+2.5.0
+- Double start: a set can open with two songs together, drops landing on the same beat.
+- Weave: a new Trickster mix where the next song cuts in and out before it lands.
+- Taste survey on first launch builds a Made for you set.
+- Like and dislike, with a Liked songs crate and Hidden songs in Settings.
+- The Mixing screen is gone; Now Playing shows the mix.

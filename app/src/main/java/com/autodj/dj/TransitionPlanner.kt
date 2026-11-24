@@ -116,15 +116,19 @@ object TransitionPlanner {
         val family = styleFamily ?: b.genreFamily
         val multiple = tempoMultiple(a.bpm, b.bpm)
         val speed = a.bpm * multiple / b.bpm
-        val beatmatched = abs(speed - 1) <= MAX_STRETCH
+        // A doubted tempo (the beat finder flipped between readings) can't be beat-matched: such a
+        // song only gets a clean cut, which doesn't need the two beats or bar grids to agree.
+        val unsure = a.tempoUnsure || b.tempoUnsure
+        val beatmatched = abs(speed - 1) <= MAX_STRETCH && !unsure
         // Word play first: when both songs share a word in the right places, that's the showpiece.
         // Never twice running, so it stays a surprise.
-        if (exitAt == null && ((forced == null && history.lastOrNull() != Recipe.WORD_PLAY) || forced == Recipe.WORD_PLAY)) {
+        if (exitAt == null && ((forced == null && !unsure && history.lastOrNull() != Recipe.WORD_PLAY) || forced == Recipe.WORD_PLAY)) {
             wordPlay(a, aEntryBar, nowSec, b, lyrics, mode, multiple, speed, aPitchSemis)?.let { return it }
         } else {
             wordPlayNote = when {
                 exitAt != null -> "a skip was asked for"
                 forced != null -> "a ${forced.label} was asked for"
+                unsure -> "a song's tempo is unsure"
                 else -> "the last mix was word play"
             }
         }
@@ -137,6 +141,8 @@ object TransitionPlanner {
         val (shift, keysFit) = keyShift(a, aPitchSemis, b)
         val ranked: List<Pair<Recipe, Double>> = if (forced != null) {
             listOf(forced to 0.0)
+        } else if (unsure && !blendOnly) {
+            listOf(Recipe.HARD_CUT to 0.0)
         } else {
             DecisionEngine.scores(a, b, beatmatched, speed, history, keysFit, mode, family)
                 .mapValues { (r, s) -> if (lift == 2 && r.cut) s + LIFT_CUT_BONUS else s }
@@ -202,7 +208,8 @@ object TransitionPlanner {
         val turn = Math.floorMod((a.uri + b.uri).hashCode(), 3)
         val drum = SfxDressing.drum(if (SfxDressing.regional(a)) a else b, turn)
         val raw = RecipeBuilder(a, b, a.barTime(c.exitBar), b.barTime(c.entryBar), multiple, beatmatched)
-            .build(c.recipe, c.mixBars, rampBars, rampTo = 1 / speed, drum = drum)
+            // Trickster keeps the vocal swap short and clean: a long overlap of two half-songs sounds muffled.
+            .build(c.recipe, c.mixBars, rampBars, rampTo = 1 / speed, drum = drum, short = mode == MixMode.TRICKSTER)
         // A hard cut is the clean move, and a drum-fill cut brings its own drums.
         val dressed = mode == MixMode.TRICKSTER && c.recipe != Recipe.HARD_CUT && c.recipe != Recipe.DRUM_FILL_CUT
         val built = if (dressed) withSoundEffects(raw, a, b, c, entrySec = b.barTime(c.entryBar), family = family) else raw
@@ -532,7 +539,12 @@ object TransitionPlanner {
         val exit = a.barTime(c.exitBar)
         // B's big moment: its drop for a bass drop; a blend builds into its bass swap, halfway
         // through, and the hit lands on the swap; a cut hits on B's first beat.
-        val swapBars = if (!c.recipe.cut && c.recipe != Recipe.BASS_DROP) c.mixBars / 2 else 0
+        // A weave's moment is B landing, at its end.
+        val swapBars = when {
+            c.recipe == Recipe.WEAVE -> c.mixBars
+            !c.recipe.cut && c.recipe != Recipe.BASS_DROP -> c.mixBars / 2
+            else -> 0
+        }
         val bHit = if (c.recipe == Recipe.BASS_DROP) b.barTime(b.introEndBar) else entrySec + swapBars * b.barSec
         val aHit = if (c.recipe == Recipe.BASS_DROP) exit + (c.mixBars - 1) * a.barSec else exit + swapBars * a.barSec
         // Sized to the moment: as long a build as A has room for, as loud as the music there.
@@ -559,6 +571,7 @@ object TransitionPlanner {
         recipe == Recipe.VOCAL_SWAP -> listOf(12)
         recipe == Recipe.ACAPELLA_MASHUP || recipe == Recipe.VOCAL_CARRY -> listOf(16)
         recipe == Recipe.BREAKDOWN_SWAP -> listOf(8)
+        recipe == Recipe.WEAVE -> listOf(8)
         // Different tempos can only overlap briefly.
         !beatmatched -> listOf(4)
         recipe in GENRE_LENGTH_BLENDS || recipe == Recipe.LOOP_MIX -> lengths.options
@@ -608,6 +621,7 @@ object TransitionPlanner {
             recipe == Recipe.ACAPELLA_MASHUP || recipe == Recipe.VOCAL_CARRY -> exit + 8
             recipe == Recipe.BASS_DROP -> exit + mix - 1
             recipe == Recipe.BREAKDOWN_SWAP -> exit + 2
+            recipe == Recipe.WEAVE -> exit + mix
             else -> exit + min(mix / 2, 8)
         }
         val played = a.barTime(handover) - a.barTime(aEntryBar)

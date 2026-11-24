@@ -1,5 +1,9 @@
 package com.autodj.ui
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import com.autodj.dj.Taste
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -104,7 +108,7 @@ import kotlinx.coroutines.withContext
 
 /** Settings: updates, analysis, what's new, supporting FireTheDJ, and where it comes from. */
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onEditTaste: () -> Unit = {}, onUnhide: (Taste.Song) -> Unit = { Taste.unhide(it.id) }) {
     val context = LocalContext.current
     val state by Updates.state.collectAsStateWithLifecycle()
     val checked by Updates.lastChecked.collectAsStateWithLifecycle()
@@ -129,6 +133,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                     "Now Playing keeps the song's colour either way.",
                 color = Glass.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp),
             )
+
+            YourTaste(onEditTaste, onUnhide)
 
             if (remember { Stems.supported(context) }) {
                 GlassHeading("Mixing & stems", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
@@ -728,5 +734,107 @@ private fun checkedLabel(at: Long): String {
         min < 60 -> "Checked $min min ago"
         min < 24 * 60 -> "Checked ${min / 60} h ago"
         else -> "Checked ${min / (24 * 60)} days ago"
+    }
+}
+
+/**
+ * Your taste: the survey's answers (Edit opens it again), how many songs are liked, and the
+ * hidden songs, which never play in any set until unhidden here.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun YourTaste(onEdit: () -> Unit, onUnhide: (Taste.Song) -> Unit) {
+    val version by Taste.version.collectAsStateWithLifecycle()
+    val survey = remember(version) { Taste.survey() }
+    val liked = remember(version) { Taste.likedSongs().size }
+    val hidden = remember(version) { Taste.hiddenSongs() }
+    GlassHeading("Your taste", Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp))
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp))) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (survey == null || (survey.languages + survey.genres).isEmpty() && survey.artists.isEmpty()) {
+                        Text("Tell the DJ what you like", color = Glass.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Languages, genres and artists. It builds a set made for you.", color = Glass.Muted, fontSize = 13.sp, lineHeight = 18.sp)
+                    } else {
+                        TasteLine("Languages", survey.languages)
+                        TasteLine("Genres", survey.genres)
+                        if (survey.artists.isNotEmpty()) {
+                            Text("ARTISTS", color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                                survey.artists.take(6).forEach { a -> TasteAvatar(a) }
+                                if (survey.artists.size > 6) {
+                                    Box(Modifier.size(36.dp).clip(CircleShape).background(Glass.FillStrong), contentAlignment = Alignment.Center) {
+                                        Text("+${survey.artists.size - 6}", color = Glass.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Box(
+                    Modifier.padding(start = 12.dp).height(36.dp).floatingGlass(RoundedCornerShape(18.dp), Glass.FillStrong, elevation = 2.dp)
+                        .clickable(role = Role.Button, onClick = onEdit).padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (survey == null) "Start" else "Edit", color = Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+        Divider()
+        SettingRow(
+            "Liked songs", if (liked == 1) "1 song" else "$liked songs",
+            icon = { IconTile(Glass.Ember) { Icon(Icons.Filled.Favorite, null, tint = Glass.OnAccent, modifier = Modifier.size(18.dp)) } },
+        ) { Text(if (liked >= 2) "A crate in Mix" else "Like 2 to mix", color = Glass.Muted, fontSize = 13.sp) }
+    }
+    if (hidden.isNotEmpty()) {
+        Collapsible("Hidden songs · ${hidden.size}", "Never played in any set, from any source.", Modifier.padding(top = 12.dp)) {
+            Column(Modifier.fillMaxWidth()) {
+                hidden.forEachIndexed { i, song ->
+                    if (i > 0) Divider()
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(song.title, color = Glass.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val from = if (song.id.startsWith("yt:")) "YouTube" else if (song.id.startsWith("http")) "Stream" else "This phone"
+                            Text(listOf(song.artist, from).filter { it.isNotBlank() }.joinToString(" · "), color = Glass.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(
+                            "Unhide", color = Glass.EmberText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button) { onUnhide(song) }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TasteLine(label: String, items: List<String>) {
+    if (items.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label.uppercase(), color = Glass.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items.forEach {
+                Box(Modifier.height(30.dp).clip(RoundedCornerShape(15.dp)).background(Glass.FireSelected).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                    Text(it, color = Glass.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TasteAvatar(a: Taste.Artist) {
+    val image = rememberRemoteImage(a.photo)
+    Box(
+        Modifier.size(36.dp).clip(CircleShape).background(Glass.FillStrong).border(2.dp, Glass.Sheet, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (image != null) androidx.compose.foundation.Image(image, a.name, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        else Text(a.name.take(1).uppercase(), color = Glass.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }

@@ -151,7 +151,7 @@ internal fun GlassRecord(artworkPath: String?, seed: String, title: String) {
 }
 
 @Composable
-private fun FxTag(label: String, color: Color) {
+internal fun FxTag(label: String, color: Color) {
     Row(
         Modifier.background(VisInk.Bg.copy(alpha = 0.8f), RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,

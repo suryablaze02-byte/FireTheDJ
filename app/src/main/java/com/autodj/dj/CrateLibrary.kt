@@ -25,6 +25,7 @@ class CrateLibrary(context: Context) {
 
     init {
         SponsorBlock.init(context)
+        Taste.init(context)
     }
 
     /** One crate on offer: a genre family, every genre ([family] null), or [YOUR_SET]. */
@@ -34,11 +35,15 @@ class CrateLibrary(context: Context) {
 
     /** Blocking (reads the analysis files); run off the main thread. The crates last mixed together on the phone, "All genres", then the biggest crates first. */
     fun crates(): List<Crate> {
-        val tracks = prefs.getString("uris", "").orEmpty().lines().filter { it.isNotBlank() }
+        // Hidden songs never play, from any crate.
+        val all = prefs.getString("uris", "").orEmpty().lines().filter { it.isNotBlank() }
             .mapNotNull { cache.get(it) }
             .map(::withNonMusic)
-            .filter { it.genreFamily != Genres.UNCLASSIFIED }
-        if (tracks.isEmpty()) return emptyList()
+            .filter { !Taste.isHidden(it) }
+        val liked = all.filter { Taste.isLiked(it) }
+        val likedCrate = if (liked.size < 2) emptyList() else listOf(Crate(LIKED, "Liked songs", liked))
+        val tracks = all.filter { it.genreFamily != Genres.UNCLASSIFIED }
+        if (tracks.isEmpty()) return likedCrate
         val families = tracks.groupBy { it.genreFamily }
             .map { (family, list) -> Crate(family, family, list) }
             .sortedByDescending { it.tracks.size }
@@ -46,7 +51,7 @@ class CrateLibrary(context: Context) {
         val picked = families.filter { it.family in picks }
         val yourSet = if (picked.size < 2) emptyList()
             else listOf(Crate(YOUR_SET, cratesLabel(picked.map { it.label }), picked.flatMap { it.tracks }))
-        return yourSet + Crate(null, "All genres", tracks) + families
+        return yourSet + likedCrate + Crate(null, "All genres", tracks) + families
     }
 
     /** A YouTube upload's non-music parts, as last looked up (no lookup here: the app's analysis does that). */
@@ -66,6 +71,7 @@ class CrateLibrary(context: Context) {
         const val ROOT = "root"
         const val PREFIX = "crate:"
         const val YOUR_SET = "your set"
+        const val LIKED = "liked"
         private const val ALL = "all"
     }
 }

@@ -175,9 +175,6 @@ object Performer {
     /** Phrase fills per track at most. */
     private const val MAX_FILLS = 6
 
-    /** The rise in energy a phrase start needs to stand in for a drop. */
-    private const val MIN_LIFT = 0.1
-
     /** A drop's bass boost, dB. */
     private const val BOOST_DB = 5f
 
@@ -202,6 +199,8 @@ object Performer {
         mode: MixMode = MixMode.SMOOTH,
         /** The track's timed words, for word loops into drops; null plays the plain rolls. */
         lyrics: TimedLyrics? = null,
+        /** Trickster: whether this song gets a roll build into its drop (the set alternates). */
+        showpiece: Boolean = true,
     ): Performance {
         val trickster = mode == MixMode.TRICKSTER
         val bar = t.barSec
@@ -234,16 +233,14 @@ object Performer {
             return Performance(events, Lane(speedRamps, startSpeed.toFloat()), null, tricks, target)
         }
 
-        // Roll builds into drops: quiet run-up, then the energy lands on a phrase start, with a
-        // siren or riser over the build and a horn and impact on the drop.
-        val drops = (entryBar + 8 until t.outroStartBar)
+        // The song's one real drop: quiet run-up, then the energy lands on a phrase start, with a
+        // siren or riser over the build and a horn and impact on the drop. Never in the intro or the
+        // song's first 16 bars; a song without a clear drop gets none. The roll build into it only on [showpiece]
+        // songs (every other one), so it stays a treat, not a habit.
+        // (The beat coming in after the intro is the song starting, not a drop.)
+        val drops = (maxOf(entryBar + 16, t.introEndBar + 1) until t.outroStartBar)
             .filter { t.isPhraseStart(it) && t.energyIn(it - 4, it) < 0.65 && t.energyIn(it, it + 4) >= 0.85 }
-            .take(2)
-            // Every song gets a showpiece: without a clear drop, its biggest lift in energy stands in for one.
-            .ifEmpty {
-                val lift = { b: Int -> t.energyIn(b, b + 4) - t.energyIn(b - 4, b) }
-                listOfNotNull((entryBar + 16 until t.outroStartBar - 8).filter { t.isPhraseStart(it) }.maxByOrNull(lift)?.takeIf { lift(it) >= MIN_LIFT })
-            }
+            .take(1)
         val dressTurn = Math.floorMod(t.uri.hashCode(), 3)
         for ((n, d) in drops.withIndex()) {
             val dSec = t.barTime(d)
@@ -259,7 +256,9 @@ object Performer {
             val rollEnd = if (tapeStop) dSec - 2 * rollBeat else dSec
             // The last word sung before the drop, looped and tightening into it; else a roll that
             // tightens and rises in pitch as it goes, the way festival builds climb.
-            val build = if (word != null) {
+            val build = if (!showpiece) {
+                emptyList()
+            } else if (word != null) {
                 val loops = wordLoop(t, word, dSec).filter { it.start < rollEnd }.map { if (it.end > rollEnd) FxEvent(it.type, it.start, rollEnd, it.from, it.to, it.p1, it.p2) else it }
                 // From stems, the loop takes just the sung word: a clean a cappella stutter into the drop.
                 loops + FxEvent(FxType.STEM_ACAPELLA, loops.first().start, rollEnd)
@@ -272,27 +271,32 @@ object Performer {
                 ).filter { it.start < rollEnd }
             }
             events += build
-            events += FxEvent(FxType.HIGH_PASS, dSec - 2 * rollBar, dSec, 0f, 0.55f)
+            if (build.isNotEmpty()) events += FxEvent(FxType.HIGH_PASS, dSec - 2 * rollBar, dSec, 0f, 0.55f)
             // Build as long as the quiet run-up, landing with a hit sized to the drop.
             events += SfxDressing.build(t, d, SfxDressing.buildBars(t, d), dressTurn + n)
             events += SfxDressing.hit(t, d, dressTurn + n)
-            events += when (setup) {
+            val setupEvent = when (setup) {
                 0 -> FxEvent(FxType.MUTE, dSec - rollBeat / 2, dSec)
                 1 -> FxEvent(FxType.BASS_KILL, dSec - rollBar, dSec)
                 else -> FxEvent(FxType.BRAKE, dSec - 2 * rollBeat, dSec)
             }
+            events += setupEvent
             // The first drop gets a bass boost to ride on for a phrase, easing back.
             if (n == 0) {
                 events += FxEvent(FxType.BASS_BOOST, dSec, dSec + 8 * bar, 1f, 0.3f, p1 = BOOST_DB)
                 tricks += Trick("Bass boost", dSec, dSec + 8 * bar)
             }
-            val into = if (word != null) "Word loop “${word.text}”" else "Rising roll"
+            val into = when {
+                build.isEmpty() -> null
+                word != null -> "Word loop “${word.text}”"
+                else -> "Rising roll"
+            }
             val how = when (setup) {
                 0 -> "gap"
                 1 -> "bass kill"
                 else -> "tape stop"
             }
-            tricks += Trick("$into · $how · drop", build.minOf { it.start }, dSec + beat)
+            tricks += Trick(listOfNotNull(into, how, "drop").joinToString(" · "), (build + setupEvent).minOf { it.start }, dSec + beat)
         }
 
         // Hook replay: needs room after it, and must not collide with a roll build. Jumping back

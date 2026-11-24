@@ -14,6 +14,29 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.5.0",
+            "Double start, the Weave, a taste survey and like/dislike.",
+            listOf(
+                Section(
+                    "What's new",
+                    listOf(
+                        Change("Double start", "A set can open with two songs at once: both at full volume from the first second, timed so their drops land on the same beat. In Trickster the second song cuts out and back in every few bars on the way. Now Playing shows both as scrolling waveforms with the drop marked."),
+                        Change("Weave", "A new Trickster mix. The next song plays over the current one at full volume, cutting out on the last bar of every four, then lands on the one with its bass and vocal as the old song stops."),
+                        Change("Your taste", "On first launch, pick your languages, genres and artists, and FireTheDJ builds a Made for you set from YouTube Music. Skip it, or change it later in Settings › Your taste."),
+                        Change("Like and dislike", "Heart a song to add it to the new Liked songs crate. Thumbs down mixes it out early and keeps it out of every set and source; undo from the message, or see Hidden songs in Settings."),
+                    ),
+                ),
+                Section(
+                    "Better",
+                    listOf(
+                        Change("One screen while mixing", "The separate Mixing screen is gone. Now Playing shows what the mix is doing."),
+                        Change("Drops that are real drops", "Trickster's drop tricks only land on a song's real drop, never in its intro, and the rolling build into it comes every other song so it stays a treat."),
+                        Change("Steadier mixes", "Songs whose tempo can't be read reliably are matched last, and a loaded song no longer starts a few seconds early under the playing one."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.4.1",
             "Settings is back on the TV.",
             listOf(

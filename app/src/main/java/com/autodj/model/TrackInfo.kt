@@ -112,6 +112,21 @@ class TrackInfo(
     fun steadyIn(fromSec: Double, toSec: Double) =
         knownTempos(fromSec, toSec).all { kotlin.math.abs(it / bpm - 1) <= 0.03 }
 
+    /**
+     * True when the tempo map often disagrees with the main tempo (not counting double or half
+     * time) and keeps flipping back and forth: the beat finder wavered between readings, such
+     * as 93 and 124 BPM, and the main tempo can't be trusted for matching beats. One different
+     * stretch (a slow intro) is a real tempo change, not doubt.
+     */
+    val tempoUnsure: Boolean get() {
+        val known = tempoMap.filter { it > 0f }
+        if (known.size < 4 || bpm <= 0) return false
+        val agrees = known.map { t -> listOf(1.0, 2.0, 0.5).any { m -> kotlin.math.abs(t * m / bpm - 1) <= UNSURE_TOLERANCE } }
+        val off = agrees.count { !it }
+        val flips = agrees.zipWithNext().count { (x, y) -> x != y }
+        return off >= UNSURE_SHARE * known.size && flips >= UNSURE_FLIPS
+    }
+
     /** Tempo where the next track would come in: its first minute. */
     val startBpm get() = tempoIn(0.0, 60.0)
 
@@ -140,6 +155,15 @@ class TrackInfo(
     fun isPhraseStart(bar: Int) = Math.floorMod(bar - phraseOffsetBars, 8) == 0
 
     companion object {
+        /** How far a local tempo may stray from the main one (or its double or half) and still agree. */
+        private const val UNSURE_TOLERANCE = 0.06
+
+        /** The share of the tempo map that must disagree for the main tempo to be doubted. */
+        private const val UNSURE_SHARE = 0.2
+
+        /** Switches between agreeing and not in the tempo map that make it wavering, not a section change. */
+        private const val UNSURE_FLIPS = 3
+
         /** Marked parts shorter than this are ignored: a breath of talk isn't worth losing music over. */
         private const val MIN_PART_SEC = 1.5
 

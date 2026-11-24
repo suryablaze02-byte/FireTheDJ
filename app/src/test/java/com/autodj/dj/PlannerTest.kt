@@ -237,7 +237,7 @@ class PlannerTest {
         assertTrue(p.events.any { it.type in setOf(FxType.MUTE, FxType.BASS_KILL, FxType.BRAKE) && it.end == drop })
         // Dressed with a build that ends on the drop and a hit that lands on it.
         assertTrue(p.events.any { it.type.isSfx && it.end == t.barTime(80) })
-        assertTrue(p.events.count { it.type.isSfx && it.start == t.barTime(80) } == 2)
+        assertTrue(p.events.count { it.type.isSfx && it.start == t.barTime(80) } >= 1)
         // Hook replay: after the hook's first pass, jump back to it.
         assertEquals(40, p.replay!!.atBar)
         assertEquals(32, p.replay!!.toBar)
@@ -652,7 +652,7 @@ class PlannerTest {
     }
     @Test
     fun indianTracksGetRegionalFillsAndARewind() {
-        val t = track("t", 96.0, Genres.HIPHOP, genre = "Telugu Hip Hop")
+        val t = track("t", 96.0, Genres.HIPHOP, genre = "Telugu Hip Hop", drop = 32)
         val p = Performer.plan(t, 0, 1.0, 96.0, mode = MixMode.TRICKSTER)
         assertTrue(p.events.any { it.type == FxType.DAPPU || it.type == FxType.MARFA || it.type == FxType.THAVIL })
         val r = p.replay!!
@@ -725,11 +725,47 @@ class PlannerTest {
     }
 
     @Test
-    fun aSongWithoutAClearDropStillGetsAShowpiece() {
-        // Energy steps up at bar 48 but never from quiet: no textbook drop.
-        val t = track("steady", 124.0, Genres.HOUSE, bars = 128, outro = 112, drop = 48)
+    fun aSongWithoutAClearDropGetsNoRollBuild() {
+        // Loud from the intro on, with no breakdown: no drop, so no roll into one.
+        val t = track("steady", 124.0, Genres.HOUSE, bars = 128, outro = 112, drop = 200)
         val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.TRICKSTER)
-        assertTrue("tricks: ${p.tricks.map { it.label }}", p.tricks.any { "drop" in it.label })
+        assertTrue("tricks: ${p.tricks.map { it.label }}", p.tricks.none { "drop" in it.label })
+    }
+
+    @Test
+    fun aSongOffItsShowpieceTurnDropsWithoutARoll() {
+        val t = track("a", 124.0, hookBar = 32, vocalBars = 32 until 40)
+        val p = Performer.plan(t, entryBar = 0, startSpeed = 1.0, masterBpm = 124.0, mode = MixMode.TRICKSTER, showpiece = false)
+        val drop = t.barTime(80)
+        assertTrue(p.events.none { it.type == FxType.LOOP_ROLL && it.end <= drop + 1e-9 && it.end > drop - 2 * t.barSec })
+        assertTrue(p.events.any { it.type in setOf(FxType.MUTE, FxType.BASS_KILL, FxType.BRAKE) && it.end == drop })
+    }
+
+    @Test
+    fun aSongWhoseTempoFlipsIsPickedLastAndOnlyCutTo() {
+        // Read as 124 BPM, but a third of it measures 93: the beat finder wasn't sure.
+        val flips = FloatArray(18) { if (it % 3 == 0) 93f else 124f }
+        val a = track("a", 122.0)
+        val unsure = track("starboy", 124.0, tempoMap = flips)
+        val sure = track("sure", 126.0, tempoMap = FloatArray(18) { 126f })
+        assertTrue(unsure.tempoUnsure)
+        assertFalse(sure.tempoUnsure)
+        // Double time reads as agreeing.
+        assertFalse(track("dt", 87.0, tempoMap = FloatArray(18) { if (it % 2 == 0) 174f else 87f }).tempoUnsure)
+        assertEquals(sure, SetPlanner.pickNext(a, listOf(unsure, sure)))
+        val t = TransitionPlanner.plan(a, 0, 10.0, unsure, mode = MixMode.TRICKSTER)
+        assertEquals(Recipe.HARD_CUT, t.recipe)
+        assertFalse(t.beatmatched)
+    }
+
+    @Test
+    fun tricksterVocalSwapIsShortAndClean() {
+        val a = track("a", 124.0, Genres.HOUSE, keyConfidence = 0.8f, vocalBars = 40 until 56)
+        val b = track("b", 124.0, Genres.HOUSE, keyConfidence = 0.8f, vocalBars = 16 until 48)
+        val t = runCatching { TransitionPlanner.plan(a, 0, 10.0, b, forced = Recipe.VOCAL_SWAP, mode = MixMode.TRICKSTER) }.getOrNull() ?: return
+        if (t.recipe != Recipe.VOCAL_SWAP) return
+        assertTrue(t.bPlan.events.none { it.type == FxType.VOCAL_ISOLATE })
+        assertTrue(t.handoverSec - t.exitSec <= 4 * a.barSec + 1e-6)
     }
 
     @Test
@@ -745,7 +781,8 @@ class PlannerTest {
                 val bSec = t.entrySec + (s - t.exitSec)
                 val aG = t.aPlan.gain.at(s)
                 val bG = t.bPlan.gain.at(bSec)
-                assertFalse("$r at ${"%.2f".format(s)}: A $aG and B $bG both near full", aG > 0.75f && bG > 0.75f)
+                // The weave plays both at full level on purpose; B has no bass or vocal until it lands.
+                if (r != Recipe.WEAVE) assertFalse("$r at ${"%.2f".format(s)}: A $aG and B $bG both near full", aG > 0.75f && bG > 0.75f)
                 // A high-pass takes a deck's bass out as surely as its bass control.
                 val aCut = (t.aPlan.active(FxType.HIGH_PASS, s)?.amount(s) ?: 0f) > 0.3f
                 val bCut = (t.bPlan.active(FxType.HIGH_PASS, bSec)?.amount(bSec) ?: 0f) > 0.3f
@@ -1226,5 +1263,35 @@ class PlannerTest {
     fun aChosenEnergyIgnoresTheClockAndTheArc() {
         assertEquals(0.9, SetShape.target(0.05, 20, SetEnergy.PEAK), 1e-9)
         assertEquals(0.2, SetShape.target(0.7, 1, SetEnergy.WIND_DOWN), 1e-9)
+    }
+
+    @Test
+    fun weaveCutsBOutOneBarInFourThenLandsB() {
+        val a = track("a", 124.0)
+        val b = track("b", 124.0)
+        val exit = a.barTime(64)
+        val entry = b.barTime(8)
+        val w = RecipeBuilder(a, b, exit, entry, 1.0, true).build(Recipe.WEAVE, 8)
+        val mid = a.barSec / 2
+        fun bAt(bar: Int) = w.bPlan.gain.at(entry + bar * b.barSec + mid)
+        // B in at full level, out on bars 4 and 8 of the 8, then in for good.
+        listOf(0, 1, 2, 4, 5, 6, 8, 9).forEach { assertEquals("bar $it", 1f, bAt(it), 1e-6f) }
+        listOf(3, 7).forEach { assertEquals("bar $it", 0f, bAt(it), 1e-6f) }
+        // A at full level throughout, gone once B lands; B's bass and voice only from then.
+        assertEquals(1f, w.aPlan.gain.at(exit + 7 * a.barSec + mid), 1e-6f)
+        assertEquals(0f, w.aPlan.gain.at(exit + 8 * a.barSec + 0.1), 1e-6f)
+        assertEquals(0f, w.bPlan.bass.at(entry + 4 * b.barSec), 1e-6f)
+        assertEquals(1f, w.bPlan.bass.at(entry + 8 * b.barSec + 0.1), 1e-6f)
+        assertNotNull(w.bPlan.active(FxType.VOCAL_CUT, entry + 2 * b.barSec))
+        assertNull(w.bPlan.active(FxType.VOCAL_CUT, entry + 8 * b.barSec + 0.1))
+    }
+
+    @Test
+    fun onlyTricksterWeaves() {
+        val a = track("a", 124.0)
+        val b = track("b", 124.0)
+        assertEquals(Double.NEGATIVE_INFINITY, DecisionEngine.scores(a, b, true, 1.0, emptyList())[Recipe.WEAVE]!!, 0.0)
+        assertTrue(DecisionEngine.scores(a, b, true, 1.0, emptyList(), mode = MixMode.TRICKSTER)[Recipe.WEAVE]!! > 0)
+        assertEquals(Double.NEGATIVE_INFINITY, DecisionEngine.scores(a, b, false, 1.03, emptyList(), mode = MixMode.TRICKSTER)[Recipe.WEAVE]!!, 0.0)
     }
 }

@@ -146,6 +146,9 @@ class Deck(context: Context) {
         // A streamed track plays from its downloaded copy when there is one.
         val source = streams.fileFor(t.uri)?.let { Uri.fromFile(it) } ?: Uri.parse(t.uri)
         player.setMediaItem(MediaItem.fromUri(source), (startSec * 1000).toLong())
+        // Loaded ahead of its mix, it must wait for play(): a deck that played before keeps
+        // playWhenReady through stop(), and would start under the other song seconds early.
+        player.playWhenReady = false
         player.prepare()
         this.pitchSemis = pitchSemis
         this.speed = speed
@@ -170,6 +173,7 @@ class Deck(context: Context) {
     }
 
     fun unload() {
+        player.playWhenReady = false
         player.stop()
         player.volume = 1f
         player.clearMediaItems()
