@@ -63,6 +63,9 @@ class MixService : MediaLibraryService() {
         session = MediaLibrarySession.Builder(this, EnginePlayer(engine, scope, ::playCrate), LibraryCallback())
             .setSessionActivity(openApp)
             .build()
+            // Media3 only draws the notification and lock-screen player for sessions it knows;
+            // without a controller connecting (the app never connects one) it never learns of it.
+            .also(::addSession)
         ContextCompat.registerReceiver(
             this,
             noisyReceiver,

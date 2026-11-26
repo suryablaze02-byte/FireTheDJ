@@ -1,0 +1,2 @@
+2.5.1
+- The player is back on the lock screen and in the notification shade while a set plays.

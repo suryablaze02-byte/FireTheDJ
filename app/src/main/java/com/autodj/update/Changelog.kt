@@ -14,6 +14,18 @@ object Changelog {
 
     val versions = listOf(
         Version(
+            "2.5.1",
+            "The player is back on the lock screen and in the notifications.",
+            listOf(
+                Section(
+                    "Fixes",
+                    listOf(
+                        Change("Lock screen and notification player", "While a set plays, the song, pause and skip show on the lock screen and in the notification shade again."),
+                    ),
+                ),
+            ),
+        ),
+        Version(
             "2.5.0",
             "Double start, the Weave, a taste survey and like/dislike.",
             listOf(
